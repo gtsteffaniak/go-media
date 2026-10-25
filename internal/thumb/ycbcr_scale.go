@@ -16,7 +16,8 @@ func yccSource(img image.Image) (*image.YCbCr, yccRGB) {
 		return t.YCbCr, t.RGB
 	}
 	if ycc, ok := img.(*image.YCbCr); ok {
-		return ycc, yuv420BT601LimitedToRGBA
+		// JPEG/MJPEG decodes use full-range YCbCr; do not apply video limited-range matrices.
+		return ycc, jpegYCbCrToRGBA
 	}
 	return nil, nil
 }
@@ -187,6 +188,10 @@ func clampU8(v float64) byte {
 
 // tryScaleYCbCrSource scales if img is YCbCr and target is smaller.
 func tryScaleYCbCrSource(img image.Image, maxW, maxH int, mode ScalerMode) (image.Image, bool) {
+	// Video IDR frames only; embedded JPEG/MJPEG YCbCr must scale in RGB (chroma siting differs).
+	if _, ok := img.(*h264.ThumbYCbCr); !ok {
+		return img, false
+	}
 	ycc, toRGB := yccSource(img)
 	if ycc == nil {
 		return img, false
@@ -199,6 +204,12 @@ func tryScaleYCbCrSource(img image.Image, maxW, maxH int, mode ScalerMode) (imag
 		return scaleYCbCrArea(ycc, tw, th, toRGB), true
 	}
 	return img, false
+}
+
+func jpegYCbCrToRGBA(yy, cb, cr byte) (r, g, b byte) {
+	c := color.YCbCr{Y: yy, Cb: cb, Cr: cr}
+	rr, gg, bb, _ := c.RGBA()
+	return byte(rr >> 8), byte(gg >> 8), byte(bb >> 8)
 }
 
 // yuv420BT601LimitedToRGBA converts limited-range 4:2:0 samples to RGB (BT.601 default when VUI absent).

@@ -63,7 +63,7 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		{"webm_vp9", "video", "WebM VP9 (thumbnail unsupported)", "video/webm_vp9.webm",
 			[]string{"-i", clip, "-c:v", "libvpx-vp9", "-g", "30", "-crf", "30", "-an"}, nil},
 		{"mjpeg_mp4", "video", "MJPEG in MP4", "video/mjpeg.mp4",
-			[]string{"-i", clip, "-vf", "scale=960:-2", "-c:v", "mjpeg", "-q:v", "3", "-an", "-frames:v", "1"}, nil},
+			[]string{"-i", clip, "-vf", "scale=960:-2", "-c:v", "mjpeg", "-q:v", "3", "-an"}, nil},
 		{"mp3_cbr", "audio", "MP3 CBR + ID3", "audio/mp3_cbr.mp3",
 			[]string{"-f", "lavfi", "-i", audioSrc, "-c:a", "libmp3lame", "-b:a", "128k",
 				"-metadata", "title=Bunny", "-metadata", "artist=go-media", "-metadata", "album=Compare",
