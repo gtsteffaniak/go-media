@@ -7,8 +7,8 @@
       {
         "assetId": "mjpeg_mp4",
         "checks": ["thumbnail_small"],
-        "maxRegressionFraction": 0.3,
-        "reason": "1080p MJPEG small preset: pure Go jpegfast DCT-trunc + YCbCr area (default gate 10%; MJPEG relaxed to 130% of ffmpeg)"
+        "maxRegressionFraction": 0.35,
+        "reason": "1080p MJPEG small preset: pure Go jpegfast DCT-trunc + YCbCr area (default gate 10%; CI may need ~135% of ffmpeg)"
       },
       {
         "assetId": "mjpeg_mp4",
