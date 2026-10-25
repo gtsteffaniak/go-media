@@ -104,7 +104,7 @@ jobs:
       - name: Build thumbmode simd experiment binary smoke
         if: matrix.os == 'ubuntu-latest'
         working-directory: test/compare/harness
-        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -tags purego -pgo=default.pgo -o /tmp/thumbmode-simd ./thumbmode
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -tags purego -pgo=../../../default.pgo -o /tmp/thumbmode-simd ./thumbmode
 
   compare-gate:
     name: ffmpeg comparison gate
@@ -124,6 +124,8 @@ jobs:
         run: test -s default.pgo && test -s default.pgo.provenance.json
       - name: Check PGO freshness
         run: make check-pgo
+      - name: Generate compare assets
+        run: ./scripts/generate-fixtures.sh
       - name: Comparison gate
         run: make compare-gate
       - name: Upload HTML report
