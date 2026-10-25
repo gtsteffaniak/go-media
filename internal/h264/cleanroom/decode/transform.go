@@ -38,23 +38,9 @@ func levelScale4x4(m, i, j int) int32 {
 	return 16 * normAdjust4x4[m][posClass4x4(i, j)]
 }
 
-// dequant4x4 scales the 16 coefficients of a 4x4 block. Row-major
-// order: idx = i*4 + j. For I_16x16/chroma, position 0 (DC) is preset to zero
-// and then overwritten by the separately computed DC.
+// dequant4x4 scales the 16 coefficients of a 4x4 block (kernel portable/simd dispatch).
 func dequant4x4(coef [16]int32, qp int) [16]int32 {
-	m := qp % 6
-	shift := qp / 6
-	var d [16]int32
-	for idx := 0; idx < 16; idx++ {
-		ls := levelScale4x4(m, idx/4, idx%4)
-		c := coef[idx]
-		if shift >= 4 {
-			d[idx] = (c * ls) << uint(shift-4)
-		} else {
-			d[idx] = (c*ls + (1 << uint(3-shift))) >> uint(4-shift)
-		}
-	}
-	return d
+	return h264k.Dequant4x4(coef, qp)
 }
 
 // inverseTransform4x4 applies the kernel IDCT + rounding (bit-identical portable/simd/asm dispatch).

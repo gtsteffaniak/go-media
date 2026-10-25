@@ -1,5 +1,7 @@
 package decode
 
+import h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"
+
 // 8x8 transform path for High profile (ISO/IEC 14496-10): zig-zag scan,
 // dequantization and the inverse 8x8 integer transform. Flat scaling matrix
 // (weightScale = 16); custom scaling lists are not yet supported.
@@ -99,30 +101,7 @@ func idct8(g [8]int32) [8]int32 {
 	return m
 }
 
-// inverseTransform8x8 applies the inverse transform to rows then columns and
-// returns the residual r = (e + 32) >> 6.
+// inverseTransform8x8 applies the kernel 8×8 IDCT + rounding (portable/simd dispatch).
 func inverseTransform8x8(d [64]int32) [64]int32 {
-	var f [64]int32
-	for r := 0; r < 8; r++ {
-		var g [8]int32
-		copy(g[:], d[r*8:r*8+8])
-		m := idct8(g)
-		copy(f[r*8:r*8+8], m[:])
-	}
-	var h [64]int32
-	for c := 0; c < 8; c++ {
-		var g [8]int32
-		for r := 0; r < 8; r++ {
-			g[r] = f[r*8+c]
-		}
-		m := idct8(g)
-		for r := 0; r < 8; r++ {
-			h[r*8+c] = m[r]
-		}
-	}
-	var res [64]int32
-	for k := 0; k < 64; k++ {
-		res[k] = (h[k] + 32) >> 6
-	}
-	return res
+	return h264k.InverseTransform8x8Residual(d)
 }

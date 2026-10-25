@@ -9,6 +9,7 @@ require (
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	github.com/gen2brain/vpx v0.2.1
 	golang.org/x/image v0.47.0
+	golang.org/x/sys v0.49.0
 )
 
 require github.com/google/uuid v1.1.2 // indirect

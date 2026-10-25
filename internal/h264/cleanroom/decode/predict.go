@@ -1,5 +1,7 @@
 package decode
 
+import h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"
+
 // Intra prediction for H.264. The predictors are pure functions: they
 // take neighboring reconstructed samples (top row top, left column left,
 // corner corner) and availability flags, and produce the filled prediction
@@ -41,17 +43,9 @@ const (
 func predictIntra16x16(dst []byte, mode int, top, left []byte, corner byte, availLeft, availTop bool) {
 	switch mode {
 	case I16Vertical:
-		for y := 0; y < 16; y++ {
-			for x := 0; x < 16; x++ {
-				dst[y*16+x] = top[x]
-			}
-		}
+		h264k.PredictIntra16x16Vertical(dst, top)
 	case I16Horizontal:
-		for y := 0; y < 16; y++ {
-			for x := 0; x < 16; x++ {
-				dst[y*16+x] = left[y]
-			}
-		}
+		h264k.PredictIntra16x16Horizontal(dst, left)
 	case I16DC:
 		var dc byte
 		switch {

@@ -1,5 +1,7 @@
 package decode
 
+import h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"
+
 // Luma 4x4 intra prediction — 9 modes. Inputs: top row
 // top (p[0..7,-1], including top-right), left column left (p[-1,0..3]) and the
 // corner corner (p[-1,-1]); output is the 4x4 block dst (row-major). Top-right
@@ -36,17 +38,9 @@ func predictIntra4x4(dst []byte, mode int, top, left []byte, corner byte, availL
 
 	switch mode {
 	case I4Vertical:
-		for y := 0; y < 4; y++ {
-			for x := 0; x < 4; x++ {
-				put(x, y, int(top[x]))
-			}
-		}
+		h264k.PredictIntra4x4Vertical(dst, top)
 	case I4Horizontal:
-		for y := 0; y < 4; y++ {
-			for x := 0; x < 4; x++ {
-				put(x, y, int(left[y]))
-			}
-		}
+		h264k.PredictIntra4x4Horizontal(dst, left)
 	case I4DC:
 		var dc int
 		switch {

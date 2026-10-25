@@ -23,17 +23,17 @@ func (sd *sliceDecoder) decodeMB16(addr int, mb MBType) error {
 	predictIntra16x16(pred, mb.Intra16x16PredMode, top, left, corner, availL, availT)
 
 	// DC block (16 DC coefficients → inverse Hadamard).
-	dcScan, _ := residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, 0), 16)
-	dcVals := inverseLumaDC(inverseScan4x4(dcScan), qp)
+	_ = sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, 0), 16)
+	dcVals := inverseLumaDC(inverseScan4x4(sd.coeffScratch[:16]), qp)
 
 	for blk := 0; blk < 16; blk++ {
 		bx, by := luma4x4BlockX[blk], luma4x4BlockY[blk]
 		gx, gy := mbX*4+bx, mbY*4+by
 		var d [16]int32
 		if mb.CBPLuma != 0 { // CBPLuma=15 → all AC are present
-			acScan, tc := residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 15)
+			tc := sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 15)
 			sd.nzLuma[gy*sd.w4+gx] = uint8(tc)
-			d = dequant4x4(buildAC(acScan), qp)
+			d = dequant4x4(buildAC(sd.coeffScratch[:15]), qp)
 		} else {
 			sd.nzLuma[gy*sd.w4+gx] = 0
 		}
@@ -85,9 +85,9 @@ func (sd *sliceDecoder) reconstructChroma420(mbX, mbY, predMode, cbpChroma, qpY 
 	dc := [2][numBlk]int32{}
 	if cbpChroma&3 != 0 {
 		for c := range comps {
-			dcScan, _ := residualBlockCAVLC(r, -1, numBlk)
+			_ = sd.residualBlockCAVLC(r, -1, numBlk)
 			var cc [4]int32
-			copy(cc[:], dcScan[:numBlk])
+			copy(cc[:], sd.coeffScratch[:numBlk])
 			dc[c] = inverseChromaDC(cc, qpC)
 		}
 	}
@@ -103,9 +103,9 @@ func (sd *sliceDecoder) reconstructChroma420(mbX, mbY, predMode, cbpChroma, qpY 
 			gx, gy := mbX*sd.cbpw+bx, mbY*(f.MbHeightC/4)+by
 			var d [16]int32
 			if cbpChroma == 2 {
-				acScan, tc := residualBlockCAVLC(r, sd.chromaNC(comps[c].nz, mbX, mbY, blk), 15)
+				tc := sd.residualBlockCAVLC(r, sd.chromaNC(comps[c].nz, mbX, mbY, blk), 15)
 				comps[c].nz[gy*sd.cw4+gx] = uint8(tc)
-				d = dequant4x4(buildAC(acScan), qpC)
+				d = dequant4x4(buildAC(sd.coeffScratch[:15]), qpC)
 			} else {
 				comps[c].nz[gy*sd.cw4+gx] = 0
 			}

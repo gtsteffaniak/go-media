@@ -19,11 +19,12 @@ func BenchmarkBaselineThumbnailDecode(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		dec := borrowDecoder(true)
 		frames, err := dec.DecodeIDRAVC(data)
-		releaseDecoder(dec)
 		if err != nil || len(frames) == 0 {
+			releaseDecoder(dec)
 			b.Fatal(err)
 		}
 		_ = cleanroom.ToFrame(dec, frames[0])
+		releaseDecoder(dec)
 	}
 }
 

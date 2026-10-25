@@ -59,9 +59,9 @@ func (sd *sliceDecoder) decodeMBNxN(addr int) error {
 
 		var res [16]int32
 		if cbpLuma&(1<<uint(blk/4)) != 0 {
-			scan, tc := residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 16)
+			tc := sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 16)
 			sd.nzLuma[gy*sd.w4+gx] = uint8(tc)
-			res = inverseTransform4x4(dequant4x4(inverseScan4x4(scan), qp))
+			res = inverseTransform4x4(dequant4x4(inverseScan4x4(sd.coeffScratch[:16]), qp))
 		} else {
 			sd.nzLuma[gy*sd.w4+gx] = 0
 		}
@@ -144,10 +144,11 @@ func (sd *sliceDecoder) decodeMB8x8Cavlc(addr int) error {
 			var coef [64]int32
 			for j := 0; j < 4; j++ {
 				blk := 4*blk8 + j // 4x4-блок blk8-квадранта в зиг-заг порядке
-				scan, n := residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 16)
+				n := sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 16)
 				bx, by := luma4x4BlockX[blk], luma4x4BlockY[blk]
 				sd.nzLuma[(mbY*4+by)*sd.w4+mbX*4+bx] = uint8(n)
-				for i := 0; i < 16 && i < len(scan); i++ {
+				scan := sd.coeffScratch[:16]
+				for i := 0; i < 16; i++ {
 					coef[4*i+j] = scan[i] // интерлив 4 под-блоков в 64 коэф.
 				}
 			}

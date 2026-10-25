@@ -55,31 +55,32 @@ func Parse(ebsp []byte) (Unit, bool) {
 	if hdr&0x80 != 0 { // forbidden_zero_bit must be 0
 		return Unit{}, false
 	}
+	body := ebsp[1:]
 	return Unit{
 		RefIDC: (hdr >> 5) & 0x03,
 		Type:   Type(hdr & 0x1f),
-		RBSP:   EBSPtoRBSP(ebsp[1:]),
+		RBSP:   EBSPtoRBSP(body),
 	}, true
 }
 
-// EBSPtoRBSP removes emulation_prevention_three_byte: inside a NAL the sequence
-// 00 00 03 encodes 00 00, so the body contains no accidental start codes. The
-// byte 0x03 is dropped if it follows two zeros and precedes a byte <= 0x03.
-func EBSPtoRBSP(ebsp []byte) []byte {
-	rbsp := make([]byte, 0, len(ebsp))
-	zeros := 0
-	for i := 0; i < len(ebsp); i++ {
-		b := ebsp[i]
-		if zeros >= 2 && b == 0x03 && (i+1 >= len(ebsp) || ebsp[i+1] <= 0x03) {
-			zeros = 0 // emulation prevention byte — skip it
-			continue
-		}
-		rbsp = append(rbsp, b)
-		if b == 0 {
-			zeros++
-		} else {
-			zeros = 0
-		}
+// ParseInto writes RBSP into rbspDst and returns a parsed unit. rbspDst must be
+// at least len(ebsp)-1 bytes. The returned Unit's RBSP slice aliases rbspDst.
+func ParseInto(ebsp []byte, rbspDst []byte) (Unit, bool) {
+	if len(ebsp) < 1 {
+		return Unit{}, false
 	}
-	return rbsp
+	hdr := ebsp[0]
+	if hdr&0x80 != 0 {
+		return Unit{}, false
+	}
+	body := ebsp[1:]
+	if len(rbspDst) < len(body) {
+		return Unit{}, false
+	}
+	n := EBSPtoRBSPDst(rbspDst, body)
+	return Unit{
+		RefIDC: (hdr >> 5) & 0x03,
+		Type:   Type(hdr & 0x1f),
+		RBSP:   rbspDst[:n],
+	}, true
 }

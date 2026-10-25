@@ -64,6 +64,7 @@ type sliceDecoder struct {
 	nTop8        [16]byte
 	nLeft8       [8]byte
 	levelScratch [16]int32
+	coeffScratch [16]int32
 	runsScratch  [16]int
 	resCoeff     [64]int32
 	resSig       [64]bool

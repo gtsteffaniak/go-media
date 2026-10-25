@@ -12,6 +12,7 @@ require (
 	github.com/gen2brain/vpx v0.2.1 // indirect
 	github.com/google/uuid v1.1.2 // indirect
 	golang.org/x/image v0.47.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 )
 
 replace github.com/gtsteffaniak/go-media => ../../..

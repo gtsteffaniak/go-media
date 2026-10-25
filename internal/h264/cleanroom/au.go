@@ -17,6 +17,7 @@ type Decoder struct {
 	pps         map[uint32]*decode.PPS
 	SkipDeblock bool
 	pic         *decode.Frame // reused coded buffer when resolution unchanged
+	rbspScratch []byte        // grown per NAL for zero-alloc EBSP→RBSP
 }
 
 // New creates a decoder with empty parameter-set maps.
@@ -53,7 +54,10 @@ func (d *Decoder) decodeNALUs(nalus [][]byte, idrOnly bool) (*decode.Frame, erro
 		if len(nalu) == 0 {
 			continue
 		}
-		u, ok := nal.Parse(nalu)
+		if len(d.rbspScratch) < len(nalu) {
+			d.rbspScratch = make([]byte, len(nalu))
+		}
+		u, ok := nal.ParseInto(nalu, d.rbspScratch)
 		if !ok {
 			continue
 		}
