@@ -4,34 +4,37 @@ package bitstream
 import "fmt"
 
 // Reader reads H.264 RBSP (emulation prevention already removed).
+// Valid bits are MSB-aligned in the 64-bit register (ffmpeg-style).
 type Reader struct {
 	data []byte
-	pos  int // byte offset into data
-	bits uint64
-	nb   int // valid bits in bits (MSB-aligned)
+	pos  int
+	reg  uint64
+	nb   int // number of valid bits in reg (from the MSB side)
 }
 
 // New attaches a reader to rbsp without copying.
 func New(rbsp []byte) *Reader {
 	r := &Reader{data: rbsp}
-	r.refill()
+	r.load()
 	return r
 }
 
-func (r *Reader) refill() {
-	for r.nb <= 32 && r.pos < len(r.data) {
-		r.bits = (r.bits << 8) | uint64(r.data[r.pos])
+func (r *Reader) load() {
+	for r.nb <= 56 && r.pos < len(r.data) {
+		r.reg |= uint64(r.data[r.pos]) << (56 - r.nb)
 		r.pos++
 		r.nb += 8
 	}
 }
 
-// Available returns true if at least n bits can be read.
-func (r *Reader) Available(n int) bool {
-	for r.nb < n && r.pos < len(r.data) {
-		r.refill()
+func (r *Reader) ensure(n int) error {
+	for r.nb < n {
+		if r.pos >= len(r.data) {
+			return fmt.Errorf("bitstream: overrun")
+		}
+		r.load()
 	}
-	return r.nb >= n
+	return nil
 }
 
 // Read reads n bits (1..32).
@@ -39,14 +42,14 @@ func (r *Reader) Read(n int) (uint32, error) {
 	if n <= 0 || n > 32 {
 		return 0, fmt.Errorf("bitstream: invalid read width %d", n)
 	}
-	for r.nb < n {
-		if r.pos >= len(r.data) {
-			return 0, fmt.Errorf("bitstream: overrun")
-		}
-		r.refill()
+	if err := r.ensure(n); err != nil {
+		return 0, err
 	}
+	v := uint32(r.reg >> (64 - n))
+	r.reg <<= uint(n)
 	r.nb -= n
-	return uint32(r.bits >> r.nb), nil
+	r.load()
+	return v, nil
 }
 
 // Read1 reads a single bit.
@@ -56,20 +59,15 @@ func (r *Reader) Read1() (uint32, error) {
 
 // Skip discards n bits.
 func (r *Reader) Skip(n int) error {
-	for n > 0 {
-		if r.nb == 0 {
-			if r.pos >= len(r.data) {
-				return fmt.Errorf("bitstream: skip overrun")
-			}
-			r.refill()
-		}
-		take := n
-		if take > r.nb {
-			take = r.nb
-		}
-		r.nb -= take
-		n -= take
+	if n <= 0 {
+		return nil
 	}
+	if err := r.ensure(n); err != nil {
+		return err
+	}
+	r.reg <<= uint(n)
+	r.nb -= n
+	r.load()
 	return nil
 }
 
@@ -111,18 +109,28 @@ func (r *Reader) ReadSE() (int32, error) {
 	return int32(ue+1 >> 1), nil
 }
 
+// PeekBits returns the next n bits without consuming them (n <= 32).
+func (r *Reader) PeekBits(n int) (uint32, error) {
+	if n <= 0 || n > 32 {
+		return 0, fmt.Errorf("bitstream: peek width %d", n)
+	}
+	if err := r.ensure(n); err != nil {
+		return 0, err
+	}
+	return uint32(r.reg >> (64 - n)), nil
+}
+
+// SkipBits discards n bits (fast path for VLC).
+func (r *Reader) SkipBits(n int) error {
+	return r.Skip(n)
+}
+
 // MoreRBSPData implements H.264 more_rbsp_data() using the 64-bit cache.
 func (r *Reader) MoreRBSPData() bool {
-	if r.nb > 0 {
-		// Any non-padding bit before byte alignment means more data.
-		if r.bits<<(64-r.nb) != 0 {
-			return true
-		}
-	}
-	if r.pos < len(r.data) {
+	if r.nb > 0 && r.reg != 0 {
 		return true
 	}
-	return false
+	return r.pos < len(r.data)
 }
 
 // ByteAlign skips to the next byte boundary (cabac alignment).
