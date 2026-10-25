@@ -44,6 +44,10 @@ func mapErr(err error) error {
 	if err == nil {
 		return nil
 	}
+	var u *errs.UnsupportedError
+	if errors.As(err, &u) {
+		return Unsupported(u.Op, u.Reason)
+	}
 	if errors.Is(err, errs.Unsupported) {
 		return ErrUnsupported
 	}
@@ -52,10 +56,6 @@ func mapErr(err error) error {
 	}
 	if errors.Is(err, errs.NotMedia) {
 		return ErrNotMedia
-	}
-	var u *errs.UnsupportedError
-	if errors.As(err, &u) {
-		return Unsupported(u.Op, u.Reason)
 	}
 	return err
 }

@@ -18,7 +18,11 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	if info.Timescale == 0 || info.Duration == 0 {
 		return detect.DurationResult{}, errs.Unsup("duration", "mp4 missing mvhd duration")
 	}
-	d := time.Duration(info.Duration) * time.Second / time.Duration(info.Timescale)
+	sec := float64(info.Duration) / float64(info.Timescale)
+	if sec < 0 || sec > 86400*366*100 {
+		return detect.DurationResult{}, errs.Unsup("duration", "mp4 duration out of range")
+	}
+	d := time.Duration(sec * float64(time.Second))
 	return detect.DurationResult{Duration: d, Source: "header"}, nil
 }
 

@@ -2,6 +2,7 @@ package thumb
 
 import (
 	"bytes"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -50,16 +51,18 @@ func Generate(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt
 
 	if opt.PreferEmbedded {
 		if data, mime, err := tagread.Artwork(r, size); err == nil {
-			return encodeImage(data, mime, opt)
+			if res, encErr := encodeImage(data, mime, opt); encErr == nil {
+				return res, nil
+			}
 		}
 	}
 
-	fmt, err := sniff.Detect(r, size)
+	fmtID, err := sniff.Detect(r, size)
 	if err != nil {
 		return Result{}, err
 	}
 
-	switch fmt {
+	switch fmtID {
 	case format.MP4:
 		if b, ok := isobmff.MJPEGFrame(r, size); ok {
 			return encodeImage(b, "image/jpeg", opt)
@@ -73,7 +76,7 @@ func Generate(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt
 			return encodeImage(data, mime, opt)
 		}
 	}
-	return Result{}, errs.Unsup("thumbnail", string(fmt))
+	return Result{}, errs.Unsup("thumbnail", string(fmtID))
 }
 
 func decodeVP8(frame []byte, opt Options) (Result, error) {
@@ -100,6 +103,9 @@ func decodeVP8(frame []byte, opt Options) (Result, error) {
 func encodeImage(data []byte, mime string, opt Options) (Result, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
+		if errors.Is(err, image.ErrFormat) {
+			return Result{}, errs.Unsup("thumbnail", "unsupported cover image format")
+		}
 		return Result{}, err
 	}
 	return rasterize(img, opt, "embedded")
@@ -128,22 +134,30 @@ func scaleDown(img image.Image, maxW, maxH int) image.Image {
 	if maxW <= 0 {
 		maxW = w
 	}
-	if maxH <= 0 && h > maxW {
-		scale := float64(maxW) / float64(w)
-		nh := int(float64(h) * scale)
-		return resizeNearest(img, maxW, nh)
+	if maxH <= 0 {
+		maxH = h
 	}
-	if w <= maxW && (maxH <= 0 || h <= maxH) {
+	if w <= maxW && h <= maxH {
 		return img
 	}
-	scale := float64(maxW) / float64(w)
-	nh := int(float64(h) * scale)
-	if maxH > 0 && nh > maxH {
-		scale = float64(maxH) / float64(h)
-		maxW = int(float64(w) * scale)
-		nh = maxH
+	scaleW := float64(maxW) / float64(w)
+	scaleH := float64(maxH) / float64(h)
+	scale := scaleW
+	if scaleH < scale {
+		scale = scaleH
 	}
-	return resizeNearest(img, maxW, nh)
+	if scale >= 1 {
+		return img
+	}
+	nw := int(float64(w) * scale)
+	nh := int(float64(h) * scale)
+	if nw < 1 {
+		nw = 1
+	}
+	if nh < 1 {
+		nh = 1
+	}
+	return resizeNearest(img, nw, nh)
 }
 
 func resizeNearest(src image.Image, w, h int) image.Image {

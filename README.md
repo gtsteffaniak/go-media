@@ -40,7 +40,7 @@ Legend: ✅ Implemented · 🟡 Partial / conditional · 📋 Planned · ❌ Out
 |---|---|---|
 | MP4 / MOV / M4A / M4V / 3GP | `mvhd` box | ✅ |
 | MKV / WebM | Segment Info `Duration` (missing in some streamed WebM, which falls back) | 🟡 |
-| WAV / AIFF / AU | data size ÷ byte rate | ✅ |
+| WAV | data size ÷ byte rate | ✅ |
 | FLAC | `STREAMINFO` total samples | ✅ |
 | OGG Vorbis / Opus | last page granule position | ✅ |
 | MP3 | Xing/Info/VBRI header; CBR estimate | 🟡 |

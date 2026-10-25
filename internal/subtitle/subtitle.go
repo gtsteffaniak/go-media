@@ -97,7 +97,7 @@ func cueBlock(start, end, text string) string {
 
 func toVTTTime(s string) string {
 	s = strings.TrimSpace(s)
-	s = strings.ReplaceAll(s, ".", ",")
+	s = strings.ReplaceAll(s, ",", ".")
 	if strings.Count(s, ":") == 1 {
 		s = "00:" + s
 	}

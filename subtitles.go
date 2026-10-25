@@ -74,15 +74,17 @@ func ExtractEmbeddedSubtitle(r io.ReaderAt, size int64, streamIndex int) (string
 
 // ExternalSubtitleTracks lists sidecar subtitles sharing a base name with videoPath.
 func ExternalSubtitleTracks(videoPath string, siblingNames []string) []SubtitleTrack {
-	ext := strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath))
+	videoStem := strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath))
 	var out []SubtitleTrack
 	for _, name := range siblingNames {
-		base := strings.TrimSuffix(name, filepath.Ext(name))
-		if !strings.HasPrefix(base, ext) {
-			continue
-		}
 		low := strings.ToLower(filepath.Ext(name))
 		if low != ".srt" && low != ".vtt" && low != ".ass" && low != ".ssa" {
+			continue
+		}
+		fileBase := strings.TrimSuffix(name, filepath.Ext(name))
+		langExt := filepath.Ext(fileBase)
+		fileBase2 := strings.TrimSuffix(fileBase, langExt)
+		if fileBase != videoStem && fileBase2 != videoStem {
 			continue
 		}
 		out = append(out, SubtitleTrack{

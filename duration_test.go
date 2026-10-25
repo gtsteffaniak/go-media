@@ -1,12 +1,34 @@
 package media_test
 
 import (
+	"errors"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/gtsteffaniak/go-media"
 )
+
+type bytesAt struct {
+	b []byte
+}
+
+func (b bytesAt) ReadAt(p []byte, off int64) (int, error) {
+	if off >= int64(len(b.b)) {
+		return 0, os.ErrInvalid
+	}
+	n := copy(p, b.b[off:])
+	return n, nil
+}
+
+func TestUnsupportedErrorKeepsDetail(t *testing.T) {
+	wav := []byte("RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00")
+	_, err := media.Duration(bytesAt{b: wav}, int64(len(wav)))
+	var u *media.UnsupportedError
+	if !errors.As(err, &u) || u.Reason == "" {
+		t.Fatalf("expected detailed unsupported, got %v", err)
+	}
+}
 
 func openFixture(t *testing.T, name string) (*os.File, int64) {
 	f, err := os.Open("testdata/" + name)

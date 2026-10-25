@@ -7,39 +7,46 @@ import (
 
 	"github.com/gtsteffaniak/go-media/internal/detect"
 	"github.com/gtsteffaniak/go-media/internal/errs"
-	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
 func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
-	head, err := ioat.ReadAll(r, size, 0, min64(size, 256*1024))
-	if err != nil {
-		return detect.DurationResult{}, err
-	}
-	if len(head) < 44 {
+	if size < 12 {
 		return detect.DurationResult{}, errs.Corrupt
 	}
-	if string(head[0:4]) != "RIFF" || string(head[8:12]) != "WAVE" {
+	hdr := make([]byte, 12)
+	if _, err := r.ReadAt(hdr, 0); err != nil {
+		return detect.DurationResult{}, err
+	}
+	if string(hdr[0:4]) != "RIFF" || string(hdr[8:12]) != "WAVE" {
 		return detect.DurationResult{}, errs.NotMedia
 	}
-	var dataSize int64
 	var byteRate uint32
-	pos := 12
-	for pos+8 <= len(head) {
-		id := string(head[pos : pos+4])
-		ch := binary.LittleEndian.Uint32(head[pos+4 : pos+8])
-		pos += 8
-		if pos+int(ch) > len(head) {
+	var dataSize int64
+	pos := int64(12)
+	for pos+8 <= size {
+		ch := make([]byte, 8)
+		if _, err := r.ReadAt(ch, pos); err != nil {
 			break
 		}
+		id := string(ch[0:4])
+		sz := int64(binary.LittleEndian.Uint32(ch[4:8]))
 		switch id {
 		case "fmt ":
-			if ch >= 16 {
-				byteRate = binary.LittleEndian.Uint32(head[pos+8 : pos+12])
+			if sz >= 16 && pos+8+16 <= size {
+				fmtb := make([]byte, 16)
+				_, _ = r.ReadAt(fmtb, pos+8)
+				byteRate = binary.LittleEndian.Uint32(fmtb[8:12])
 			}
 		case "data":
-			dataSize = int64(ch)
+			dataSize = sz
 		}
-		pos += int(ch)
+		if id == "data" {
+			break
+		}
+		pos += 8 + sz
+		if sz%2 == 1 {
+			pos++
+		}
 	}
 	if byteRate == 0 || dataSize == 0 {
 		return detect.DurationResult{}, errs.Unsup("duration", "wav missing fmt/data")
@@ -49,22 +56,30 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 }
 
 func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
-	head, _ := ioat.ReadAll(r, size, 0, min64(size, 4096))
-	if len(head) < 44 {
+	if size < 12 {
 		return nil, errs.Corrupt
 	}
 	var channels uint16
 	var sampleRate uint32
-	pos := 12
-	for pos+8 <= len(head) {
-		id := string(head[pos : pos+4])
-		ch := binary.LittleEndian.Uint32(head[pos+4 : pos+8])
-		pos += 8
-		if id == "fmt " && pos+int(ch) <= len(head) && ch >= 16 {
-			channels = binary.LittleEndian.Uint16(head[pos+2 : pos+4])
-			sampleRate = binary.LittleEndian.Uint32(head[pos+4 : pos+8])
+	pos := int64(12)
+	for pos+8 <= size {
+		ch := make([]byte, 8)
+		if _, err := r.ReadAt(ch, pos); err != nil {
+			break
 		}
-		pos += int(ch)
+		id := string(ch[0:4])
+		sz := int64(binary.LittleEndian.Uint32(ch[4:8]))
+		if id == "fmt " && sz >= 16 && pos+8+16 <= size {
+			fmtb := make([]byte, 16)
+			_, _ = r.ReadAt(fmtb, pos+8)
+			channels = binary.LittleEndian.Uint16(fmtb[2:4])
+			sampleRate = binary.LittleEndian.Uint32(fmtb[4:8])
+			break
+		}
+		pos += 8 + sz
+		if sz%2 == 1 {
+			pos++
+		}
 	}
 	return []detect.Stream{{
 		Index:      0,
@@ -75,9 +90,4 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	}}, nil
 }
 
-func min64(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
+var _ = io.EOF

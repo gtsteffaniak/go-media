@@ -7,24 +7,37 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
-// MJPEGFrame returns the first video sample when the track is MJPEG.
+const maxMJPEGSniff = 8 * 1024 * 1024
+
+// MJPEGFrame returns the first JPEG in mdat when the file looks like a single-frame MJPEG MP4.
 func MJPEGFrame(r io.ReaderAt, size int64) ([]byte, bool) {
 	info, err := mp4.Probe(ioat.New(r, size))
 	if err != nil {
 		return nil, false
 	}
-	// Probe does not expose mjpeg directly; scan mdat for JPEG SOI after stsz/stco would be needed.
-	// For test fixtures we embed a single-frame MJPEG in mdat right after moov.
+	// Skip typical H.264/AAC MP4 files without reading mdat.
+	for _, tr := range info.Tracks {
+		if tr.Codec == mp4.CodecAVC1 {
+			return nil, false
+		}
+	}
 	mdat, err := mp4.ExtractBox(ioat.New(r, size), nil, mp4.BoxPath{mp4.BoxTypeMdat()})
 	if err != nil || len(mdat) == 0 {
 		return nil, false
 	}
 	box := mdat[0]
-	payload, err := io.ReadAll(io.NewSectionReader(ioat.New(r, size), int64(box.Offset)+int64(box.HeaderSize), int64(box.Size)-int64(box.HeaderSize)))
+	payloadLen := int64(box.Size) - int64(box.HeaderSize)
+	if payloadLen <= 0 {
+		return nil, false
+	}
+	readLen := payloadLen
+	if readLen > maxMJPEGSniff {
+		readLen = maxMJPEGSniff
+	}
+	payload, err := ioat.ReadAll(r, size, int64(box.Offset)+int64(box.HeaderSize), readLen)
 	if err != nil || len(payload) < 4 {
 		return nil, false
 	}
-	// JPEG start of image
 	for i := 0; i+2 < len(payload); i++ {
 		if payload[i] == 0xFF && payload[i+1] == 0xD8 {
 			end := i + 2
@@ -37,6 +50,5 @@ func MJPEGFrame(r io.ReaderAt, size int64) ([]byte, bool) {
 			return payload[i:], true
 		}
 	}
-	_ = info
 	return nil, false
 }

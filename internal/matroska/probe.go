@@ -15,10 +15,10 @@ type segmentHead struct {
 		Info struct {
 			TimecodeScale uint64  `ebml:"TimecodeScale"`
 			Duration      float64 `ebml:"Duration"`
-		} `ebml:"Info,stop"`
+		} `ebml:"Info"`
 		Tracks struct {
 			TrackEntry []trackEntry `ebml:"TrackEntry"`
-		} `ebml:"Tracks,stop"`
+		} `ebml:"Tracks"`
 	}
 }
 

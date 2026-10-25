@@ -1,6 +1,7 @@
 package media_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/gtsteffaniak/go-media"
@@ -26,7 +27,7 @@ func TestThumbnailFLACArt(t *testing.T) {
 		return // ok if ffmpeg embedded art in flac
 	}
 	// tone.flac fixture has no embedded picture — unsupported is fine
-	if err != media.ErrUnsupported {
+	if !errors.Is(err, media.ErrUnsupported) {
 		t.Fatalf("expected unsupported or success, got %v", err)
 	}
 }

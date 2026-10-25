@@ -1,7 +1,7 @@
 package matroska
 
 import (
-	"bytes"
+	"fmt"
 	"io"
 	"strings"
 
@@ -32,7 +32,11 @@ func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, 
 	if target == 0 {
 		target = uint64(streamIndex + 1)
 	}
-	var buf bytes.Buffer
+	type block struct {
+		ts   int64
+		text string
+	}
+	var blocks []block
 	for _, br := range readers {
 		entry := br.TrackEntry()
 		if entry.TrackNumber != target {
@@ -40,24 +44,58 @@ func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, 
 			continue
 		}
 		for {
-			b, _, _, err := br.Read()
+			b, _, ts, err := br.Read()
 			if err == io.EOF {
 				break
 			}
 			if err != nil {
 				break
 			}
-			buf.Write(b)
-			buf.WriteByte('\n')
+			text := strings.TrimSpace(string(b))
+			if text == "" {
+				continue
+			}
+			blocks = append(blocks, block{ts: ts, text: text})
 		}
 		br.Close()
 	}
-	raw := buf.String()
-	if strings.Contains(raw, "Dialogue:") {
-		return subtitle.ParseASS(strings.NewReader(raw))
+	if len(blocks) == 0 {
+		return "", errs.Unsup("subtitle", "no subtitle blocks")
 	}
-	if strings.Contains(raw, "-->") {
-		return subtitle.ParseSRT(strings.NewReader(raw))
+	var cues []string
+	for i, bl := range blocks {
+		start := msToVTT(bl.ts)
+		endMs := bl.ts + 2000
+		if i+1 < len(blocks) {
+			endMs = blocks[i+1].ts
+			if endMs <= bl.ts {
+				endMs = bl.ts + 2000
+			}
+		}
+		end := msToVTT(endMs)
+		cues = append(cues, fmt.Sprintf("%s --> %s\n%s", start, end, bl.text))
 	}
-	return subtitle.ParseVTT(strings.NewReader("WEBVTT\n\n" + raw))
+	if len(blocks) == 1 {
+		raw := blocks[0].text
+		if strings.Contains(raw, "Dialogue:") {
+			return subtitle.ParseASS(strings.NewReader(raw))
+		}
+		if strings.Contains(raw, "-->") {
+			return subtitle.ParseSRT(strings.NewReader(raw))
+		}
+	}
+	return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
+}
+
+func msToVTT(ms int64) string {
+	if ms < 0 {
+		ms = 0
+	}
+	h := ms / 3_600_000
+	ms %= 3_600_000
+	m := ms / 60_000
+	ms %= 60_000
+	s := ms / 1000
+	ms %= 1000
+	return fmt.Sprintf("%02d:%02d:%02d.%03d", h, m, s, ms)
 }

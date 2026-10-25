@@ -1,6 +1,7 @@
 package ogg
 
 import (
+	"encoding/binary"
 	"io"
 	"time"
 
@@ -10,22 +11,59 @@ import (
 )
 
 func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
+	head, _ := ioat.ReadAll(r, size, 0, min64(size, 128*1024))
+	sr := sampleRateFromHead(head)
+	if sr == 0 {
+		return detect.DurationResult{}, errs.Unsup("duration", "ogg sample rate")
+	}
 	tailSize := min64(size, 128*1024)
 	tail, err := ioat.ReadAll(r, size, size-tailSize, tailSize)
 	if err != nil && err != io.EOF {
 		return detect.DurationResult{}, err
 	}
-	granule, sr, ok := lastGranule(tail)
-	if !ok || sr == 0 {
-		return detect.DurationResult{}, errs.Unsup("duration", "ogg granule/sample rate")
+	granule, ok := lastGranule(tail)
+	if !ok {
+		return detect.DurationResult{}, errs.Unsup("duration", "ogg granule")
 	}
 	sec := float64(granule) / float64(sr)
 	return detect.DurationResult{Duration: time.Duration(sec * float64(time.Second)), Source: "header"}, nil
 }
 
-func lastGranule(buf []byte) (uint64, int, bool) {
+func sampleRateFromHead(buf []byte) int {
+	if sr := vorbisSampleRate(buf); sr > 0 {
+		return sr
+	}
+	if sr := opusSampleRate(buf); sr > 0 {
+		return sr
+	}
+	return 0
+}
+
+func vorbisSampleRate(buf []byte) int {
+	for i := 0; i+18 <= len(buf); i++ {
+		if buf[i] == 0x01 && buf[i+1] == 'v' && buf[i+2] == 'o' && buf[i+3] == 'r' && buf[i+4] == 'b' && buf[i+5] == 'i' && buf[i+6] == 's' {
+			return int(binary.LittleEndian.Uint32(buf[i+11 : i+15]))
+		}
+	}
+	return 0
+}
+
+func opusSampleRate(buf []byte) int {
+	i := 0
+	for i+8 < len(buf) {
+		if buf[i] == 'O' && buf[i+1] == 'p' && buf[i+2] == 'u' && buf[i+3] == 's' && buf[i+4] == 'H' && buf[i+5] == 'e' && buf[i+6] == 'a' && buf[i+7] == 'd' {
+			if i+16 <= len(buf) {
+				return int(binary.LittleEndian.Uint32(buf[i+12 : i+16]))
+			}
+			return 48000
+		}
+		i++
+	}
+	return 0
+}
+
+func lastGranule(buf []byte) (uint64, bool) {
 	var lastGranule uint64
-	var sampleRate int
 	for i := 0; i+27 <= len(buf); i++ {
 		if buf[i] != 'O' || buf[i+1] != 'g' || buf[i+2] != 'g' || buf[i+3] != 'S' {
 			continue
@@ -35,37 +73,13 @@ func lastGranule(buf []byte) (uint64, int, bool) {
 		if granule != 0 {
 			lastGranule = granule
 		}
-		if sampleRate == 0 {
-			sampleRate = guessSampleRate(buf[i:])
-		}
 	}
-	if lastGranule == 0 {
-		return 0, 0, false
-	}
-	if sampleRate == 0 {
-		sampleRate = 48000
-	}
-	return lastGranule, sampleRate, true
-}
-
-func guessSampleRate(page []byte) int {
-	for _, sr := range []int{8000, 11025, 16000, 22050, 32000, 44100, 48000, 96000} {
-		b := byte(sr & 0xFF)
-		b1 := byte((sr >> 8) & 0xFF)
-		b2 := byte((sr >> 16) & 0xFF)
-		b3 := byte((sr >> 24) & 0xFF)
-		for i := 0; i+4 < len(page); i++ {
-			if page[i] == b3 && page[i+1] == b2 && page[i+2] == b1 && page[i+3] == b {
-				return sr
-			}
-		}
-	}
-	return 48000
+	return lastGranule, lastGranule != 0
 }
 
 func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
-	head, _ := ioat.ReadAll(r, size, 0, min64(size, 4096))
-	_, sr, _ := lastGranule(head)
+	head, _ := ioat.ReadAll(r, size, 0, min64(size, 128*1024))
+	sr := sampleRateFromHead(head)
 	if sr == 0 {
 		sr = 48000
 	}

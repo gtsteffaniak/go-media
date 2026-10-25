@@ -13,21 +13,21 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	if size < 128 {
 		return detect.DurationResult{}, errs.Corrupt
 	}
-	head, _ := ioat.ReadAll(r, size, 0, min64(size, 256*1024))
-	off := 0
+	audioStart := int64(0)
+	head, _ := ioat.ReadAll(r, size, 0, min64(size, 12))
 	if len(head) >= 3 && head[0] == 'I' && head[1] == 'D' && head[2] == '3' {
-		if len(head) < 10 {
+		id3h, _ := ioat.ReadAll(r, size, 0, 10)
+		if len(id3h) < 10 {
 			return detect.DurationResult{}, errs.Corrupt
 		}
-		tagSize := syncSafe(head[6:10])
-		off = 10 + tagSize
+		tagSize := syncSafe(id3h[6:10])
+		audioStart = 10 + int64(tagSize)
 	}
-	if off+4 > len(head) {
-		more, _ := ioat.ReadAll(r, size, int64(off), min64(size-int64(off), 4096))
-		head = append(head[off:], more...)
-		off = 0
+	if audioStart >= size {
+		return detect.DurationResult{}, errs.Unsup("duration", "mp3 audio start past eof")
 	}
-	d, src, ok := durationFromFrames(head, off, size)
+	frameBuf, _ := ioat.ReadAll(r, size, audioStart, min64(size-audioStart, 64*1024))
+	d, src, ok := durationFromFrames(frameBuf, 0, size-audioStart)
 	if !ok {
 		return detect.DurationResult{}, errs.Unsup("duration", "mp3 without xing/vbri and cbr estimate failed")
 	}
