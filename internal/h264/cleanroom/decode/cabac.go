@@ -107,15 +107,21 @@ func (e *cabacEngine) decodeDecision(ctxIdx int) uint32 {
 		binVal = uint32(c.mps)
 		c.state = stateTrans[c.state][1]
 	}
-	e.renorm()
+	// Inlined renorm (hot path — millions of calls per frame).
+	r := e.r
+	for e.codIRange < 256 {
+		e.codIRange <<= 1
+		e.codIOffset = (e.codIOffset << 1) | r.Bit()
+	}
 	return binVal
 }
 
 // renorm rescales codIRange back into [256,510], pulling in fresh offset bits.
 func (e *cabacEngine) renorm() {
+	r := e.r
 	for e.codIRange < 256 {
 		e.codIRange <<= 1
-		e.codIOffset = (e.codIOffset << 1) | e.r.Bit()
+		e.codIOffset = (e.codIOffset << 1) | r.Bit()
 	}
 }
 

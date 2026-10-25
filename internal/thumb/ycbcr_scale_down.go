@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/gtsteffaniak/go-media/internal/h264"
 	"github.com/gtsteffaniak/go-media/internal/kernels"
 )
 
@@ -62,10 +63,16 @@ func scaleYCbCrAreaDown(src *image.YCbCr, dstW, dstH int) *image.YCbCr {
 	return dst
 }
 
-// tryScaleYCbCrDown scales JPEG sources in YCbCr when the output is JPEG.
+// tryScaleYCbCrDown scales YCbCr sources in-place when the output is JPEG (avoids RGB during downscale).
 func tryScaleYCbCrDown(img image.Image, maxW, maxH int, mode ScalerMode) (image.Image, bool) {
-	ycc, ok := img.(*image.YCbCr)
-	if !ok {
+	var ycc *image.YCbCr
+	switch v := img.(type) {
+	case *image.YCbCr:
+		ycc = v
+	case *h264.ThumbYCbCr:
+		ycc = v.YCbCr
+	}
+	if ycc == nil {
 		return img, false
 	}
 	tw, th := fitThumbSize(ycc.Bounds().Dx(), ycc.Bounds().Dy(), maxW, maxH)

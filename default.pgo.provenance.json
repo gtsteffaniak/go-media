@@ -1,9 +1,14 @@
 {
-  "generatedAt": "2026-10-25T14:50:00Z",
-  "gitHead": "634d8fe4e7e22dd10a76380238d7367839d311cd",
-  "profileSha256": "355b46e5a3a381ff463540d5c37ad5b29d9e1cea01c5df1a023a4122c883e72d",
+  "generatedAt": "2026-10-25T15:30:53Z",
+  "gitHead": "977ef830f1dc15ba30a96c3ffd3473bfa31d2733",
+  "profileSha256": "4982bcfafc259d57db423f560d36c552bbe3eafbc00b83ee1c39716555f4a980",
   "workloads": [
-    "Run make pgo to merge MJPEG/H.264 Main/High/WebM thumbnail benches + Baseline CAVLC decode"
+    "internal/thumb BenchmarkMJPEGSmall/Large",
+    "internal/thumb BenchmarkMP4H264Large",
+    "internal/thumb BenchmarkMP4H264Main1080Large",
+    "internal/thumb BenchmarkMP4H264High1080Large",
+    "internal/thumb BenchmarkThumbnailLargeWebM",
+    "internal/h264 BenchmarkBaselineThumbnailDecode (CAVLC IDR)"
   ],
   "hotPathGlobs": [
     "internal/thumb/**/*.go",
