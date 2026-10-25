@@ -40,7 +40,8 @@ func benchmarkThumbnail(a Asset, opt media.ThumbnailOptions, preset thumbnailPre
 	ffPath := tmp + ".ff.jpg"
 	for i := 0; i < thumbTimingWarmup+thumbTimingRuns; i++ {
 		start := time.Now()
-		_ = ffmpegThumbnailPreset(a.Path, ffPath, 10, preset, assetH264KeyframeOnly(a))
+		kf := assetH264KeyframeOnly(a)
+		_ = ffmpegThumbnailPreset(a.Path, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
 		ffSamples = append(ffSamples, msSince(start))
 	}
 	return thumbTimingSample{

@@ -399,7 +399,8 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	ffPNG := filepath.Join(thumbDir, base+"_ff.png")
 
 	kfOnly := assetH264KeyframeOnly(a)
-	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, 10, preset, kfOnly)
+	seekSec := thumbnailSeekSeconds(a.Path, 10, kfOnly)
+	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, seekSec, preset, kfOnly)
 
 	if gErr != nil {
 		res.Status = classifyGoErr(gErr)
@@ -438,7 +439,7 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 				_ = os.WriteFile(goPNG, goRaw, 0o644)
 			}
 		}
-		if err := ffmpegRasterPNG(a.Path, ffPNG, 10, preset, kfOnly); err == nil {
+		if err := ffmpegRasterPNG(a.Path, ffPNG, seekSec, preset, kfOnly); err == nil {
 			if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
 				res.PSNRDecode = dPSNR
 				res.SSIMDecode = dSSIM
@@ -480,10 +481,6 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	if kfOnly && res.PSNRDecode > 0 && res.PSNRDecode < 45 {
 		res.Status = StatusMismatch
 		res.Detail += fmt.Sprintf("; decode gate: PSNR %.1f < 45 dB", res.PSNRDecode)
-		return res
-	}
-	if kfOnly && res.PSNRDecode >= 45 {
-		res.Status = StatusSupported
 		return res
 	}
 	if res.SSIM >= 0.85 || res.PSNR >= 25 {

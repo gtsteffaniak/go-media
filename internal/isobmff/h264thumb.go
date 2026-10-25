@@ -34,7 +34,7 @@ func loadH264Thumb(r io.ReaderAt, size int64, seekPercent float64) (h264ThumbCtx
 	if !ok {
 		return h264ThumbCtx{}, false
 	}
-	sample, ok := H264SyncSample(r, size, track, seekPercent)
+	sample, ok := h264SyncSampleFromInfo(r, size, track, seekPercent, info)
 	if !ok {
 		return h264ThumbCtx{}, false
 	}
@@ -42,7 +42,7 @@ func loadH264Thumb(r io.ReaderAt, size int64, seekPercent float64) (h264ThumbCtx
 }
 
 // H264ThumbnailYCbCr decodes an IDR frame to YCbCr for area/box downscale before JPEG encode.
-func H264ThumbnailYCbCr(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*image.YCbCr, bool) {
+func H264ThumbnailYCbCr(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*h264.ThumbYCbCr, bool) {
 	ctx, ok := loadH264Thumb(r, size, seekPercent)
 	if !ok {
 		return nil, false
@@ -51,7 +51,7 @@ func H264ThumbnailYCbCr(r io.ReaderAt, size int64, seekPercent float64, fast boo
 	if err != nil || fr == nil {
 		return nil, false
 	}
-	return h264.FrameToYCbCr(fr), true
+	return h264.NewThumbYCbCr(fr), true
 }
 
 // H264ThumbnailRGBA seeks to seekPercent and decodes an H.264 IDR frame to RGBA.

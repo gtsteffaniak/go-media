@@ -38,7 +38,15 @@ func SyncSampleNumbers(r io.ReaderAt, size int64, trackIndex int) ([]uint32, err
 
 // KeyframeSamples returns file offsets and sizes for sync samples (stss).
 func KeyframeSamples(r io.ReaderAt, size int64, trackIndex int) ([]SampleRef, error) {
-	refs, err := SampleRefs(r, size, trackIndex)
+	info, err := mp4.Probe(ioat.New(r, size))
+	if err != nil {
+		return nil, err
+	}
+	return keyframeSamplesFromInfo(r, size, trackIndex, info)
+}
+
+func keyframeSamplesFromInfo(r io.ReaderAt, size int64, trackIndex int, info *mp4.ProbeInfo) ([]SampleRef, error) {
+	refs, err := sampleRefsFromInfo(r, size, trackIndex, info)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +71,10 @@ func SampleRefs(r io.ReaderAt, size int64, trackIndex int) ([]SampleRef, error) 
 	if err != nil {
 		return nil, err
 	}
+	return sampleRefsFromInfo(r, size, trackIndex, info)
+}
+
+func sampleRefsFromInfo(r io.ReaderAt, size int64, trackIndex int, info *mp4.ProbeInfo) ([]SampleRef, error) {
 	if trackIndex < 0 || trackIndex >= len(info.Tracks) {
 		return nil, errs.Unsup("sample table", "track index out of range")
 	}

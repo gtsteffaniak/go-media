@@ -56,7 +56,15 @@ func FirstAVCTrackIndex(r io.ReaderAt, size int64) (int, bool) {
 // seekPercent selects the sync sample whose presentation time is closest to that
 // fraction of the track duration (matching ffmpeg -ss seek semantics).
 func H264SyncSample(r io.ReaderAt, size int64, trackIndex int, seekPercent float64) ([]byte, bool) {
-	keyframes, err := KeyframeSamples(r, size, trackIndex)
+	info, err := mp4.Probe(ioat.New(r, size))
+	if err != nil {
+		return nil, false
+	}
+	return h264SyncSampleFromInfo(r, size, trackIndex, seekPercent, info)
+}
+
+func h264SyncSampleFromInfo(r io.ReaderAt, size int64, trackIndex int, seekPercent float64, info *mp4.ProbeInfo) ([]byte, bool) {
+	keyframes, err := keyframeSamplesFromInfo(r, size, trackIndex, info)
 	if err != nil || len(keyframes) == 0 {
 		return nil, false
 	}
@@ -66,7 +74,7 @@ func H264SyncSample(r io.ReaderAt, size int64, trackIndex int, seekPercent float
 	if seekPercent > 100 {
 		seekPercent = 100
 	}
-	ref, ok := pickKeyframeByTime(r, size, trackIndex, keyframes, seekPercent)
+	ref, ok := pickKeyframeByTimeFromInfo(r, size, trackIndex, keyframes, seekPercent, info)
 	if !ok {
 		return nil, false
 	}
@@ -104,7 +112,14 @@ func H264SyncTimeSec(r io.ReaderAt, size int64, trackIndex int, seekPercent floa
 
 func pickKeyframeByTime(r io.ReaderAt, size int64, trackIndex int, keyframes []SampleRef, seekPercent float64) (SampleRef, bool) {
 	info, err := mp4.Probe(ioat.New(r, size))
-	if err != nil || trackIndex < 0 || trackIndex >= len(info.Tracks) {
+	if err != nil {
+		return SampleRef{}, false
+	}
+	return pickKeyframeByTimeFromInfo(r, size, trackIndex, keyframes, seekPercent, info)
+}
+
+func pickKeyframeByTimeFromInfo(r io.ReaderAt, size int64, trackIndex int, keyframes []SampleRef, seekPercent float64, info *mp4.ProbeInfo) (SampleRef, bool) {
+	if trackIndex < 0 || trackIndex >= len(info.Tracks) {
 		return SampleRef{}, false
 	}
 	tr := info.Tracks[trackIndex]

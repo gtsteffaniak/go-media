@@ -9,7 +9,8 @@ import (
 )
 
 func frameToRGBA(f *frame.Frame) *image.RGBA {
-	cs := yuv.BT709
+	// Match Eyevinn/hi264 FrameToImageCS defaults (BT.601 limited) when VUI is absent.
+	cs := yuv.BT601
 	rng := yuv.LimitedRange
 	if f.ColorDescriptionValid && f.MatrixCoefficients != 0 {
 		cs = yuv.ColorSpaceFromMatrixCoefficients(f.MatrixCoefficients)

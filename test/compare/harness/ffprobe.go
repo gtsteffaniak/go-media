@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/gtsteffaniak/go-media"
 )
 
 // FFProbeFormat holds ffprobe format fields used for comparison.
@@ -126,51 +128,72 @@ func ffprobeVersionLine() string {
 	return strings.TrimSpace(lines[0])
 }
 
+// thumbnailSeekSeconds returns ffmpeg -ss time aligned with go-media thumbnail seek.
+func thumbnailSeekSeconds(videoPath string, seekPercent float64, keyframeOnly bool) float64 {
+	if keyframeOnly {
+		f, err := openFileAt(videoPath)
+		if err != nil {
+			return 0
+		}
+		sec, err := media.H264KeyframeTimeSec(f, f.Size(), seekPercent)
+		if err != nil {
+			return 0
+		}
+		return sec
+	}
+	dur, err := ffprobeDuration(videoPath)
+	if err != nil || dur <= 0 {
+		dur = 5
+	}
+	return dur * seekPercent / 100.0
+}
+
 // ffmpegThumbnailPreset extracts one JPEG frame aligned with a media thumbnail preset.
+// seekSec is presentation time in seconds (use stss sync time for H.264 intra thumbnails).
 // When keyframeOnly is true, ffmpeg decodes only IDR/I frames (matches go-media H.264 intra path).
-func ffmpegThumbnailPreset(path, dest string, seekPercent float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
+func ffmpegThumbScaleFlags(preset thumbnailPresetConfig, keyframeOnly bool) string {
+	// go-media H.264 intra thumbnails use area downscale in YCbCr (ThumbnailFilterArea).
+	if keyframeOnly {
+		return "flags=area"
+	}
+	return preset.FFScale
+}
+
+func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
 	}
-	dur, err := ffprobeDuration(path)
-	if err != nil || dur <= 0 {
-		dur = 5
-	}
-	ss := dur * seekPercent / 100.0
+	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-		preset.MaxWidth, preset.MaxHeight, preset.FFScale)
+		preset.MaxWidth, preset.MaxHeight, scaleFlags)
 	qv := ffmpegQScale(preset.Quality)
 	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
-	if dur >= 0.5 {
-		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
-	}
 	if keyframeOnly {
 		args = append(args, "-skip_frame", "nokey")
+	}
+	if seekSec > 0.001 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
 	}
 	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
 	return exec.Command(ffmpeg, args...).Run()
 }
 
 // ffmpegRasterPNG writes a lossless PNG frame using the same seek/scale as thumbnails.
-func ffmpegRasterPNG(path, dest string, seekPercent float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
+func ffmpegRasterPNG(path, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
 	}
-	dur, err := ffprobeDuration(path)
-	if err != nil || dur <= 0 {
-		dur = 5
-	}
-	ss := dur * seekPercent / 100.0
+	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-		preset.MaxWidth, preset.MaxHeight, preset.FFScale)
+		preset.MaxWidth, preset.MaxHeight, scaleFlags)
 	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
-	if dur >= 0.5 {
-		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
-	}
 	if keyframeOnly {
 		args = append(args, "-skip_frame", "nokey")
+	}
+	if seekSec > 0.001 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
 	}
 	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, dest)
 	return exec.Command(ffmpeg, args...).Run()
