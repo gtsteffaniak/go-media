@@ -389,21 +389,6 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		return res
 	}
 	opt := mediaPreset(preset)
-	timing := benchmarkThumbnail(a, opt, preset)
-	res.GoMediaMS = timing.GoMS
-	res.GoMediaWriteMS = timing.WriteMS
-	res.FFmpegMS = timing.FFmpegMS
-	if res.FFmpegMS > 0 {
-		goCmp := res.GoMediaWriteMS
-		if goCmp <= 0 {
-			goCmp = res.GoMediaMS
-		}
-		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
-		res.TimingDeltaPct = &delta
-		if delta > maxTimingRegressionPct {
-			res.TimingGateFail = true
-		}
-	}
 
 	tr, gErr := media.Thumbnail(f, f.Size(), opt)
 
@@ -412,26 +397,33 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	ffPath := filepath.Join(thumbDir, base+"_ff.jpg")
 	goPNG := filepath.Join(thumbDir, base+"_go.png")
 	ffPNG := filepath.Join(thumbDir, base+"_ff.png")
-	res.ThumbGoPath = relReportPath(goPath)
-	res.ThumbFFPath = relReportPath(ffPath)
 
 	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
 
 	if gErr != nil {
 		res.Status = classifyGoErr(gErr)
 		res.Detail = gErr.Error()
+		if ffErr == nil {
+			res.ThumbFFPath = relReportPath(ffPath)
+		}
 		return res
 	}
 	if err := os.WriteFile(goPath, tr.Data, 0o644); err != nil {
 		res.Status = StatusError
 		res.Detail = err.Error()
+		if ffErr == nil {
+			res.ThumbFFPath = relReportPath(ffPath)
+		}
 		return res
 	}
 	if ffErr != nil {
 		res.Status = StatusError
 		res.Detail = ffErr.Error()
+		res.ThumbGoPath = relReportPath(goPath)
 		return res
 	}
+	res.ThumbGoPath = relReportPath(goPath)
+	res.ThumbFFPath = relReportPath(ffPath)
 
 	f2, err := openAsset(a)
 	if err == nil {
@@ -454,6 +446,23 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	}
 	res.Detail = fmt.Sprintf("jpeg PSNR=%.1f SSIM=%.3f decode PSNR=%.1f SSIM=%.3f",
 		res.PSNR, res.SSIM, res.PSNRDecode, res.SSIMDecode)
+
+	timing := benchmarkThumbnail(a, opt, preset)
+	res.GoMediaMS = timing.GoMS
+	res.GoMediaWriteMS = timing.WriteMS
+	res.FFmpegMS = timing.FFmpegMS
+	if res.FFmpegMS > 0 {
+		goCmp := res.GoMediaWriteMS
+		if goCmp <= 0 {
+			goCmp = res.GoMediaMS
+		}
+		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
+		res.TimingDeltaPct = &delta
+		if delta > maxTimingRegressionPct {
+			res.TimingGateFail = true
+		}
+	}
+
 	if res.TimingGateFail {
 		res.Status = StatusMismatch
 		res.Detail += fmt.Sprintf("; timing gate: write %.0fms vs ffmpeg %.0fms (%.0f%% > 10%%)",

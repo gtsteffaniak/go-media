@@ -44,7 +44,7 @@ type CheckResult struct {
 	GoMediaMS     float64          `json:"goMediaMs"`
 	GoMediaWriteMS float64         `json:"goMediaWriteMs,omitempty"`
 	FFmpegMS      float64          `json:"ffmpegMs,omitempty"`
-	// TimingDeltaPct is (goMediaWriteMs - ffmpegMs) / ffmpegMs when ffmpegMs > 0 (median of 7 runs).
+	// TimingDeltaPct is (goMediaWriteMs - ffmpegMs) / ffmpegMs for supported/mismatch rows only (median of 7 runs).
 	TimingDeltaPct *float64 `json:"timingDeltaPct,omitempty"`
 	TimingGateFail bool             `json:"timingGateFail,omitempty"`
 	Detail        string           `json:"detail,omitempty"`

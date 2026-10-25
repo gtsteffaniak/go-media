@@ -218,6 +218,10 @@ td.metric-col { min-width: 120px; }
   pointer-events: none;
   user-select: none;
 }
+.compare-slider img.compare-missing {
+  object-fit: cover;
+  background: #0d1117;
+}
 .compare-clip {
   position: absolute;
   inset: 0;
@@ -259,10 +263,21 @@ td.metric-col { min-width: 120px; }
   padding: 2rem;
 }
 .lightbox.hidden { display: none; }
-.lightbox img {
+#lightbox-body {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+#lightbox-body .lightbox-img {
   max-width: min(96vw, 1200px);
   max-height: 80vh;
   border-radius: 6px;
+}
+#lightbox-body .compare-slider.lightbox-enlarged {
+  width: min(96vw, 1400px);
+  max-height: 82vh;
+  max-width: 100%;
+  cursor: ew-resize;
 }
 .lightbox-close {
   position: absolute;

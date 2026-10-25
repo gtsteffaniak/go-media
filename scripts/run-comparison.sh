@@ -18,4 +18,5 @@ if [[ "${COMPARE_GATE:-}" == "1" ]]; then
 fi
 
 CGO_ENABLED=0 go run . -seed-dir "$HARNESS/.seed" -assets "$HARNESS/.assets" -report "$REPORT" "${GATE_ARGS[@]}"
-echo "Open test/compare/report_site/index.html in a browser (or: python3 -m http.server 8765 -d test/compare/report_site)"
+PORT="${COMPARE_SERVER_PORT:-8765}"
+echo "View the report: make server  →  http://localhost:${PORT}/"

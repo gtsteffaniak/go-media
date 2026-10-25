@@ -2,6 +2,61 @@ if (new URLSearchParams(window.location.search).has('capture')) {
   document.body.classList.add('capture-mode');
 }
 
+/** Opaque placeholder when go-media (or ffmpeg) thumb file is missing. */
+const THUMB_MISSING_SRC =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180"><rect fill="#0d1117" width="320" height="180"/><rect x="118" y="58" width="84" height="64" rx="4" fill="none" stroke="#3a4555" stroke-width="2"/><path d="M128 98l20-22 18 16 16-14 30 28" fill="none" stroke="#3a4555" stroke-width="2"/><text x="160" y="148" text-anchor="middle" fill="#6b7a90" font-family="system-ui,sans-serif" font-size="13">N/A</text></svg>',
+  );
+
+function thumbCompareSrc(path) {
+  return path || THUMB_MISSING_SRC;
+}
+
+function attachThumbImgFallback(img) {
+  img.addEventListener('error', () => {
+    if (img.dataset.fallbackApplied) return;
+    img.dataset.fallbackApplied = '1';
+    img.src = THUMB_MISSING_SRC;
+    img.classList.add('compare-missing');
+  });
+}
+
+function compareSliderMarkup({ assetId, goSrc, ffSrc, goMissing, ffMissing, extraClass = '' }) {
+  return `
+      <div class="compare-slider ${extraClass}" data-asset="${assetId}" title="Drag to compare · Click to enlarge">
+        <img class="compare-base${goMissing ? ' compare-missing' : ''}" src="${goSrc}" alt="go-media ${assetId}" />
+        <div class="compare-clip">
+          <img class="${ffMissing ? 'compare-missing' : ''}" src="${ffSrc}" alt="ffmpeg ${assetId}" />
+        </div>
+        <div class="compare-handle" aria-hidden="true"></div>
+        <span class="compare-label left">ffmpeg</span>
+        <span class="compare-label right">go-media</span>
+      </div>`;
+}
+
+function openThumbCompareLightbox(card, pct) {
+  const slider = card.querySelector('.compare-slider');
+  if (!slider) return;
+  const goImg = slider.querySelector('.compare-base');
+  const ffImg = slider.querySelector('.compare-clip img');
+  const body = document.getElementById('lightbox-body');
+  const box = document.getElementById('lightbox');
+  body.innerHTML = compareSliderMarkup({
+    assetId: card.dataset.assetId || '',
+    goSrc: goImg.src,
+    ffSrc: ffImg.src,
+    goMissing: goImg.classList.contains('compare-missing'),
+    ffMissing: ffImg.classList.contains('compare-missing'),
+    extraClass: 'lightbox-enlarged',
+  });
+  body.querySelectorAll('img').forEach(attachThumbImgFallback);
+  const enlarged = initCompareSlider(body.querySelector('.compare-slider'));
+  if (enlarged) enlarged.setPct(pct);
+  document.getElementById('lightbox-caption').textContent = card.querySelector('h3')?.textContent?.trim() || '';
+  box.classList.remove('hidden');
+}
+
 let chartInstances = [];
 let reportData = null;
 
@@ -18,6 +73,19 @@ function metricBar(value, max, kind, format, title) {
     <div class="metric-bar-track"><div class="metric-bar-fill ${kind}" style="width:${pct}%"></div></div>
     <span class="metric-bar-value">${label}</span>
   </div>`;
+}
+
+function timingComparableRow(r) {
+  return r.status === 'supported' || r.status === 'mismatch';
+}
+
+function thumbQualityLine(r) {
+  return `JPEG PSNR ${r.psnr?.toFixed(1) ?? '—'} SSIM ${r.ssim?.toFixed(3) ?? '—'} · decode PSNR ${r.psnrDecode?.toFixed(1) ?? '—'} SSIM ${r.ssimDecode?.toFixed(3) ?? '—'}`;
+}
+
+function thumbStatsLine(r) {
+  if (!timingComparableRow(r) || r.timingDeltaPct == null) return thumbQualityLine(r);
+  return `${thumbQualityLine(r)} · go ${r.goMediaMs?.toFixed(1) ?? '—'}ms write ${r.goMediaWriteMs?.toFixed(1) ?? '—'}ms ffmpeg ${r.ffmpegMs?.toFixed(1) ?? '—'}ms ${deltaPctCell(r.timingDeltaPct)}`;
 }
 
 function deltaPctCell(pct) {
@@ -66,26 +134,38 @@ function makeSortable(table, getRows, renderBody) {
 
 function initLightbox() {
   const box = document.getElementById('lightbox');
-  const img = document.getElementById('lightbox-img');
+  const body = document.getElementById('lightbox-body');
   const cap = document.getElementById('lightbox-caption');
+  const close = () => box.classList.add('hidden');
   document.body.addEventListener('click', (e) => {
     const t = e.target;
     if (t.matches('.thumb-compare img, .thumb-pair img')) {
-      img.src = t.src;
+      body.innerHTML = `<img class="lightbox-img" src="${t.src}" alt="" />`;
+      const img = body.querySelector('img');
+      img.alt = t.alt || '';
       cap.textContent = t.alt || '';
       box.classList.remove('hidden');
     }
   });
-  box.querySelector('.lightbox-close').addEventListener('click', () => box.classList.add('hidden'));
-  box.addEventListener('click', (e) => { if (e.target === box) box.classList.add('hidden'); });
+  box.querySelector('.lightbox-close').addEventListener('click', close);
+  box.addEventListener('click', (e) => { if (e.target === box) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !box.classList.contains('hidden')) close();
+  });
 }
 
-function initCompareSlider(root) {
-  const slider = root.querySelector('.compare-slider');
-  if (!slider) return;
+const COMPARE_CLICK_DRAG_PX = 8;
+
+function initCompareSlider(sliderOrRoot, { onZoom } = {}) {
+  const slider = sliderOrRoot?.classList?.contains('compare-slider')
+    ? sliderOrRoot
+    : sliderOrRoot?.querySelector('.compare-slider');
+  if (!slider) return null;
   const clip = slider.querySelector('.compare-clip');
   const handle = slider.querySelector('.compare-handle');
   let pct = 50;
+  let dragStart = null;
+  let dragged = false;
   const apply = (p) => {
     pct = Math.max(2, Math.min(98, p));
     clip.style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
@@ -97,14 +177,30 @@ function initCompareSlider(root) {
     apply(((clientX - rect.left) / rect.width) * 100);
   };
   slider.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    dragStart = { x: e.clientX, y: e.clientY };
+    dragged = false;
     slider.setPointerCapture(e.pointerId);
     move(e.clientX);
   });
   slider.addEventListener('pointermove', (e) => {
     if (!slider.hasPointerCapture(e.pointerId)) return;
+    if (dragStart) {
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      if (Math.hypot(dx, dy) > COMPARE_CLICK_DRAG_PX) dragged = true;
+    }
     move(e.clientX);
   });
-  slider.addEventListener('pointerup', (e) => slider.releasePointerCapture(e.pointerId));
+  slider.addEventListener('pointerup', (e) => {
+    if (slider.hasPointerCapture(e.pointerId)) slider.releasePointerCapture(e.pointerId);
+    if (!dragged && onZoom) onZoom(pct);
+    dragStart = null;
+  });
+  slider.addEventListener('pointercancel', () => {
+    dragStart = null;
+  });
+  return { getPct: () => pct, setPct: apply };
 }
 
 function renderCharts(report) {
@@ -170,7 +266,7 @@ function renderCharts(report) {
   }));
 
   const deltas = results
-    .filter((r) => r.timingDeltaPct != null && r.status !== 'skipped')
+    .filter((r) => r.timingDeltaPct != null && timingComparableRow(r))
     .map((r) => r.timingDeltaPct * 100);
   const histBins = [-100, -50, -25, -10, 0, 10, 25, 50, 100, 200];
   const histCounts = new Array(histBins.length - 1).fill(0);
@@ -369,9 +465,9 @@ function renderReport(report) {
         <td>${r.assetId}</td>
         <td>${r.check}</td>
         <td class="status-${r.status}">${r.status}${stReg}</td>
-        <td class="metric-col">${metricBar(r.goMediaMs || 0, maxMs, 'go', (v) => `${v.toFixed(2)}`, `go-media ${r.goMediaMs?.toFixed(2)} ms`)}${reg}</td>
-        <td class="metric-col">${r.ffmpegMs ? metricBar(r.ffmpegMs, maxMs, 'ff', (v) => `${v.toFixed(2)}`, `ffmpeg ${r.ffmpegMs.toFixed(2)} ms`) : '—'}</td>
-        <td>${deltaPctCell(r.timingDeltaPct)}</td>
+        <td class="metric-col">${timingComparableRow(r) ? metricBar(r.goMediaMs || 0, maxMs, 'go', (v) => `${v.toFixed(2)}`, `go-media ${r.goMediaMs?.toFixed(2)} ms`) + reg : '—'}</td>
+        <td class="metric-col">${timingComparableRow(r) && r.ffmpegMs ? metricBar(r.ffmpegMs, maxMs, 'ff', (v) => `${v.toFixed(2)}`, `ffmpeg ${r.ffmpegMs.toFixed(2)} ms`) : '—'}</td>
+        <td>${timingComparableRow(r) ? deltaPctCell(r.timingDeltaPct) : '—'}</td>
         <td>${qualityBar(r.durationDeltaSec, 1, false)}</td>
         <td>${r.psnr ? qualityBar(r.psnr, maxPsnr, true) : '—'}</td>
         <td>${r.ssim ? qualityBar(r.ssim, 1, true) : '—'}</td>
@@ -387,26 +483,31 @@ function renderReport(report) {
   const grid = document.getElementById('thumb-grid');
   grid.innerHTML = '';
   for (const r of report.results) {
-    if ((r.check !== 'thumbnail_small' && r.check !== 'thumbnail_large') || !r.thumbGoPath) continue;
+    if (r.check !== 'thumbnail_small' && r.check !== 'thumbnail_large') continue;
+    if (!r.thumbFFPath && !r.thumbGoPath) continue;
     const card = document.createElement('div');
     card.className = 'thumb-card';
     card.dataset.assetId = r.assetId;
     card.dataset.thumbPreset = r.thumbPreset || (r.check === 'thumbnail_large' ? 'large' : 'small');
     const preset = card.dataset.thumbPreset;
+    const ffMissing = !r.thumbFFPath;
+    const goMissing = !r.thumbGoPath;
     card.innerHTML = `
       <h3>${r.assetId} (${preset}) <span class="status-${r.status}">${r.status}</span></h3>
-      <div class="compare-slider" data-asset="${r.assetId}">
-        <img class="compare-base" src="${r.thumbFFPath}" alt="ffmpeg ${r.assetId}" />
-        <div class="compare-clip">
-          <img src="${r.thumbGoPath}" alt="go-media ${r.assetId}" />
-        </div>
-        <div class="compare-handle" aria-hidden="true"></div>
-        <span class="compare-label left">ffmpeg</span>
-        <span class="compare-label right">go-media</span>
-      </div>
-      <p>JPEG PSNR ${r.psnr?.toFixed(1) ?? '—'} SSIM ${r.ssim?.toFixed(3) ?? '—'} · decode PSNR ${r.psnrDecode?.toFixed(1) ?? '—'} SSIM ${r.ssimDecode?.toFixed(3) ?? '—'} · go ${r.goMediaMs?.toFixed(1) ?? '—'}ms write ${r.goMediaWriteMs?.toFixed(1) ?? '—'}ms ffmpeg ${r.ffmpegMs?.toFixed(1) ?? '—'}ms ${deltaPctCell(r.timingDeltaPct)}</p>`;
+      ${compareSliderMarkup({
+        assetId: r.assetId,
+        goSrc: thumbCompareSrc(r.thumbGoPath),
+        ffSrc: thumbCompareSrc(r.thumbFFPath),
+        goMissing,
+        ffMissing,
+      })}
+      <p>${thumbStatsLine(r)}</p>`;
     grid.appendChild(card);
-    initCompareSlider(card);
+    card.querySelectorAll('.compare-slider img').forEach(attachThumbImgFallback);
+    const previewSlider = card.querySelector('.compare-slider');
+    initCompareSlider(previewSlider, {
+      onZoom: (pct) => openThumbCompareLightbox(card, pct),
+    });
   }
 
   renderScalerTable(report.scalerBenchmarks || []);
