@@ -69,7 +69,7 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 
 	switch fmtID {
 	case format.MP4:
-		if b, ok := isobmff.MJPEGFrame(r, size); ok {
+		if b, ok := isobmff.MJPEGFrame(r, size, opt.SeekPercent); ok {
 			img, err := decodeBytes(b, "image/jpeg")
 			if err != nil {
 				return nil, "", err
