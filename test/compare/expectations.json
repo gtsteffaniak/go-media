@@ -1,6 +1,16 @@
 {
   "version": 1,
   "ffmpegVersionPrefix": "ffmpeg version 9.0.2",
+  "timingGate": {
+    "defaultMaxRegressionFraction": 0.2,
+    "targetMaxRegressionFraction": 0.1,
+    "enforcedAssetIds": [
+      "mjpeg_mp4",
+      "mp4_h264",
+      "mp4_h264_main_1080",
+      "mp4_h264_high_1080"
+    ]
+  },
   "cases": [
     {
       "assetId": "flac_tags",

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"image"
 
-	"github.com/Eyevinn/hi264/pkg/decoder"
 	"github.com/Eyevinn/hi264/pkg/frame"
 	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/errs"
@@ -53,9 +52,9 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 		}
 		data = prependParameterSets(avcc, sample)
 	}
-	dec := decoder.New()
-	dec.SkipDeblock = fast
+	dec := borrowDecoder(fast)
 	frames, err := dec.DecodeIDRAVC(data)
+	releaseDecoder(dec)
 	if err != nil {
 		return nil, mapDecodeErr(err)
 	}

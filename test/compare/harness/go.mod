@@ -1,6 +1,6 @@
 module github.com/gtsteffaniak/go-media/test/compare/harness
 
-go 1.26.4
+go 1.27.3
 
 require github.com/gtsteffaniak/go-media v0.0.0
 

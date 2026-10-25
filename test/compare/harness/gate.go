@@ -11,6 +11,7 @@ import (
 type ExpectationsFile struct {
 	Version             int                `json:"version"`
 	FFmpegVersionPrefix string             `json:"ffmpegVersionPrefix"`
+	TimingGate          *TimingGatePolicy  `json:"timingGate,omitempty"`
 	Cases               []ExpectationCase  `json:"cases"`
 }
 

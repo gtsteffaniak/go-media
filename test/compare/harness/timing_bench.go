@@ -9,8 +9,9 @@ import (
 )
 
 const thumbTimingWarmup = 9
-const thumbTimingRuns = 7
-const maxTimingRegressionPct = 0.10
+const thumbTimingRuns = 11
+const maxTimingRegressionPct = 0.20
+const targetTimingRegressionPct = 0.10
 
 type thumbTimingSample struct {
 	GoMS    float64

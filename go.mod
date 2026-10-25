@@ -1,6 +1,8 @@
 module github.com/gtsteffaniak/go-media
 
-go 1.26.4
+go 1.27.3
+
+toolchain go1.27.3
 
 require (
 	github.com/Eyevinn/hi264 v0.10.0

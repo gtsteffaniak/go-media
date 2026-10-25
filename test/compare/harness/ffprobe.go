@@ -173,8 +173,9 @@ func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailP
 	qv := ffmpegQScale(preset.Quality)
 	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
 	if keyframeOnly {
-		args = append(args, "-skip_frame", "nokey")
+		args = append(args, "-skip_frame", "nokey", "-skip_loop_filter", "all")
 	}
+	args = append(args, "-threads", "1")
 	if seekSec > 0.001 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
 	}

@@ -17,6 +17,55 @@ env:
 
 jobs:
   test:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: amd64
+            purego: false
+          - os: ubuntu-latest
+            arch: amd64
+            purego: true
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            purego: false
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            purego: true
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.3"
+          cache: true
+      - name: Install static ffmpeg
+        if: matrix.os == 'ubuntu-latest'
+        run: bash scripts/install-ffmpeg.sh
+      - name: Generate fixtures
+        if: matrix.os == 'ubuntu-latest' && matrix.purego == false
+        run: ./scripts/generate-fixtures.sh
+      - name: Vet
+        run: |
+          if [ "${{ matrix.purego }}" = "true" ]; then
+            CGO_ENABLED=0 go vet -tags purego ./...
+          else
+            CGO_ENABLED=0 go vet ./...
+          fi
+      - name: Test
+        run: |
+          if [ "${{ matrix.purego }}" = "true" ]; then
+            CGO_ENABLED=0 go test -tags purego ./...
+          else
+            CGO_ENABLED=0 go test ./...
+          fi
+      - name: Fuzz smoke (subtitle, amd64 default only)
+        if: matrix.os == 'ubuntu-latest' && matrix.purego == false
+        run: CGO_ENABLED=0 go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
+
+  test-simd-experiment:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,18 +73,10 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: "1.27.3"
           cache: true
-      - name: Install static ffmpeg
-        run: bash scripts/install-ffmpeg.sh
-      - name: Generate fixtures
-        run: ./scripts/generate-fixtures.sh
-      - name: Vet
-        run: CGO_ENABLED=0 go vet ./...
-      - name: Test
-        run: CGO_ENABLED=0 go test ./...
-      - name: Fuzz smoke (subtitle)
-        run: CGO_ENABLED=0 go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
+      - name: Test GOEXPERIMENT=simd kernels
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/...
 
   compare-gate:
     name: ffmpeg comparison gate
@@ -46,7 +87,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: "1.27.3"
           cache: true
       - name: Install static ffmpeg
         run: bash scripts/install-ffmpeg.sh

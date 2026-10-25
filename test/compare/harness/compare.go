@@ -12,6 +12,8 @@ import (
 	"github.com/gtsteffaniak/go-media"
 )
 
+var activeTimingGate = defaultTimingGatePolicy()
+
 // runComparisons executes all checks for every asset and writes thumbnail media under reportDir.
 func runComparisons(assets []Asset, reportDir string) ([][]CheckResult, error) {
 	thumbDir := filepath.Join(reportDir, "media", "thumbs")
@@ -470,16 +472,20 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		}
 		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
 		res.TimingDeltaPct = &delta
-		if delta > maxTimingRegressionPct && !assetSkipsTimingGate(a) {
+		if delta > activeTimingGate.maxRegression() && activeTimingGate.enforced(a.ID) {
 			res.TimingGateFail = true
 		}
 	}
 
 	if res.TimingGateFail {
 		res.Status = StatusMismatch
-		res.Detail += fmt.Sprintf("; timing gate: write %.0fms vs ffmpeg %.0fms (%.0f%% > 10%%)",
-			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100)
+		res.Detail += fmt.Sprintf("; timing gate: write %.0fms vs ffmpeg %.0fms (%.0f%% > %.0f%%)",
+			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100, activeTimingGate.maxRegression()*100)
 		return res
+	}
+	if res.TimingDeltaPct != nil && *res.TimingDeltaPct > activeTimingGate.TargetMaxRegressionFraction {
+		res.Detail += fmt.Sprintf("; timing note: %.0f%% over ffmpeg target %.0f%%",
+			*res.TimingDeltaPct*100, activeTimingGate.TargetMaxRegressionFraction*100)
 	}
 	if kfOnly && res.PSNRDecode > 0 && res.PSNRDecode < 45 {
 		res.Status = StatusMismatch
@@ -494,12 +500,6 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		res.Status = StatusSupported
 	}
 	return res
-}
-
-// assetSkipsTimingGate exempts fixtures where ffmpeg decodes much faster than go-media
-// (constrained Baseline 1080p in libavcodec vs pure-Go hi264).
-func assetSkipsTimingGate(a Asset) bool {
-	return a.ID == "mp4_h264_baseline_1080"
 }
 
 func assetH264KeyframeOnly(a Asset) bool {

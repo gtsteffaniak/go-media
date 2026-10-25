@@ -68,6 +68,8 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 		return nil
 	}
 
+	loadTimingGatePolicy(reportDir, expectationsPath)
+
 	nested, err := runComparisons(assets, reportDir)
 	if err != nil {
 		return err
@@ -94,6 +96,18 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 		fmt.Println("comparison gate: OK")
 	}
 	return nil
+}
+
+func loadTimingGatePolicy(reportDir, expectationsPath string) {
+	path := expectationsPath
+	if path == "" {
+		path = filepath.Join(reportDir, "..", "expectations.json")
+	}
+	exp, err := loadExpectations(path)
+	if err != nil {
+		return
+	}
+	activeTimingGate = timingGatePolicyFromExpectations(exp)
 }
 
 func absUnder(base, p string) string {
