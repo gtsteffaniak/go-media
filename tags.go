@@ -3,6 +3,8 @@ package media
 import (
 	"io"
 
+	"github.com/gtsteffaniak/go-media/internal/format"
+	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
 )
@@ -22,6 +24,9 @@ func HasArtwork(r io.ReaderAt, size int64) bool {
 	id, err := sniff.Detect(r, size)
 	if err != nil {
 		return false
+	}
+	if id == format.MP4 {
+		return isobmff.HasCover(r, size)
 	}
 	return tagread.HasArtwork(r, size, id)
 }

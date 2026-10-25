@@ -20,10 +20,10 @@ Implementation: `test/compare/harness/seed.go`.
 | Assets | 15 |
 | API checks | 105 |
 | **Supported** (matches ffmpeg within tolerance) | 40 |
-| Typed unsupported (`ErrUnsupported` / profile) | 13 |
+| Typed unsupported (`ErrUnsupported` / profile) | 8 |
 | Mismatch | 0 |
 | Error | 0 |
-| Skipped (not applicable) | 52 |
+| Skipped (not applicable) | 57 |
 
 ### Why 52 checks are skipped
 
@@ -33,8 +33,9 @@ Skips are **expected N/A rows**, not failures. Each asset runs seven checks (`du
 
 - **Duration + probe** are strong on MP4/MOV/MKV/WebM, WAV/FLAC/OGG/MP3/M4A fixtures derived from the seed or synthetic audio.
 - **Tags + artwork** align for ID3, Vorbis, and MP4 `ilst` on the generated audio matrix; FLAC embedded pictures are detected.
-- **Subtitles**: sidecar SRT/VTT/ASS convert to WebVTT; MKV embedded SRT extracts. MP4 embedded subtitle listing remains typed-unsupported (expected).
-- **Thumbnails**: MJPEG-in-MP4 previews match ffmpeg closely. H.264 in MP4/MOV/MKV and VP8 WebM often return `ErrUnsupportedProfile` (H.264 decoder stub; VP8 golden/alt-ref frames) — ffmpeg is still required for those previews.
+- **Subtitles**: sidecar SRT/VTT/ASS convert to WebVTT; MKV embedded SRT extracts; MP4/MOV lists embedded tracks (wvtt/stpp/tx3g) and extracts when present. Assets without subtitle tracks skip the subtitles check.
+- **Thumbnails**: MJPEG-in-MP4 uses the sample table (`stsz`/`stco`/`stsc`) and matches ffmpeg closely. H.264 in MP4/MOV/MKV and VP8 WebM often return `ErrUnsupportedProfile` (H.264 intra decoder stub; VP8 golden/alt-ref frames) — ffmpeg is still required for those previews.
+- **Artwork**: cover detection uses `attached_pic` disposition (not full-motion MJPEG video).
 
 ## Report dashboard
 

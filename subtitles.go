@@ -8,6 +8,7 @@ import (
 
 	"github.com/gtsteffaniak/go-media/internal/detect"
 	"github.com/gtsteffaniak/go-media/internal/format"
+	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/subtitle"
@@ -51,7 +52,21 @@ func ListSubtitleTracks(r io.ReaderAt, size int64) ([]SubtitleTrack, error) {
 		}
 		return out, nil
 	case format.MP4:
-		return nil, Unsupported("subtitle list", "mp4 embedded tracks not yet listed")
+		streams, err := isobmff.SubtitleTracks(r, size)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		var out []SubtitleTrack
+		for _, s := range streams {
+			out = append(out, SubtitleTrack{
+				Index:    s.Index,
+				Codec:    s.Codec,
+				Language: s.Language,
+				Title:    s.Title,
+				Embedded: true,
+			})
+		}
+		return out, nil
 	default:
 		return nil, nil
 	}
@@ -66,6 +81,9 @@ func ExtractEmbeddedSubtitle(r io.ReaderAt, size int64, streamIndex int) (string
 	switch id {
 	case format.MKV, format.WebM:
 		vtt, err := matroska.ExtractSubtitleWebVTT(r, size, streamIndex)
+		return vtt, mapErr(err)
+	case format.MP4:
+		vtt, err := isobmff.ExtractSubtitleWebVTT(r, size, streamIndex)
 		return vtt, mapErr(err)
 	default:
 		return "", Unsupported("subtitle extract", string(id))
