@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>go-media vs ffmpeg comparison</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>go-media vs ffmpeg / ffprobe</h1>
+    <p id="meta">Loading…</p>
+  </header>
+
+  <section class="cards" id="summary-cards"></section>
+
+  <section>
+    <h2>Capability matrix</h2>
+    <div class="table-scroll">
+      <table id="matrix-table">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th>Duration</th>
+            <th>Probe</th>
+            <th>Tags</th>
+            <th>Artwork</th>
+            <th>Lyrics</th>
+            <th>Subtitles</th>
+            <th>Thumbnail</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Detailed results</h2>
+    <div class="table-scroll">
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th>Asset</th><th>Check</th><th>Status</th><th>go-media (ms)</th><th>ffmpeg (ms)</th>
+            <th>Δ duration</th><th>PSNR</th><th>SSIM</th><th>Detail</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="thumbs-section">
+    <h2>Thumbnail comparisons</h2>
+    <div id="thumb-grid"></div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

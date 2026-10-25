@@ -19,12 +19,15 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	if sr == 0 {
 		return detect.DurationResult{}, errs.Unsup("duration", "ogg sample rate")
 	}
-	tailSize := min64(size, 128*1024)
-	tail, err := ioat.ReadAll(r, size, size-tailSize, tailSize)
+	readLen := size
+	if readLen > 512*1024 {
+		readLen = 512 * 1024
+	}
+	tail, err := ioat.ReadAll(r, size, size-readLen, readLen)
 	if err != nil && err != io.EOF {
 		return detect.DurationResult{}, err
 	}
-	granule, ok := lastGranule(tail)
+	granule, ok := maxGranule(tail)
 	if !ok {
 		return detect.DurationResult{}, errs.Unsup("duration", "ogg granule")
 	}
@@ -43,11 +46,19 @@ func sampleRateFromHead(buf []byte) int {
 	return 0
 }
 
-// vorbisSampleRate reads sample rate from a Vorbis ID header.
+// vorbisSampleRate reads sample rate from the first Vorbis identification header.
 func vorbisSampleRate(buf []byte) int {
-	for i := 0; i+18 <= len(buf); i++ {
-		if buf[i] == 0x01 && buf[i+1] == 'v' && buf[i+2] == 'o' && buf[i+3] == 'r' && buf[i+4] == 'b' && buf[i+5] == 'i' && buf[i+6] == 's' {
-			return int(binary.LittleEndian.Uint32(buf[i+11 : i+15]))
+	limit := len(buf)
+	if limit > 64*1024 {
+		limit = 64 * 1024
+	}
+	for i := 0; i+16 <= limit; i++ {
+		if buf[i] != 0x01 || buf[i+1] != 'v' || buf[i+2] != 'o' || buf[i+3] != 'r' || buf[i+4] != 'b' || buf[i+5] != 'i' || buf[i+6] != 's' {
+			continue
+		}
+		sr := int(binary.LittleEndian.Uint32(buf[i+12 : i+16]))
+		if sr >= 8000 && sr <= 384000 {
+			return sr
 		}
 	}
 	return 0
@@ -68,20 +79,43 @@ func opusSampleRate(buf []byte) int {
 	return 0
 }
 
-// lastGranule finds the highest Ogg page granule position in buf.
-func lastGranule(buf []byte) (uint64, bool) {
-	var lastGranule uint64
-	for i := 0; i+27 <= len(buf); i++ {
+// maxGranule finds the maximum Ogg page granule position in buf.
+func maxGranule(buf []byte) (uint64, bool) {
+	var maxG uint64
+	found := false
+	for i := 0; i+27 <= len(buf); {
 		if buf[i] != 'O' || buf[i+1] != 'g' || buf[i+2] != 'g' || buf[i+3] != 'S' {
+			i++
 			continue
 		}
 		granule := uint64(buf[i+6]) | uint64(buf[i+7])<<8 | uint64(buf[i+8])<<16 | uint64(buf[i+9])<<24 |
 			uint64(buf[i+10])<<32 | uint64(buf[i+11])<<40 | uint64(buf[i+12])<<48 | uint64(buf[i+13])<<56
-		if granule != 0 {
-			lastGranule = granule
+		if granule != ^uint64(0) && granule > maxG {
+			maxG = granule
+			found = true
 		}
+		pageLen := oggPageLength(buf, i)
+		if pageLen <= 0 {
+			break
+		}
+		i += pageLen
 	}
-	return lastGranule, lastGranule != 0
+	return maxG, found
+}
+
+func oggPageLength(buf []byte, i int) int {
+	if i+27 > len(buf) {
+		return 0
+	}
+	segs := int(buf[i+26])
+	if i+27+segs > len(buf) {
+		return 0
+	}
+	total := 27 + segs
+	for j := 0; j < segs; j++ {
+		total += int(buf[i+27+j])
+	}
+	return total
 }
 
 // Streams returns elementary stream descriptors from container headers.
