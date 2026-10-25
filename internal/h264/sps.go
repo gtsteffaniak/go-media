@@ -18,7 +18,7 @@ func validateSPSNAL(nal []byte) error {
 		return errs.UnsupProfile("h264", fmt.Sprintf("sps: %v", err))
 	}
 	if sps.Profile == h264ProfileBaseline {
-		return errs.UnsupProfile("h264", "baseline profile (CAVLC): unsupported for performance; use ffmpeg")
+		return errs.UnsupProfile("h264", "baseline profile (CAVLC): unsupported until ≤20% compare-gate; see docs/BASELINE_PROFILE.md")
 	}
 	if sps.ChromaFormatIDC != 1 {
 		return errs.UnsupProfile("h264", fmt.Sprintf("chroma format %d (need 4:2:0)", sps.ChromaFormatIDC))

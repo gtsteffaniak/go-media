@@ -53,7 +53,7 @@ func TestDecodeIPCMSlice(t *testing.T) {
 	frame := NewFrame(sps)
 
 	rbsp := buildIPCMSlice(sps)
-	h, err := DecodeSlice(rbsp, nal.TypeIDR, 3, sps, pps, frame)
+	h, err := DecodeSlice(rbsp, nal.TypeIDR, 3, sps, pps, frame, false)
 	if err != nil {
 		t.Fatalf("DecodeSlice: %v", err)
 	}

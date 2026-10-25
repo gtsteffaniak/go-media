@@ -2,7 +2,6 @@ package decode
 
 import (
 	"errors"
-	"os"
 
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/nal"
@@ -17,7 +16,9 @@ var (
 // DecodeSlice parses the header and data of a single slice, writing the decoded
 // macroblocks into frame. I-slices (CAVLC or CABAC) made of I_PCM, I_16x16 and
 // I_NxN macroblocks are supported.
-func DecodeSlice(rbsp []byte, nalType nal.Type, nalRefIDC uint8, sps *SPS, pps *PPS, frame *Frame) (*SliceHeader, error) {
+// DecodeSlice parses and decodes one slice into frame. When skipDeblock is true,
+// in-loop deblocking is omitted (thumbnail fast preview).
+func DecodeSlice(rbsp []byte, nalType nal.Type, nalRefIDC uint8, sps *SPS, pps *PPS, frame *Frame, skipDeblock bool) (*SliceHeader, error) {
 	r := bitstream.NewReader(rbsp)
 	h, err := readSliceHeader(r, nalType, nalRefIDC, sps, pps)
 	if err != nil {
@@ -30,7 +31,7 @@ func DecodeSlice(rbsp []byte, nalType nal.Type, nalRefIDC uint8, sps *SPS, pps *
 	if err := sd.run(); err != nil {
 		return h, err
 	}
-	if os.Getenv("H264_NO_DEBLOCK") == "" {
+	if !skipDeblock {
 		sd.deblock() // assumes one slice per frame
 	}
 	return h, nil

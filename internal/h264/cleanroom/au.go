@@ -5,7 +5,6 @@ package cleanroom
 import (
 	"encoding/binary"
 	"errors"
-	"os"
 
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/decode"
@@ -47,11 +46,6 @@ func (d *Decoder) DecodeIDRAVC(data []byte) ([]*decode.Frame, error) {
 }
 
 func (d *Decoder) decodeNALUs(nalus [][]byte, idrOnly bool) (*decode.Frame, error) {
-	if d.SkipDeblock {
-		os.Setenv("H264_NO_DEBLOCK", "1")
-	} else {
-		os.Unsetenv("H264_NO_DEBLOCK")
-	}
 	var frame *decode.Frame
 	var lastHdr *decode.SliceHeader
 	for _, nalu := range nalus {
@@ -106,7 +100,7 @@ func (d *Decoder) decodeSliceUnit(u nal.Unit, frame *decode.Frame, lastHdr *deco
 	if frame == nil {
 		frame = decode.NewFrame(sps)
 	}
-	h, err := decode.DecodeSlice(u.RBSP, u.Type, u.RefIDC, sps, pps, frame)
+	h, err := decode.DecodeSlice(u.RBSP, u.Type, u.RefIDC, sps, pps, frame, d.SkipDeblock)
 	if err != nil {
 		if lastHdr == nil {
 			return nil, h, err
