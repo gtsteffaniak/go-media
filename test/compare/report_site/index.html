@@ -5,29 +5,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>go-media vs ffmpeg comparison</title>
   <link rel="stylesheet" href="style.css" />
+  <script
+    src="vendor/chart.umd.min.js"
+    integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC"
+    crossorigin="anonymous"
+  ></script>
 </head>
 <body>
   <header>
     <h1>go-media vs ffmpeg / ffprobe</h1>
     <p id="meta">Loading…</p>
+    <p id="timing-meta" class="sub-meta"></p>
   </header>
 
   <section class="cards" id="summary-cards"></section>
 
+  <section class="charts-row" id="charts-summary">
+    <div class="chart-box compact"><canvas id="chart-status"></canvas></div>
+    <div class="chart-box compact"><canvas id="chart-timing-totals"></canvas></div>
+    <div class="chart-box compact"><canvas id="chart-capability"></canvas></div>
+  </section>
+
+  <section class="charts-metrics" id="charts-metrics">
+    <div class="chart-box tall">
+      <h3>Timing delta % (go-media vs ffmpeg)</h3>
+      <div class="chart-wrap"><canvas id="chart-timing-histogram"></canvas></div>
+    </div>
+    <div class="chart-box tall">
+      <h3>go-media latency by check (median ms)</h3>
+      <div class="chart-wrap"><canvas id="chart-check-median"></canvas></div>
+    </div>
+    <div class="chart-box tall" id="per-asset-chart-section">
+      <h3>Per-asset go-media ms (supported checks)</h3>
+      <div class="chart-wrap"><canvas id="chart-per-asset"></canvas></div>
+    </div>
+  </section>
+
   <section>
     <h2>Capability matrix</h2>
+    <div class="filters">
+      <label>Filter asset <input type="search" id="matrix-filter" placeholder="id or description" /></label>
+    </div>
     <div class="table-scroll">
-      <table id="matrix-table">
+      <table id="matrix-table" class="sortable">
         <thead>
           <tr>
-            <th>Asset</th>
-            <th>Duration</th>
-            <th>Probe</th>
-            <th>Tags</th>
-            <th>Artwork</th>
-            <th>Lyrics</th>
-            <th>Subtitles</th>
-            <th>Thumbnail</th>
+            <th data-sort="asset">Asset</th>
+            <th data-sort="duration">Duration</th>
+            <th data-sort="probe">Probe</th>
+            <th data-sort="tags">Tags</th>
+            <th data-sort="artwork">Artwork</th>
+            <th data-sort="lyrics">Lyrics</th>
+            <th data-sort="subtitles">Subtitles</th>
+            <th data-sort="thumbnail">Thumbnail</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -37,12 +67,31 @@
 
   <section>
     <h2>Detailed results</h2>
+    <div class="filters">
+      <label>Asset <input type="search" id="filter-asset" placeholder="asset id" /></label>
+      <label>Check <select id="filter-check"><option value="">all</option></select></label>
+      <label>Status <select id="filter-status"><option value="">all</option></select></label>
+      <label>Δ timing <select id="filter-delta">
+        <option value="">all</option>
+        <option value="faster">go-media faster</option>
+        <option value="slower">go-media slower</option>
+        <option value="regression">vs prev run</option>
+      </select></label>
+    </div>
     <div class="table-scroll">
-      <table id="results-table">
+      <table id="results-table" class="sortable">
         <thead>
           <tr>
-            <th>Asset</th><th>Check</th><th>Status</th><th>go-media (ms)</th><th>ffmpeg (ms)</th>
-            <th>Δ duration</th><th>PSNR</th><th>SSIM</th><th>Detail</th>
+            <th data-sort="assetId">Asset</th>
+            <th data-sort="check">Check</th>
+            <th data-sort="status">Status</th>
+            <th data-sort="goMediaMs">go-media (ms)</th>
+            <th data-sort="ffmpegMs">ffmpeg (ms)</th>
+            <th data-sort="timingDeltaPct">Δ timing %</th>
+            <th data-sort="durationDeltaSec">Δ duration</th>
+            <th data-sort="psnr">PSNR</th>
+            <th data-sort="ssim">SSIM</th>
+            <th>Detail</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -52,8 +101,15 @@
 
   <section id="thumbs-section">
     <h2>Thumbnail comparisons</h2>
+    <p class="hint">Drag the divider to compare ffmpeg (left) vs go-media (right). Click an image to expand.</p>
     <div id="thumb-grid"></div>
   </section>
+
+  <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true">
+    <button type="button" class="lightbox-close" aria-label="Close">×</button>
+    <img id="lightbox-img" alt="" />
+    <p id="lightbox-caption"></p>
+  </div>
 
   <script src="app.js"></script>
 </body>

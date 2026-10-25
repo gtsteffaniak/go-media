@@ -5,14 +5,25 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
 // writeReport builds summary JSON and copies static site assets into reportDir.
 func writeReport(reportDir string, assets []Asset, results [][]CheckResult) error {
-	summary := buildSummary(assets, results)
-	report := FullReport{Summary: summary, Assets: assets, Results: flattenResults(results)}
 	dataDir := filepath.Join(reportDir, "data")
+	var prev *FullReport
+	prevPath := filepath.Join(dataDir, "report.json")
+	if b, err := os.ReadFile(prevPath); err == nil {
+		var loaded FullReport
+		if json.Unmarshal(b, &loaded) == nil {
+			prev = &loaded
+		}
+	}
+	flat := flattenResults(results)
+	enrichResults(flat, prev)
+	summary := buildSummary(assets, nestedFromFlat(flat))
+	report := FullReport{Summary: summary, Assets: assets, Results: flat}
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
@@ -38,6 +49,75 @@ func flattenResults(nested [][]CheckResult) []CheckResult {
 	return flat
 }
 
+func nestedFromFlat(flat []CheckResult) [][]CheckResult {
+	return [][]CheckResult{flat}
+}
+
+func enrichResults(flat []CheckResult, prev *FullReport) {
+	prevByKey := map[string]CheckResult{}
+	if prev != nil {
+		for _, r := range prev.Results {
+			prevByKey[resultKey(r)] = r
+		}
+	}
+	var timingRegressions, statusRegressions, compared int
+	for i := range flat {
+		r := &flat[i]
+		if r.FFmpegMS > 0 {
+			pct := (r.GoMediaMS - r.FFmpegMS) / r.FFmpegMS
+			r.TimingDeltaPct = &pct
+		}
+		if pr, ok := prevByKey[resultKey(*r)]; ok {
+			compared++
+			prevMS := pr.GoMediaMS
+			r.PrevGoMediaMS = &prevMS
+			if pr.TimingDeltaPct != nil {
+				v := *pr.TimingDeltaPct
+				r.PrevTimingDelta = &v
+			}
+			reg := r.GoMediaMS > prevMS*1.15 && r.GoMediaMS-prevMS > 1
+			r.TimingRegression = &reg
+			if reg {
+				timingRegressions++
+			}
+			stReg := rankStatus(r.Status) < rankStatus(pr.Status)
+			r.StatusRegression = &stReg
+			if stReg {
+				statusRegressions++
+			}
+		}
+	}
+	if prev != nil && compared > 0 {
+		_lastPrevSummary = &PreviousRunSummary{
+			GeneratedAt:       prev.Summary.GeneratedAt,
+			ComparedChecks:    compared,
+			TimingRegressions: timingRegressions,
+			StatusRegressions: statusRegressions,
+		}
+	}
+}
+
+var _lastPrevSummary *PreviousRunSummary
+
+func resultKey(r CheckResult) string {
+	return r.AssetID + "\x00" + string(r.Check)
+}
+
+func rankStatus(st CapabilityStatus) int {
+	switch st {
+	case StatusSupported:
+		return 5
+	case StatusTypedUnsupported:
+		return 4
+	case StatusSkipped:
+		return 3
+	case StatusMismatch:
+		return 2
+	default:
+		return 1
+	}
+}
+
 // buildSummary aggregates counts for the dashboard.
 func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	s := ReportSummary{
@@ -51,6 +131,17 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	s.FFmpegVersion = ffmpegVersionLine()
 	s.FFprobeVersion = ffprobeVersionLine()
 	s.GoMediaModule = "github.com/gtsteffaniak/go-media"
+	checkNames := []CheckName{
+		CheckDuration, CheckProbe, CheckTags, CheckArtwork,
+		CheckLyrics, CheckSubtitles, CheckThumbnail,
+	}
+	byCheckStatus := map[CheckName]map[CapabilityStatus]int{}
+	for _, c := range checkNames {
+		byCheckStatus[c] = map[CapabilityStatus]int{}
+	}
+	var deltaPcts []float64
+	var totalGo, totalFF float64
+	comparable := 0
 	for _, group := range nested {
 		for _, r := range group {
 			s.TotalChecks++
@@ -58,7 +149,49 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 			if r.Status == StatusSupported {
 				s.ByCheck[string(r.Check)]++
 			}
+			byCheckStatus[r.Check][r.Status]++
+			if r.FFmpegMS > 0 && r.Status != StatusSkipped {
+				comparable++
+				totalGo += r.GoMediaMS
+				totalFF += r.FFmpegMS
+				if r.TimingDeltaPct != nil {
+					deltaPcts = append(deltaPcts, *r.TimingDeltaPct)
+				}
+			}
 		}
+	}
+	for _, c := range checkNames {
+		m := byCheckStatus[c]
+		s.CapabilityChart = append(s.CapabilityChart, CapabilityBreakdown{
+			Check:     string(c),
+			Supported: m[StatusSupported],
+			Other:     m[StatusTypedUnsupported] + m[StatusMismatch] + m[StatusError],
+			Skipped:   m[StatusSkipped],
+		})
+	}
+	s.Timing = TimingAggregate{
+		ComparableRows: comparable,
+		TotalGoMediaMS: totalGo,
+		TotalFFmpegMS:  totalFF,
+	}
+	if len(deltaPcts) > 0 {
+		var sum float64
+		for _, d := range deltaPcts {
+			sum += d
+		}
+		s.Timing.AvgDeltaPct = sum / float64(len(deltaPcts))
+		sorted := append([]float64(nil), deltaPcts...)
+		sort.Float64s(sorted)
+		mid := len(sorted) / 2
+		if len(sorted)%2 == 0 {
+			s.Timing.MedianDeltaPct = (sorted[mid-1] + sorted[mid]) / 2
+		} else {
+			s.Timing.MedianDeltaPct = sorted[mid]
+		}
+	}
+	if _lastPrevSummary != nil {
+		s.PreviousRun = _lastPrevSummary
+		_lastPrevSummary = nil
 	}
 	return s
 }

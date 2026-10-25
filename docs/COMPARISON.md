@@ -41,6 +41,10 @@ Skips are **expected N/A rows**, not failures. Each asset runs seven checks (`du
 
 ![Comparison report dashboard](comparison/report-dashboard.png)
 
+Interactive charts (timing histograms, capability breakdown, per-asset latency) are rendered with vendored Chart.js in the report site:
+
+![Comparison report charts](comparison/report-charts.png)
+
 ## Thumbnail comparisons
 
 ### MJPEG (supported)
@@ -62,7 +66,9 @@ make compare-docs     # compare + Playwright screenshots for docs/comparison/
 # open test/compare/report_site/index.html
 ```
 
-Doc screenshots (`docs/comparison/*.png`) are **browser captures** of the rendered report (`test/compare/report_site/index.html?capture=1`), not composited images. Regenerate with `make compare-docs` (requires Node + `npm install` under `scripts/` on first run).
+Doc screenshots (`docs/comparison/*.png`) are **browser captures** of the rendered report (`test/compare/report_site/index.html?capture=1`), not composited images. The MJPEG and VP8 shots use the report’s clip-path compare slider (ffmpeg / go-media labels). Regenerate with `make compare-docs` (requires Node + `npm install` under `scripts/` on first run).
+
+`report.json` includes per-row `timingDeltaPct` ((go-media − ffmpeg) / ffmpeg), aggregate timing stats, capability breakdown, and optional regression flags when a previous `data/report.json` is present on disk before the run.
 
 Manifest: [`test/compare/expectations.json`](../test/compare/expectations.json) lists the allowed status for all 105 `(asset, check)` pairs. `COMPARE_GATE=1` or `-gate` fails on any drift.
 

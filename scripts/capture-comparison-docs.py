@@ -64,6 +64,7 @@ def main() -> int:
 
     for name in (
         "report-dashboard.png",
+        "report-charts.png",
         "mjpeg-thumbnail-side-by-side.png",
         "vp8-ffmpeg-frame.png",
     ):

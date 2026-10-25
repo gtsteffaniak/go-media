@@ -42,6 +42,8 @@ type CheckResult struct {
 	Status        CapabilityStatus `json:"status"`
 	GoMediaMS     float64          `json:"goMediaMs"`
 	FFmpegMS      float64          `json:"ffmpegMs,omitempty"`
+	// TimingDeltaPct is (goMediaMs - ffmpegMs) / ffmpegMs when ffmpegMs > 0.
+	TimingDeltaPct *float64 `json:"timingDeltaPct,omitempty"`
 	Detail        string           `json:"detail,omitempty"`
 	DurationDelta float64          `json:"durationDeltaSec,omitempty"`
 	FieldDiffs    []string         `json:"fieldDiffs,omitempty"`
@@ -49,6 +51,36 @@ type CheckResult struct {
 	SSIM          float64          `json:"ssim,omitempty"`
 	ThumbGoPath   string           `json:"thumbGoPath,omitempty"`
 	ThumbFFPath   string           `json:"thumbFFPath,omitempty"`
+	// Previous-run regression (when a prior report.json existed).
+	PrevGoMediaMS   *float64 `json:"prevGoMediaMs,omitempty"`
+	PrevTimingDelta *float64 `json:"prevTimingDeltaPct,omitempty"`
+	TimingRegression *bool   `json:"timingRegression,omitempty"`
+	StatusRegression *bool   `json:"statusRegression,omitempty"`
+}
+
+// TimingAggregate summarizes latency across comparable rows.
+type TimingAggregate struct {
+	ComparableRows int     `json:"comparableRows"`
+	TotalGoMediaMS float64 `json:"totalGoMediaMs"`
+	TotalFFmpegMS  float64 `json:"totalFfmpegMs"`
+	AvgDeltaPct    float64 `json:"avgTimingDeltaPct"`
+	MedianDeltaPct float64 `json:"medianTimingDeltaPct"`
+}
+
+// CapabilityBreakdown is supported vs other counts per check name.
+type CapabilityBreakdown struct {
+	Check     string `json:"check"`
+	Supported int    `json:"supported"`
+	Other     int    `json:"other"`
+	Skipped   int    `json:"skipped"`
+}
+
+// PreviousRunSummary captures drift vs the last generated report.
+type PreviousRunSummary struct {
+	GeneratedAt      time.Time `json:"generatedAt"`
+	ComparedChecks   int       `json:"comparedChecks"`
+	TimingRegressions int      `json:"timingRegressions"`
+	StatusRegressions int      `json:"statusRegressions"`
 }
 
 // ReportSummary aggregates dashboard counts.
@@ -63,6 +95,9 @@ type ReportSummary struct {
 	FFmpegVersion   string         `json:"ffmpegVersion"`
 	FFprobeVersion  string         `json:"ffprobeVersion"`
 	GoMediaModule   string         `json:"goMediaModule"`
+	Timing          TimingAggregate           `json:"timing"`
+	CapabilityChart []CapabilityBreakdown     `json:"capabilityBreakdown"`
+	PreviousRun     *PreviousRunSummary       `json:"previousRun,omitempty"`
 }
 
 // FullReport is serialized to report_site/data/report.json for the static dashboard.
