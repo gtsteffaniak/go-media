@@ -37,34 +37,46 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	}
 	var streams []detect.Stream
 	for i, tr := range info.Tracks {
-		s := detect.Stream{Index: i}
-		switch tr.Codec {
-		case mp4.CodecAVC1:
-			s.Type = detect.StreamVideo
-			s.Codec = "h264"
-			if tr.AVC != nil {
-				s.Width = int(tr.AVC.Width)
-				s.Height = int(tr.AVC.Height)
-			}
-		case mp4.CodecMP4A:
-			s.Type = detect.StreamAudio
-			s.Codec = "aac"
-			if tr.MP4A != nil {
-				s.Channels = int(tr.MP4A.ChannelCount)
-			}
-		default:
-			if tr.Codec != mp4.CodecUnknown {
-				continue
-			}
-			if _, ok := MJPEGFrame(r, size); !ok {
-				continue
-			}
-			s.Type = detect.StreamVideo
-			s.Codec = "mjpeg"
+		s, ok := streamForTrack(r, size, i, tr)
+		if !ok {
+			continue
 		}
 		streams = append(streams, s)
 	}
 	return streams, nil
+}
+
+func streamForTrack(r io.ReaderAt, size int64, index int, tr *mp4.Track) (detect.Stream, bool) {
+	s := detect.Stream{Index: index}
+	switch tr.Codec {
+	case mp4.CodecAVC1:
+		s.Type = detect.StreamVideo
+		s.Codec = "h264"
+		if tr.AVC != nil {
+			s.Width = int(tr.AVC.Width)
+			s.Height = int(tr.AVC.Height)
+		}
+		return s, true
+	case mp4.CodecMP4A:
+		s.Type = detect.StreamAudio
+		s.Codec = "aac"
+		if tr.MP4A != nil {
+			s.Channels = int(tr.MP4A.ChannelCount)
+		}
+		return s, true
+	case mp4.CodecUnknown:
+		vse, ok := visualMJPEGSampleEntry(r, size, index)
+		if !ok {
+			return detect.Stream{}, false
+		}
+		s.Type = detect.StreamVideo
+		s.Codec = "mjpeg"
+		s.Width = int(vse.Width)
+		s.Height = int(vse.Height)
+		return s, true
+	default:
+		return detect.Stream{}, false
+	}
 }
 
 // FormatName supports media inspection.
