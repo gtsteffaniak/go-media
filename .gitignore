@@ -6,3 +6,7 @@ test/compare/harness/report_site/
 test/compare/report_site/data/
 test/compare/report_site/media/
 test/compare/.seed_tmp/
+
+# Doc capture (scripts/package.json)
+scripts/node_modules/
+scripts/node_modules/

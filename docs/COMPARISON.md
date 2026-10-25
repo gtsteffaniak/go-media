@@ -20,12 +20,12 @@ Implementation: `test/compare/harness/seed.go`.
 | Assets | 15 |
 | API checks | 105 |
 | **Supported** (matches ffmpeg within tolerance) | 40 |
-| Typed unsupported (`ErrUnsupported` / profile) | 13 |
+| Typed unsupported (`ErrUnsupported` / profile) | 8 |
 | Mismatch | 0 |
 | Error | 0 |
-| Skipped (not applicable) | 52 |
+| Skipped (not applicable) | 57 |
 
-### Why 52 checks are skipped
+### Why 57 checks are skipped
 
 Skips are **expected N/A rows**, not failures. Each asset runs seven checks (`duration`, `probe`, `tags`, `artwork`, `lyrics`, `subtitles`, `thumbnail`). A check is skipped when it does not apply to that fixture—for example `tags` on video-only files, `thumbnail` on audio, `lyrics` without an `.lrc` sidecar, or `subtitles` when the asset is not a subtitle-focused case. The CLI summary and `report.json` `detail` field document the reason per row.
 
@@ -33,8 +33,9 @@ Skips are **expected N/A rows**, not failures. Each asset runs seven checks (`du
 
 - **Duration + probe** are strong on MP4/MOV/MKV/WebM, WAV/FLAC/OGG/MP3/M4A fixtures derived from the seed or synthetic audio.
 - **Tags + artwork** align for ID3, Vorbis, and MP4 `ilst` on the generated audio matrix; FLAC embedded pictures are detected.
-- **Subtitles**: sidecar SRT/VTT/ASS convert to WebVTT; MKV embedded SRT extracts. MP4 embedded subtitle listing remains typed-unsupported (expected).
-- **Thumbnails**: MJPEG-in-MP4 previews match ffmpeg closely. H.264 in MP4/MOV/MKV and VP8 WebM often return `ErrUnsupportedProfile` (H.264 decoder stub; VP8 golden/alt-ref frames) — ffmpeg is still required for those previews.
+- **Subtitles**: sidecar SRT/VTT/ASS convert to WebVTT; MKV embedded SRT extracts; MP4/MOV lists embedded tracks (wvtt/stpp/tx3g) and extracts when present. Assets without subtitle tracks skip the subtitles check.
+- **Thumbnails**: MJPEG-in-MP4 uses the sample table (`stsz`/`stco`/`stsc`) and matches ffmpeg closely. H.264 in MP4/MOV/MKV and VP8 WebM often return `ErrUnsupportedProfile` (H.264 intra decoder stub; VP8 golden/alt-ref frames) — ffmpeg is still required for those previews.
+- **Artwork**: cover detection uses `attached_pic` disposition (not full-motion MJPEG video).
 
 ## Report dashboard
 
@@ -57,8 +58,11 @@ Requirements: Go 1.26+, **ffmpeg/ffprobe 9.0.2** on `PATH` (install with `make f
 ```bash
 make compare          # report only
 make compare-gate     # report + expectations.json gate (CI uses this)
+make compare-docs     # compare + Playwright screenshots for docs/comparison/
 # open test/compare/report_site/index.html
 ```
+
+Doc screenshots (`docs/comparison/*.png`) are **browser captures** of the rendered report (`test/compare/report_site/index.html?capture=1`), not composited images. Regenerate with `make compare-docs` (requires Node + `npm install` under `scripts/` on first run).
 
 Manifest: [`test/compare/expectations.json`](../test/compare/expectations.json) lists the allowed status for all 105 `(asset, check)` pairs. `COMPARE_GATE=1` or `-gate` fails on any drift.
 

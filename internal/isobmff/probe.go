@@ -35,8 +35,19 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	if err != nil {
 		return nil, err
 	}
+	metas, _ := listTrakMeta(r, size)
 	var streams []detect.Stream
 	for i, tr := range info.Tracks {
+		if i < len(metas) && isSubtitleHandler(metas[i].HandlerType) {
+			codec := subtitleCodecFromFourCC(metas[i].SampleFourCC)
+			if codec != "" {
+				streams = append(streams, detect.Stream{
+					Index: i, Type: detect.StreamSubtitle, Codec: codec,
+					Language: metas[i].Language, Title: metas[i].HandlerName,
+				})
+			}
+			continue
+		}
 		s, ok := streamForTrack(r, size, i, tr)
 		if !ok {
 			continue

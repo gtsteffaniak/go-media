@@ -23,4 +23,7 @@ compare: ffmpeg
 compare-gate: ffmpeg
 	COMPARE_GATE=1 bash scripts/run-comparison.sh
 
+compare-docs: compare
+	python3 scripts/capture-comparison-docs.py
+
 ci: test compare-gate

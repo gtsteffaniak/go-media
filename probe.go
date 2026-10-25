@@ -56,7 +56,11 @@ func Probe(r io.ReaderAt, size int64) (*ProbeInfo, error) {
 		info.Tags = mapTags(tags)
 	}
 	info.HasLyrics = tagread.HasEmbeddedLyrics(r, size, id) || info.Tags.Raw["lyrics"] != ""
-	info.HasArtwork = tagread.HasArtwork(r, size, id)
+	if id == format.MP4 {
+		info.HasArtwork = isobmff.HasCover(r, size)
+	} else {
+		info.HasArtwork = tagread.HasArtwork(r, size, id)
+	}
 
 	subs, _ := ListSubtitleTracks(r, size)
 	info.SubtitleTracks = subs

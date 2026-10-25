@@ -1,3 +1,7 @@
+if (new URLSearchParams(window.location.search).has('capture')) {
+  document.body.classList.add('capture-mode');
+}
+
 async function loadReport() {
   const res = await fetch('data/report.json');
   const report = await res.json();
@@ -55,6 +59,7 @@ async function loadReport() {
     if (r.check !== 'thumbnail' || !r.thumbGoPath) continue;
     const card = document.createElement('div');
     card.className = 'thumb-card';
+    card.dataset.assetId = r.assetId;
     card.innerHTML = `
       <h3>${r.assetId} <span class="status-${r.status}">${r.status}</span></h3>
       <div class="thumb-pair">

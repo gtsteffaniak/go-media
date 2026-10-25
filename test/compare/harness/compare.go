@@ -207,7 +207,7 @@ func checkArtwork(a Asset) CheckResult {
 	}
 	ffHas := false
 	for _, s := range ff.Streams {
-		if s.CodecType == "video" && (s.CodecName == "png" || s.CodecName == "mjpeg" || s.CodecName == "bmp") {
+		if s.AttachedPic == 1 {
 			ffHas = true
 		}
 	}

@@ -30,7 +30,7 @@
     {
       "assetId": "mp4_h264",
       "check": "subtitles",
-      "expect": "typed_unsupported"
+      "expect": "skipped"
     },
     {
       "assetId": "mp4_h264",
@@ -65,7 +65,7 @@
     {
       "assetId": "mov_h264",
       "check": "subtitles",
-      "expect": "typed_unsupported"
+      "expect": "skipped"
     },
     {
       "assetId": "mov_h264",
@@ -195,17 +195,17 @@
     {
       "assetId": "mjpeg_mp4",
       "check": "artwork",
-      "expect": "typed_unsupported"
-    },
-    {
-      "assetId": "mjpeg_mp4",
-      "check": "lyrics",
       "expect": "skipped"
     },
     {
       "assetId": "mjpeg_mp4",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mjpeg_mp4",
       "check": "subtitles",
-      "expect": "typed_unsupported"
+      "expect": "skipped"
     },
     {
       "assetId": "mjpeg_mp4",
@@ -450,7 +450,7 @@
     {
       "assetId": "m4a_aac",
       "check": "subtitles",
-      "expect": "typed_unsupported"
+      "expect": "skipped"
     },
     {
       "assetId": "m4a_aac",
