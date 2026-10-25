@@ -1,7 +1,6 @@
 // Package h264 implements intra-only H.264/AVC keyframe decode for thumbnails.
 //
-// Intra-only AVC decode for thumbnails. Decode stack is being replaced under
-// internal/h264/cleanroom; see docs/FOLLOWUP_H264_CLEANROOM.md (hi264 relocation is not acceptable).
+// Intra-only AVC decode for thumbnails via internal/h264/cleanroom (no Eyevinn/hi264).
 package h264
 
 import (
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"image"
 
+	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom"
 	"github.com/gtsteffaniak/go-media/internal/h264/frame"
 	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/errs"
@@ -32,6 +32,7 @@ func DecodeAVCC(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*i
 	}
 	return frameToRGBA(fr), nil
 }
+
 
 // DecodeAVCCFrame returns the decoded frame without RGB conversion.
 func DecodeAVCCFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*frame.Frame, error) {
@@ -61,7 +62,7 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 	if len(frames) == 0 {
 		return nil, errs.UnsupProfile("h264 keyframe", "no IDR slice in sample")
 	}
-	return frames[0], nil
+	return cleanroom.ToFrame(frames[0]), nil
 }
 
 func mapDecodeErr(err error) error {

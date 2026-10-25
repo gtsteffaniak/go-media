@@ -3,19 +3,19 @@ package h264
 import (
 	"sync"
 
-	"github.com/gtsteffaniak/go-media/internal/h264/intradec"
+	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom"
 )
 
 var decoderPool = sync.Pool{
-	New: func() interface{} { return intradec.New() },
+	New: func() interface{} { return cleanroom.New() },
 }
 
-func borrowDecoder(fast bool) *intradec.Decoder {
-	dec := decoderPool.Get().(*intradec.Decoder)
+func borrowDecoder(fast bool) *cleanroom.Decoder {
+	dec := decoderPool.Get().(*cleanroom.Decoder)
 	dec.SkipDeblock = fast
 	return dec
 }
 
-func releaseDecoder(dec *intradec.Decoder) {
+func releaseDecoder(dec *cleanroom.Decoder) {
 	decoderPool.Put(dec)
 }

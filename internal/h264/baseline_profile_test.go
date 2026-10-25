@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/abema/go-mp4"
+	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom"
 )
 
 // BenchmarkBaselineThumbnailDecode profiles CAVLC decode for mp4_h264_baseline_1080
@@ -22,6 +23,7 @@ func BenchmarkBaselineThumbnailDecode(b *testing.B) {
 		if err != nil || len(frames) == 0 {
 			b.Fatal(err)
 		}
+		_ = cleanroom.ToFrame(frames[0])
 	}
 }
 

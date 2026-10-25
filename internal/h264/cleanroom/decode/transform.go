@@ -1,0 +1,142 @@
+package decode
+
+// Inverse dequantization and integer transforms for H.264.
+// All functions operate on integer coefficients and do not depend on the
+// bitstream — they are easy to verify with deterministic vectors. Flat
+// quantization matrix (weightScale = 16); scaling lists (High profile) will be
+// added later.
+
+// normAdjust4x4 (the "v" table): rows m = QP%6, columns are the position class.
+var normAdjust4x4 = [6][3]int32{
+	{10, 16, 13},
+	{11, 18, 14},
+	{13, 20, 16},
+	{14, 23, 18},
+	{16, 25, 20},
+	{18, 29, 23},
+}
+
+// posClass4x4: 0 — both coordinates even, 1 — both odd, 2 — otherwise.
+func posClass4x4(i, j int) int {
+	iEven := i%2 == 0
+	jEven := j%2 == 0
+	switch {
+	case iEven && jEven:
+		return 0
+	case !iEven && !jEven:
+		return 1
+	default:
+		return 2
+	}
+}
+
+// levelScale4x4 with a flat matrix: LevelScale = weightScale(16) · normAdjust.
+func levelScale4x4(m, i, j int) int32 {
+	return 16 * normAdjust4x4[m][posClass4x4(i, j)]
+}
+
+// dequant4x4 scales the 16 coefficients of a 4x4 block. Row-major
+// order: idx = i*4 + j. For I_16x16/chroma, position 0 (DC) is preset to zero
+// and then overwritten by the separately computed DC.
+func dequant4x4(coef [16]int32, qp int) [16]int32 {
+	m := qp % 6
+	shift := qp / 6
+	var d [16]int32
+	for idx := 0; idx < 16; idx++ {
+		ls := levelScale4x4(m, idx/4, idx%4)
+		c := coef[idx]
+		if shift >= 4 {
+			d[idx] = (c * ls) << uint(shift-4)
+		} else {
+			d[idx] = (c*ls + (1 << uint(3-shift))) >> uint(4-shift)
+		}
+	}
+	return d
+}
+
+// inverseTransform4x4 — inverse integer transform over the scaled
+// coefficients d; returns the residual r = (e + 32) >> 6.
+func inverseTransform4x4(d [16]int32) [16]int32 {
+	var f [16]int32
+	for i := 0; i < 4; i++ { // by rows
+		o := i * 4
+		e0 := d[o+0] + d[o+2]
+		e1 := d[o+0] - d[o+2]
+		e2 := (d[o+1] >> 1) - d[o+3]
+		e3 := d[o+1] + (d[o+3] >> 1)
+		f[o+0] = e0 + e3
+		f[o+1] = e1 + e2
+		f[o+2] = e1 - e2
+		f[o+3] = e0 - e3
+	}
+	var h [16]int32
+	for j := 0; j < 4; j++ { // by columns
+		g0 := f[0*4+j] + f[2*4+j]
+		g1 := f[0*4+j] - f[2*4+j]
+		g2 := (f[1*4+j] >> 1) - f[3*4+j]
+		g3 := f[1*4+j] + (f[3*4+j] >> 1)
+		h[0*4+j] = g0 + g3
+		h[1*4+j] = g1 + g2
+		h[2*4+j] = g1 - g2
+		h[3*4+j] = g0 - g3
+	}
+	var r [16]int32
+	for k := 0; k < 16; k++ {
+		r[k] = (h[k] + 32) >> 6
+	}
+	return r
+}
+
+// inverseLumaDC — inverse 4x4 Hadamard over the I_16x16 DC coefficients and
+// their scaling. Result is 16 DC values, one per 4x4 block.
+func inverseLumaDC(c [16]int32, qp int) [16]int32 {
+	var f [16]int32
+	for i := 0; i < 4; i++ {
+		o := i * 4
+		e0 := c[o+0] + c[o+2]
+		e1 := c[o+0] - c[o+2]
+		e2 := c[o+1] - c[o+3]
+		e3 := c[o+1] + c[o+3]
+		f[o+0] = e0 + e3
+		f[o+1] = e1 + e2
+		f[o+2] = e1 - e2
+		f[o+3] = e0 - e3
+	}
+	var g [16]int32
+	for j := 0; j < 4; j++ {
+		a0 := f[0*4+j] + f[2*4+j]
+		a1 := f[0*4+j] - f[2*4+j]
+		a2 := f[1*4+j] - f[3*4+j]
+		a3 := f[1*4+j] + f[3*4+j]
+		g[0*4+j] = a0 + a3
+		g[1*4+j] = a1 + a2
+		g[2*4+j] = a1 - a2
+		g[3*4+j] = a0 - a3
+	}
+	m := qp % 6
+	shift := qp / 6
+	ls := levelScale4x4(m, 0, 0)
+	var dc [16]int32
+	for k := 0; k < 16; k++ {
+		if shift >= 6 {
+			dc[k] = (g[k] * ls) << uint(shift-6)
+		} else {
+			dc[k] = (g[k]*ls + (1 << uint(5-shift))) >> uint(6-shift)
+		}
+	}
+	return dc
+}
+
+// inverseChromaDC — inverse 2x2 Hadamard over the chroma DC (4:2:0) and scaling
+// qpC is the chroma QP. Order of c: [(0,0),(0,1),(1,0),(1,1)].
+func inverseChromaDC(c [4]int32, qpC int) [4]int32 {
+	f0 := c[0] + c[1] + c[2] + c[3]
+	f1 := c[0] - c[1] + c[2] - c[3]
+	f2 := c[0] + c[1] - c[2] - c[3]
+	f3 := c[0] - c[1] - c[2] + c[3]
+	m := qpC % 6
+	shift := qpC / 6
+	ls := levelScale4x4(m, 0, 0)
+	scale := func(v int32) int32 { return ((v * ls) << uint(shift)) >> 5 }
+	return [4]int32{scale(f0), scale(f1), scale(f2), scale(f3)}
+}

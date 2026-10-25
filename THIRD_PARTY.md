@@ -6,8 +6,6 @@
 
 **Policy:** Do not add mp4ff for full MP4 manipulation without updating this file.
 
-## H.264 intra decode (`internal/h264`)
+## H.264 intra decode (`internal/h264/cleanroom`)
 
-**Target:** clean-room decode-only intra Main/High under `internal/h264/cleanroom`, written from ITU-T H.264 (ffmpeg/openh264 as behavioral references only). See `docs/FOLLOWUP_H264_CLEANROOM.md`.
-
-**Current PR #9 state (not acceptable):** packages `intradec`, `cabac`, `cavlc`, `transform`, `pred`, `slice`, `reconstruct`, `h264context`, `frame`, `yuv` are **relocated Eyevinn/hi264** (~8.3k LOC), not a new implementation. There is **no** `github.com/Eyevinn/hi264` module entry, but relocated copies are still hi264 and must be deleted.
+Decode-only intra path for thumbnails. **No Eyevinn/hi264.** Slice/MB implementation is derived from **[mgvs/go-openh264](https://github.com/mgvs/go-openh264)** (BSD-2-Clause; ITU-T / openh264 design references) vendored under `internal/h264/cleanroom/` — see `NOTICE-mgvs` and `LICENSE-mgvs-BSD-2`. SPS policy and MP4 wiring remain in `internal/h264`. Regenerate `default.pgo` after decode changes (`make pgo`).
