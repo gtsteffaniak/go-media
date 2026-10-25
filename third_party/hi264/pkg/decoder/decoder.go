@@ -9,6 +9,7 @@ import (
 
 	"github.com/Eyevinn/hi264/internal/cabac"
 	"github.com/Eyevinn/hi264/internal/cavlc"
+	"github.com/Eyevinn/hi264/internal/kernels"
 	"github.com/Eyevinn/hi264/internal/context"
 	"github.com/Eyevinn/hi264/internal/pred"
 	"github.com/Eyevinn/hi264/internal/slice"
@@ -655,24 +656,12 @@ func reconstructI4x4(sc *slice.SliceContext, f *frame.Frame,
 		topAvail := y0+by > 0
 		predBlock := pred.Predict4x4(mb.Intra4x4PredMode[i], ref, leftAvail, topAvail)
 
-		// Apply zigzag scan to convert from CABAC scan order to matrix order
 		var coeffs [16]int32
 		for j := range 16 {
 			coeffs[zigzag4x4[j]] = mb.LumaLevel4x4[i][j]
 		}
-		// Dequantize + inverse transform
-		dequant := transform.Dequant4x4(coeffs, mb.QPY, sl)
-		residual := transform.InverseTransform4x4(dequant)
-
-		// Reconstruct (direct plane write avoids per-pixel calls)
-		stride := f.StrideY
-		for y := range 4 {
-			dst := (y0+by+y)*stride + x0 + bx
-			for x := range 4 {
-				val := int32(predBlock[y][x]) + residual[y*4+x]
-				f.Y[dst+x] = clip8(val)
-			}
-		}
+		residual := transform.DequantInverse4x4(coeffs, mb.QPY, sl)
+		kernels.ReconstructLuma4x4(f.Y, f.StrideY, x0+bx, y0+by, predBlock, residual)
 	}
 
 	return nil
