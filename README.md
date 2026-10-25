@@ -8,7 +8,7 @@ Pure-Go media primitives: duration, metadata, subtitles, and keyframe thumbnails
 
 go-media breaks out the core media functionality that can be done in **pure Go** (`CGO_ENABLED=0`, no external binaries, no WASM) so apps like [FileBrowser Quantum](https://github.com/gtsteffaniak/filebrowser) can skip spawning `ffmpeg`/`ffprobe` for common cases.
 
-**This is not an ffmpeg replacement.** There's no video transcoding or encoding and no filters. go-media is a **fast path**: when it can't handle a file it returns a typed error (`ErrUnsupported`, `ErrUnsupportedProfile`, ...) and the caller falls back to ffmpeg (for example through [gtsteffaniak/go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)). Even limited coverage is better than starting a process for every file.
+**This is not an ffmpeg replacement.** go-media is a **fast path**: when it can't handle a file it returns a typed error (`ErrUnsupported`, `ErrUnsupportedProfile`, ...) and the caller falls back to ffmpeg (for example through [gtsteffaniak/go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)). Even limited coverage is better than starting a process for every file.
 
 ## Design principles
 
@@ -104,7 +104,7 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 | JPEG (stdlib) | ✅ primary |
 | PNG (stdlib) | ✅ |
 | WebP lossless (pure-Go encoder) | 🟡 possible |
-| WebP lossy | ❌ no pure-Go encoder exists |
+| WebP lossy | 🟡 research / TBD |
 
 ## H.264 keyframe decoder
 
@@ -130,7 +130,6 @@ These are research ideas, not commitments:
 
 ## Non-goals
 
-- Transcoding, encoding video, muxing or filters.
 - Being a general ffmpeg/libav replacement.
 - cgo, external binaries or WASM.
 - Inter-frame decoding or playback.
