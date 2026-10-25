@@ -101,15 +101,23 @@ func cueBlock(start, end, text string) string {
 // toVTTTime is an internal subtitle helper.
 func toVTTTime(s string) string {
 	s = strings.TrimSpace(s)
-	s = strings.ReplaceAll(s, ",", ".")
-	if strings.Count(s, ":") == 1 {
-		s = "00:" + s
-	}
-	// drop extra styling after timestamp in srt
-	if i := strings.Index(s, " "); i >= 0 {
+	if i := strings.IndexByte(s, ' '); i >= 0 {
 		s = s[:i]
 	}
-	return s
+	s = strings.ReplaceAll(s, ",", ".")
+	parts := strings.SplitN(s, ".", 2)
+	clock := strings.Split(parts[0], ":")
+	if len(clock) == 2 {
+		clock = append([]string{"00"}, clock...)
+	}
+	if len(clock) == 3 && len(clock[0]) == 1 {
+		clock[0] = "0" + clock[0]
+	}
+	out := strings.Join(clock, ":")
+	if len(parts) == 2 {
+		out += "." + (parts[1] + "000")[:3]
+	}
+	return out
 }
 
 // stripASSTags is an internal subtitle helper.

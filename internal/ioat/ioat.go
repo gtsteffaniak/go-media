@@ -112,9 +112,12 @@ func (s *SectionReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	if off < 0 || off >= s.size {
 		return 0, io.EOF
 	}
-	max := int64(len(p))
-	if off+max > s.size {
-		max = s.size - off
+	if rem := s.size - off; int64(len(p)) > rem {
+		n, err := s.r.ReadAt(p[:rem], s.base+off)
+		if err == nil {
+			err = io.EOF
+		}
+		return n, err
 	}
-	return s.r.ReadAt(p[:max], s.base+off)
+	return s.r.ReadAt(p, s.base+off)
 }
