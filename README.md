@@ -1,6 +1,6 @@
 # go-media
 
-> **Status: early / aspirational.** Nothing is implemented yet. The tables below show *planned* support, not current capability.
+> **Status: initial implementation.** Core probe/duration, tags (via [dhowden/tag](https://github.com/dhowden/tag)), sidecar subtitles, MKV subtitle extract, embedded artwork, MJPEG/VP8/cover thumbnails, and an H.264 intra decoder **stub** are in place. CI runs `go vet`, `CGO_ENABLED=0` tests, and an ffprobe comparison harness.
 
 Pure-Go media primitives: duration, metadata, subtitles, and keyframe thumbnails without ffmpeg.
 
@@ -30,9 +30,9 @@ Every feature is checked against real `ffmpeg`/`ffprobe` output on a corpus of r
 - **Fuzzing:** all parsers and bitstream readers are fuzzed (`go test -fuzz`).
 - **Published results:** a compatibility report lives in this repo and is updated as the corpus grows.
 
-## Aspirational support matrix
+## Support matrix (current)
 
-Legend: ✅ Planned · 🟡 Partial / conditional · ❌ Out of scope (use ffmpeg)
+Legend: ✅ Implemented · 🟡 Partial / conditional · 📋 Planned · ❌ Out of scope (use ffmpeg)
 
 ### Duration
 
@@ -40,10 +40,11 @@ Legend: ✅ Planned · 🟡 Partial / conditional · ❌ Out of scope (use ffmpe
 |---|---|---|
 | MP4 / MOV / M4A / M4V / 3GP | `mvhd` box | ✅ |
 | MKV / WebM | Segment Info `Duration` (missing in some streamed WebM, which falls back) | 🟡 |
-| WAV / AIFF / AU | data size ÷ byte rate | ✅ |
+| WAV | data size ÷ byte rate | ✅ |
 | FLAC | `STREAMINFO` total samples | ✅ |
 | OGG Vorbis / Opus | last page granule position | ✅ |
-| MP3 | Xing/Info/VBRI header; CBR estimate; VBR without a header needs an optional full frame scan | 🟡 |
+| MP3 | Xing/Info/VBRI header; CBR estimate | 🟡 |
+| AIFF / AU | — | 📋 |
 | AAC (ADTS), MPEG-TS, AVI, FLV, WMV/ASF | — | ❌ |
 
 ### Stream info (codec, resolution, fps, sample rate, channels, bitrate)
@@ -52,7 +53,8 @@ Legend: ✅ Planned · 🟡 Partial / conditional · ❌ Out of scope (use ffmpe
 |---|---|---|
 | MP4 / MOV | `stsd`, `tkhd` | ✅ |
 | MKV / WebM | `Tracks` | ✅ |
-| WAV / FLAC / OGG / MP3 | format headers | ✅ |
+| WAV / FLAC / OGG | format headers | ✅ |
+| MP3 | — | 📋 |
 
 ### Tags / metadata
 
@@ -61,7 +63,7 @@ Legend: ✅ Planned · 🟡 Partial / conditional · ❌ Out of scope (use ffmpe
 | ID3v1 / ID3v2 | MP3 | ✅ |
 | MP4 `ilst` | M4A / MP4 | ✅ |
 | Vorbis comments | FLAC / OGG | ✅ |
-| Matroska `Tags` | MKV / WebM | ✅ |
+| Matroska `Tags` | MKV / WebM | 📋 |
 
 The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 
@@ -72,7 +74,7 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 | ID3 `APIC` | ✅ |
 | MP4 `covr` | ✅ |
 | FLAC `PICTURE` | ✅ |
-| MKV attachments | ✅ |
+| MKV attachments | 📋 |
 
 ### Subtitles
 
@@ -80,7 +82,8 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 |---|---|
 | Sidecar `.srt` / `.vtt` / `.ass`: parse and convert to WebVTT | ✅ |
 | MKV text tracks (SRT, ASS/SSA, WebVTT) | ✅ |
-| MP4 `tx3g` / `wvtt` | ✅ |
+| MP4 `tx3g` / `wvtt` | 📋 |
+| MKV text tracks (extract to WebVTT) | ✅ |
 | Image subtitles (PGS, VobSub) | ❌ |
 
 ### Keyframe thumbnails (decoded in pure Go, output as JPEG)
@@ -89,8 +92,8 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 |---|---|---|
 | MJPEG | extract the frame directly | ✅ |
 | VP8 (WebM/MKV) | `golang.org/x/image/vp8` | ✅ |
-| H.264 stage 1 | intra-only IDR, CAVLC, 8-bit 4:2:0 (Baseline / Main without CABAC) | 🟡 |
-| H.264 stage 2 | adds CABAC and the 8x8 transform (High profile) | 🟡 |
+| H.264 stage 1 | intra-only IDR, CAVLC, 8-bit 4:2:0 (Baseline / Main without CABAC) | 📋 (API stub returns `ErrUnsupportedProfile`) |
+| H.264 stage 2 | adds CABAC and the 8x8 transform (High profile) | 📋 |
 | H.264 interlaced (PAFF/MBAFF), 10-bit, 4:2:2/4:4:4, inter prediction | — | ❌ |
 | HEVC, VP9, AV1 | — | ❌ |
 
@@ -156,4 +159,4 @@ if errors.Is(err, media.ErrUnsupported) {
 
 ## License
 
-TBD.
+[MIT](LICENSE).
