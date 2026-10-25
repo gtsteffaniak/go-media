@@ -23,7 +23,8 @@ const (
 	CheckArtwork    CheckName = "artwork"
 	CheckLyrics     CheckName = "lyrics"
 	CheckSubtitles  CheckName = "subtitles"
-	CheckThumbnail  CheckName = "thumbnail"
+	CheckThumbnailSmall CheckName = "thumbnail_small"
+	CheckThumbnailLarge CheckName = "thumbnail_large"
 )
 
 // Asset describes one generated fixture file.
@@ -49,6 +50,9 @@ type CheckResult struct {
 	FieldDiffs    []string         `json:"fieldDiffs,omitempty"`
 	PSNR          float64          `json:"psnr,omitempty"`
 	SSIM          float64          `json:"ssim,omitempty"`
+	PSNRDecode    float64          `json:"psnrDecode,omitempty"`
+	SSIMDecode    float64          `json:"ssimDecode,omitempty"`
+	ThumbPreset   string           `json:"thumbPreset,omitempty"`
 	ThumbGoPath   string           `json:"thumbGoPath,omitempty"`
 	ThumbFFPath   string           `json:"thumbFFPath,omitempty"`
 	// Previous-run regression (when a prior report.json existed).

@@ -144,15 +144,34 @@ These are research ideas, not commitments:
 - Inter-frame decoding or playback.
 - Damaged or truncated file recovery (ffmpeg's job).
 
-## Intended API (draft, illustrative only)
+## Thumbnail API
 
 ```go
-info, err := media.Probe(r, size)            // r io.ReaderAt
-d, src, err := media.Duration(r, size)       // src: header | estimate | scan
-img, err := media.Thumbnail(r, size, media.ThumbnailOptions{MaxWidth: 320, Fast: true})
+// FileBrowser-style presets (small = fast 256px Q76 bilinear, large = 1280×720 Q90 Catmull-Rom)
+thumb, err := media.ThumbnailSmall(r, size, 10)  // seek 10% into timeline
+thumb, err := media.ThumbnailLarge(r, size, 10)
+
+// Full control
+thumb, err := media.Thumbnail(r, size, media.ThumbnailOptions{
+    MaxWidth: 320, MaxHeight: 240, // aspect preserved
+    Quality:  85,                   // JPEG 1–100
+    Format:   "jpeg",               // jpeg | png | webp-lossless
+    Seek:     10,                   // percent 0–100 (or SeekPercent)
+    Filter:   media.ThumbnailFilterHigh,
+    Preset:   media.ThumbnailPresetLarge, // applies preset fields when set
+})
+png, err := media.ThumbnailRasterPNG(r, size, opt) // lossless scaled decode (metrics / debug)
+
 if errors.Is(err, media.ErrUnsupported) {
     // fall back to ffmpeg
 }
+```
+
+Other entry points:
+
+```go
+info, err := media.Probe(r, size)      // r io.ReaderAt
+d, src, err := media.Duration(r, size) // src: header | estimate | scan
 ```
 
 ## Roadmap

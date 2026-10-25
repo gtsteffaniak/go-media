@@ -133,7 +133,7 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	s.GoMediaModule = "github.com/gtsteffaniak/go-media"
 	checkNames := []CheckName{
 		CheckDuration, CheckProbe, CheckTags, CheckArtwork,
-		CheckLyrics, CheckSubtitles, CheckThumbnail,
+		CheckLyrics, CheckSubtitles, CheckThumbnailSmall, CheckThumbnailLarge,
 	}
 	byCheckStatus := map[CheckName]map[CapabilityStatus]int{}
 	for _, c := range checkNames {

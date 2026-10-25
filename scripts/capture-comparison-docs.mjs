@@ -50,16 +50,16 @@ await page.locator('#charts-summary').scrollIntoViewIfNeeded();
 await page.waitForTimeout(500);
 await page.locator('#charts-metrics').screenshot({ path: join(docsDir, 'report-charts.png') });
 
-async function captureCompareSlider(assetId, outName) {
-  const card = page.locator(`.thumb-card[data-asset-id="${assetId}"]`);
+async function captureCompareSlider(assetId, preset, outName) {
+  const card = page.locator(`.thumb-card[data-asset-id="${assetId}"][data-thumb-preset="${preset}"]`);
   await card.scrollIntoViewIfNeeded();
   await card.waitFor({ state: 'visible' });
   const slider = card.locator('.compare-slider');
   await slider.screenshot({ path: join(docsDir, outName) });
 }
 
-await captureCompareSlider('mjpeg_mp4', 'mjpeg-thumbnail-side-by-side.png');
-await captureCompareSlider('webm_vp8', 'vp8-thumbnail-side-by-side.png');
-await captureCompareSlider('mkv_vp8', 'mkv-vp8-thumbnail-side-by-side.png');
+await captureCompareSlider('mjpeg_mp4', 'large', 'mjpeg-thumbnail-side-by-side.png');
+await captureCompareSlider('webm_vp8', 'large', 'vp8-thumbnail-side-by-side.png');
+await captureCompareSlider('mkv_vp8', 'large', 'mkv-vp8-thumbnail-side-by-side.png');
 
 await browser.close();

@@ -203,7 +203,7 @@ function renderCharts(report) {
     },
   }));
 
-  const checks = ['duration', 'probe', 'tags', 'artwork', 'lyrics', 'subtitles', 'thumbnail'];
+  const checks = ['duration', 'probe', 'tags', 'artwork', 'lyrics', 'subtitles', 'thumbnail_small', 'thumbnail_large'];
   const medByCheck = checks.map((c) => {
     const ms = results.filter((r) => r.check === c && r.status === 'supported').map((r) => r.goMediaMs);
     if (!ms.length) return 0;
@@ -286,7 +286,7 @@ function renderReport(report) {
   extra.innerHTML = `<div class="label">avg Δ timing</div><div class="value ${(t.avgTimingDeltaPct || 0) <= 0 ? 'delta-good' : 'delta-bad'}">${((t.avgTimingDeltaPct || 0) * 100).toFixed(1)}%</div>`;
   cards.appendChild(extra);
 
-  const checks = ['duration', 'probe', 'tags', 'artwork', 'lyrics', 'subtitles', 'thumbnail'];
+  const checks = ['duration', 'probe', 'tags', 'artwork', 'lyrics', 'subtitles', 'thumbnail_small', 'thumbnail_large'];
   const byAsset = {};
   for (const r of report.results) {
     if (!byAsset[r.assetId]) byAsset[r.assetId] = {};
@@ -387,12 +387,14 @@ function renderReport(report) {
   const grid = document.getElementById('thumb-grid');
   grid.innerHTML = '';
   for (const r of report.results) {
-    if (r.check !== 'thumbnail' || !r.thumbGoPath) continue;
+    if ((r.check !== 'thumbnail_small' && r.check !== 'thumbnail_large') || !r.thumbGoPath) continue;
     const card = document.createElement('div');
     card.className = 'thumb-card';
     card.dataset.assetId = r.assetId;
+    card.dataset.thumbPreset = r.thumbPreset || (r.check === 'thumbnail_large' ? 'large' : 'small');
+    const preset = card.dataset.thumbPreset;
     card.innerHTML = `
-      <h3>${r.assetId} <span class="status-${r.status}">${r.status}</span></h3>
+      <h3>${r.assetId} (${preset}) <span class="status-${r.status}">${r.status}</span></h3>
       <div class="compare-slider" data-asset="${r.assetId}">
         <img class="compare-base" src="${r.thumbFFPath}" alt="ffmpeg ${r.assetId}" />
         <div class="compare-clip">
@@ -402,7 +404,7 @@ function renderReport(report) {
         <span class="compare-label left">ffmpeg</span>
         <span class="compare-label right">go-media</span>
       </div>
-      <p>PSNR ${r.psnr?.toFixed(1) ?? '—'} · SSIM ${r.ssim?.toFixed(3) ?? '—'} · ${deltaPctCell(r.timingDeltaPct)} · ${r.detail || ''}</p>`;
+      <p>JPEG PSNR ${r.psnr?.toFixed(1) ?? '—'} SSIM ${r.ssim?.toFixed(3) ?? '—'} · decode PSNR ${r.psnrDecode?.toFixed(1) ?? '—'} SSIM ${r.ssimDecode?.toFixed(3) ?? '—'} · go ${r.goMediaMs?.toFixed(1) ?? '—'}ms ffmpeg ${r.ffmpegMs?.toFixed(1) ?? '—'}ms ${deltaPctCell(r.timingDeltaPct)}</p>`;
     grid.appendChild(card);
     initCompareSlider(card);
   }

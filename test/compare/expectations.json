@@ -34,7 +34,12 @@
     },
     {
       "assetId": "flac_tags",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "flac_tags",
+      "check": "thumbnail_small",
       "expect": "skipped"
     },
     {
@@ -69,7 +74,12 @@
     },
     {
       "assetId": "m4a_aac",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "m4a_aac",
+      "check": "thumbnail_small",
       "expect": "skipped"
     },
     {
@@ -104,7 +114,12 @@
     },
     {
       "assetId": "mjpeg_mp4",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mjpeg_mp4",
+      "check": "thumbnail_small",
       "expect": "supported"
     },
     {
@@ -139,7 +154,12 @@
     },
     {
       "assetId": "mkv_h264",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mkv_h264",
+      "check": "thumbnail_small",
       "expect": "typed_unsupported"
     },
     {
@@ -174,7 +194,12 @@
     },
     {
       "assetId": "mkv_subtitles",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mkv_subtitles",
+      "check": "thumbnail_small",
       "expect": "typed_unsupported"
     },
     {
@@ -209,7 +234,12 @@
     },
     {
       "assetId": "mkv_vp8",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mkv_vp8",
+      "check": "thumbnail_small",
       "expect": "supported"
     },
     {
@@ -244,7 +274,12 @@
     },
     {
       "assetId": "mov_h264",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mov_h264",
+      "check": "thumbnail_small",
       "expect": "typed_unsupported"
     },
     {
@@ -279,7 +314,12 @@
     },
     {
       "assetId": "mp3_cbr",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp3_cbr",
+      "check": "thumbnail_small",
       "expect": "skipped"
     },
     {
@@ -314,7 +354,12 @@
     },
     {
       "assetId": "mp3_vbr",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp3_vbr",
+      "check": "thumbnail_small",
       "expect": "skipped"
     },
     {
@@ -349,7 +394,12 @@
     },
     {
       "assetId": "mp4_embedded_subs",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mp4_embedded_subs",
+      "check": "thumbnail_small",
       "expect": "typed_unsupported"
     },
     {
@@ -384,7 +434,12 @@
     },
     {
       "assetId": "mp4_h264",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mp4_h264",
+      "check": "thumbnail_small",
       "expect": "typed_unsupported"
     },
     {
@@ -419,7 +474,12 @@
     },
     {
       "assetId": "mp4_sidecar_subs",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mp4_sidecar_subs",
+      "check": "thumbnail_small",
       "expect": "typed_unsupported"
     },
     {
@@ -454,7 +514,12 @@
     },
     {
       "assetId": "ogg_vorbis",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "ogg_vorbis",
+      "check": "thumbnail_small",
       "expect": "skipped"
     },
     {
@@ -489,7 +554,12 @@
     },
     {
       "assetId": "opus_ogg",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "opus_ogg",
+      "check": "thumbnail_small",
       "expect": "skipped"
     },
     {
@@ -524,7 +594,12 @@
     },
     {
       "assetId": "wav_pcm",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "wav_pcm",
+      "check": "thumbnail_small",
       "expect": "skipped"
     },
     {
@@ -559,7 +634,12 @@
     },
     {
       "assetId": "webm_vp8",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "webm_vp8",
+      "check": "thumbnail_small",
       "expect": "supported"
     },
     {
@@ -594,7 +674,12 @@
     },
     {
       "assetId": "webm_vp9",
-      "check": "thumbnail",
+      "check": "thumbnail_large",
+      "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "webm_vp9",
+      "check": "thumbnail_small",
       "expect": "typed_unsupported"
     }
   ]

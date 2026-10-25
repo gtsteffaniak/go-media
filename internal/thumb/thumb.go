@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"image/png"
 
+	"github.com/gen2brain/vpx/webp"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
@@ -17,13 +18,15 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/tagread"
 )
 
-// Options is a data type used by this package.
+// Options configures thumbnail generation.
 type Options struct {
 	MaxWidth       int
 	MaxHeight      int
 	SeekPercent    float64
-	Format         string
-	JPEGQuality    int
+	Format         string // jpeg, png, webp-lossless
+	JPEGQuality    int    // 1–100; used when Quality is zero
+	Quality        int    // 1–100 preferred JPEG quality
+	Filter         Filter
 	Fast           bool
 	PreferEmbedded bool
 }
@@ -39,67 +42,71 @@ type Result struct {
 
 // Generate supports media inspection.
 func Generate(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt Options) (Result, error) {
-	if opt.MaxWidth <= 0 {
-		opt.MaxWidth = 320
+	normalizeOptions(&opt)
+	img, src, err := sourceImage(r, size, opt)
+	if err != nil {
+		return Result{}, err
 	}
-	if opt.SeekPercent <= 0 {
-		opt.SeekPercent = 10
-	}
-	if opt.JPEGQuality <= 0 {
-		opt.JPEGQuality = 85
-	}
-	if opt.Format == "" {
-		opt.Format = "jpeg"
-	}
+	return encodeImageRaster(img, opt, src)
+}
 
+// sourceImage decodes embedded art or a video frame without encoding.
+func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt Options) (image.Image, string, error) {
 	if opt.PreferEmbedded {
 		if data, mime, err := tagread.Artwork(r, size); err == nil {
-			if res, encErr := encodeImage(data, mime, opt); encErr == nil {
-				return res, nil
+			img, err := decodeBytes(data, mime)
+			if err == nil {
+				return img, "embedded", nil
 			}
 		}
 	}
 
 	fmtID, err := sniff.Detect(r, size)
 	if err != nil {
-		return Result{}, err
+		return nil, "", err
 	}
 
 	switch fmtID {
 	case format.MP4:
 		if b, ok := isobmff.MJPEGFrame(r, size); ok {
-			return encodeImage(b, "image/jpeg", opt)
+			img, err := decodeBytes(b, "image/jpeg")
+			if err != nil {
+				return nil, "", err
+			}
+			return img, "decode", nil
 		}
 	case format.MKV, format.WebM:
 		if img, ok := matroska.ThumbnailRGBA(r, size, opt.SeekPercent); ok {
-			return rasterize(img, opt, "decode")
+			return img, "decode", nil
 		}
 		if matroska.HasH264Video(r, size) {
-			return Result{}, errs.UnsupProfile("thumbnail", "h264 in matroska")
+			return nil, "", errs.UnsupProfile("thumbnail", "h264 in matroska")
 		}
 	case format.MP3, format.FLAC, format.OGG:
 		if data, mime, err := tagread.Artwork(r, size); err == nil {
-			return encodeImage(data, mime, opt)
+			img, err := decodeBytes(data, mime)
+			if err == nil {
+				return img, "embedded", nil
+			}
 		}
 	}
-	return Result{}, errs.Unsup("thumbnail", string(fmtID))
+	return nil, "", errs.Unsup("thumbnail", string(fmtID))
 }
 
-// encodeImage implements thumbnail encoding helpers.
-func encodeImage(data []byte, mime string, opt Options) (Result, error) {
+func decodeBytes(data []byte, mime string) (image.Image, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		if errors.Is(err, image.ErrFormat) {
-			return Result{}, errs.Unsup("thumbnail", "unsupported cover image format")
+			return nil, errs.Unsup("thumbnail", "unsupported cover image format")
 		}
-		return Result{}, err
+		return nil, err
 	}
-	return rasterize(img, opt, "embedded")
+	return img, nil
 }
 
-// rasterize implements thumbnail encoding helpers.
-func rasterize(img image.Image, opt Options, src string) (Result, error) {
-	img = scaleDown(img, opt.MaxWidth, opt.MaxHeight)
+func encodeImageRaster(img image.Image, opt Options, src string) (Result, error) {
+	fl := filterFromOptions(opt)
+	img = scaleDown(img, opt.MaxWidth, opt.MaxHeight, fl)
 	var buf bytes.Buffer
 	switch opt.Format {
 	case "png":
@@ -107,57 +114,50 @@ func rasterize(img image.Image, opt Options, src string) (Result, error) {
 			return Result{}, err
 		}
 		return Result{MIME: "image/png", Data: buf.Bytes(), Source: src, Width: img.Bounds().Dx(), Height: img.Bounds().Dy()}, nil
-	default:
-		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: opt.JPEGQuality}); err != nil {
+	case "webp-lossless", "webp":
+		if err := webp.Encode(&buf, img, webp.EncodeOptions{Lossless: true, Quality: 100}); err != nil {
 			return Result{}, err
 		}
-		return Result{MIME: "image/jpeg", Data: buf.Bytes(), Source: src, Width: img.Bounds().Dx(), Height: img.Bounds().Dy()}, nil
+		return Result{MIME: "image/webp", Data: buf.Bytes(), Source: src, Width: img.Bounds().Dx(), Height: img.Bounds().Dy()}, nil
 	}
+	q := jpegQuality(opt)
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
+		return Result{}, err
+	}
+	return Result{MIME: "image/jpeg", Data: buf.Bytes(), Source: src, Width: img.Bounds().Dx(), Height: img.Bounds().Dy()}, nil
 }
 
-// scaleDown implements thumbnail encoding helpers.
-func scaleDown(img image.Image, maxW, maxH int) image.Image {
-	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	if maxW <= 0 {
-		maxW = w
+func jpegQuality(opt Options) int {
+	if opt.Quality > 0 {
+		return clampQuality(opt.Quality)
 	}
-	if maxH <= 0 {
-		maxH = h
-	}
-	if w <= maxW && h <= maxH {
-		return img
-	}
-	scaleW := float64(maxW) / float64(w)
-	scaleH := float64(maxH) / float64(h)
-	scale := scaleW
-	if scaleH < scale {
-		scale = scaleH
-	}
-	if scale >= 1 {
-		return img
-	}
-	nw := int(float64(w) * scale)
-	nh := int(float64(h) * scale)
-	if nw < 1 {
-		nw = 1
-	}
-	if nh < 1 {
-		nh = 1
-	}
-	return resizeNearest(img, nw, nh)
+	return clampQuality(opt.JPEGQuality)
 }
 
-// resizeNearest implements thumbnail encoding helpers.
-func resizeNearest(src image.Image, w, h int) image.Image {
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	sw, sh := src.Bounds().Dx(), src.Bounds().Dy()
-	for y := 0; y < h; y++ {
-		sy := y * sh / h
-		for x := 0; x < w; x++ {
-			sx := x * sw / w
-			dst.Set(x, y, src.At(sx, sy))
-		}
+func clampQuality(q int) int {
+	if q < 1 {
+		return 1
 	}
-	return dst
+	if q > 100 {
+		return 100
+	}
+	return q
+}
+
+func normalizeOptions(opt *Options) {
+	if opt.MaxWidth <= 0 {
+		opt.MaxWidth = 320
+	}
+	if opt.SeekPercent <= 0 {
+		opt.SeekPercent = 10
+	}
+	if opt.Quality > 0 {
+		opt.JPEGQuality = opt.Quality
+	}
+	if opt.JPEGQuality <= 0 {
+		opt.JPEGQuality = 85
+	}
+	if opt.Format == "" {
+		opt.Format = "jpeg"
+	}
 }

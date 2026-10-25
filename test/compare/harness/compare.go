@@ -34,7 +34,9 @@ func compareAsset(a Asset, thumbDir string) []CheckResult {
 	out = append(out, checkArtwork(a))
 	out = append(out, checkLyrics(a))
 	out = append(out, checkSubtitles(a))
-	out = append(out, checkThumbnail(a, thumbDir))
+	for _, preset := range thumbnailPresets {
+		out = append(out, checkThumbnailPreset(a, thumbDir, preset))
+	}
 	return out
 }
 
@@ -313,7 +315,7 @@ func checkSubtitles(a Asset) CheckResult {
 		}
 		for _, tr := range tracks[:2] {
 			vtt, exErr := media.ExtractEmbeddedSubtitle(f2, f2.Size(), tr.Index)
-			if exErr != nil || !strings.Contains(vtt, "WEBVTT") {
+			if exErr != nil || !strings.Contains(vtt, "WEBVTT") || !strings.Contains(vtt, "Hello from SRT") {
 				res.Status = StatusMismatch
 				res.Detail = fmt.Sprintf("track %d (%s): %v", tr.Index, tr.Codec, exErr)
 				return res
@@ -360,9 +362,21 @@ func checkSubtitles(a Asset) CheckResult {
 	return res
 }
 
-// checkThumbnail compares go-media Thumbnail with an ffmpeg frame when video is present.
-func checkThumbnail(a Asset, thumbDir string) CheckResult {
-	res := CheckResult{AssetID: a.ID, Check: CheckThumbnail}
+func thumbnailCheckName(preset thumbnailPresetConfig) CheckName {
+	if preset.Name == "large" {
+		return CheckThumbnailLarge
+	}
+	return CheckThumbnailSmall
+}
+
+func mediaPreset(preset thumbnailPresetConfig) media.ThumbnailOptions {
+	opt := media.OptionsForPreset(media.ThumbnailPreset(preset.Name), 10)
+	return opt
+}
+
+// checkThumbnailPreset compares go-media vs ffmpeg for one thumbnail preset.
+func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig) CheckResult {
+	res := CheckResult{AssetID: a.ID, Check: thumbnailCheckName(preset), ThumbPreset: preset.Name}
 	if a.Category != "video" {
 		res.Status = StatusSkipped
 		res.Detail = "audio fixture"
@@ -374,20 +388,27 @@ func checkThumbnail(a Asset, thumbDir string) CheckResult {
 		res.Detail = err.Error()
 		return res
 	}
+	opt := mediaPreset(preset)
+
 	start := time.Now()
-	tr, gErr := media.Thumbnail(f, f.Size(), media.ThumbnailOptions{
-		MaxWidth: 320, MaxHeight: 240, SeekPercent: 10, Format: "jpeg",
-	})
+	tr, gErr := media.Thumbnail(f, f.Size(), opt)
 	res.GoMediaMS = msSince(start)
 
-	goPath := filepath.Join(thumbDir, a.ID+"_go.jpg")
-	ffPath := filepath.Join(thumbDir, a.ID+"_ff.jpg")
+	base := a.ID + "_" + preset.Name
+	goPath := filepath.Join(thumbDir, base+"_go.jpg")
+	ffPath := filepath.Join(thumbDir, base+"_ff.jpg")
+	goPNG := filepath.Join(thumbDir, base+"_go.png")
+	ffPNG := filepath.Join(thumbDir, base+"_ff.png")
 	res.ThumbGoPath = relReportPath(goPath)
 	res.ThumbFFPath = relReportPath(ffPath)
 
 	ffStart := time.Now()
-	ffErr := ffmpegThumbnail(a.Path, ffPath, 10)
+	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
 	res.FFmpegMS = msSince(ffStart)
+	if res.FFmpegMS > 0 {
+		delta := (res.GoMediaMS - res.FFmpegMS) / res.FFmpegMS
+		res.TimingDeltaPct = &delta
+	}
 
 	if gErr != nil {
 		res.Status = classifyGoErr(gErr)
@@ -404,17 +425,32 @@ func checkThumbnail(a Asset, thumbDir string) CheckResult {
 		res.Detail = ffErr.Error()
 		return res
 	}
+
+	f2, err := openAsset(a)
+	if err == nil {
+		if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), opt); err == nil {
+			_ = os.WriteFile(goPNG, goRaw, 0o644)
+		}
+	}
+	if err := ffmpegRasterPNG(a.Path, ffPNG, 10, preset); err == nil {
+		if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
+			res.PSNRDecode = dPSNR
+			res.SSIMDecode = dSSIM
+		}
+	}
+
 	psnr, ssim, mErr := imagePSNRSSIM(ffPath, goPath)
 	res.PSNR = psnr
 	res.SSIM = ssim
 	if mErr != nil {
 		res.Detail = mErr.Error()
 	}
-	if ssim >= 0.85 || psnr >= 25 {
+	res.Detail = fmt.Sprintf("jpeg PSNR=%.1f SSIM=%.3f decode PSNR=%.1f SSIM=%.3f",
+		res.PSNR, res.SSIM, res.PSNRDecode, res.SSIMDecode)
+	if res.SSIM >= 0.85 || res.PSNR >= 25 {
 		res.Status = StatusSupported
 	} else if tr.Width > 0 {
 		res.Status = StatusMismatch
-		res.Detail = fmt.Sprintf("visual delta PSNR=%.1f SSIM=%.3f", psnr, ssim)
 	} else {
 		res.Status = StatusSupported
 	}

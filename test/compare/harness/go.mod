@@ -10,6 +10,7 @@ require (
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8 // indirect
 	github.com/gen2brain/vpx v0.2.1 // indirect
 	github.com/google/uuid v1.1.2 // indirect
+	golang.org/x/image v0.47.0 // indirect
 )
 
 replace github.com/gtsteffaniak/go-media => ../../..

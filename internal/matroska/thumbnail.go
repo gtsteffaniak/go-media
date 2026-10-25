@@ -5,6 +5,7 @@ import (
 	"image"
 	_ "image/jpeg"
 	"io"
+	"sync"
 
 	"github.com/at-wat/ebml-go/mkvcore"
 	gvp8 "github.com/gen2brain/vpx/vp8"
@@ -40,7 +41,15 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, seekPercent float64) (*image.RGBA,
 	targetMs := int64(float64(durationMs) * seekPercent / 100.0)
 
 	reader := io.NewSectionReader(ioat.New(r, size), 0, size)
-	readers, err := mkvcore.NewSimpleBlockReader(reader)
+	var demuxFatal error
+	var demuxMu sync.Mutex
+	readers, err := mkvcore.NewSimpleBlockReader(reader, mkvcore.WithOnFatalHandler(func(e error) {
+		demuxMu.Lock()
+		if demuxFatal == nil {
+			demuxFatal = e
+		}
+		demuxMu.Unlock()
+	}))
 	if err != nil {
 		return nil, false
 	}
@@ -56,16 +65,48 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, seekPercent float64) (*image.RGBA,
 		}
 	}
 
-	defer closeBlockReaders(readers)
+	closed := map[mkvcore.BlockReadCloserWithTrackEntry]bool{}
+	closeTrack := func(br mkvcore.BlockReadCloserWithTrackEntry) {
+		if br == nil || closed[br] {
+			return
+		}
+		br.Close()
+		closed[br] = true
+	}
+	for _, br := range readers {
+		if br == nil {
+			continue
+		}
+		switch br.TrackEntry().CodecID {
+		case "V_VP8", "V_MJPEG":
+		default:
+			closeTrack(br)
+		}
+	}
+	defer func() {
+		for _, br := range readers {
+			closeTrack(br)
+		}
+	}()
+
+	if getDemuxFatal(&demuxMu, &demuxFatal) != nil {
+		return nil, false
+	}
 
 	if vp8Track != nil {
-		frames := collectVideoFrames(vp8Track)
+		frames, err := collectVideoFramesForSeek(vp8Track, scale, targetMs, true)
+		if err != nil || getDemuxFatal(&demuxMu, &demuxFatal) != nil {
+			return nil, false
+		}
 		if img, ok := decodeVP8Seek(frames, targetMs); ok {
 			return img, true
 		}
 	}
 	if mjpegTrack != nil {
-		frames := collectVideoFrames(mjpegTrack)
+		frames, err := collectVideoFramesForSeek(mjpegTrack, scale, targetMs, false)
+		if err != nil || getDemuxFatal(&demuxMu, &demuxFatal) != nil {
+			return nil, false
+		}
 		if img, ok := decodeMJPEGSeek(frames, targetMs); ok {
 			return img, true
 		}
@@ -73,31 +114,64 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, seekPercent float64) (*image.RGBA,
 	return nil, false
 }
 
-func closeBlockReaders(readers []mkvcore.BlockReadCloserWithTrackEntry) {
-	for _, br := range readers {
-		if br != nil {
-			br.Close()
-		}
-	}
+func getDemuxFatal(mu *sync.Mutex, fatal *error) error {
+	mu.Lock()
+	defer mu.Unlock()
+	return *fatal
 }
 
-func collectVideoFrames(br mkvcore.BlockReadCloserWithTrackEntry) []videoFrame {
+// timecodeTicksToMs converts Matroska cluster timecode ticks to milliseconds.
+func timecodeTicksToMs(ticks int64, timecodeScale uint64) int64 {
+	return ticks * int64(timecodeScale) / 1_000_000
+}
+
+// collectVideoFramesForSeek reads only the frames needed to decode near targetMs.
+// For VP8, payloads from the last keyframe at or before target through the first
+// frame at or after target are retained. For MJPEG, only the latest frame at or
+// before target is kept.
+func collectVideoFramesForSeek(br mkvcore.BlockReadCloserWithTrackEntry, timecodeScale uint64, targetMs int64, vp8 bool) ([]videoFrame, error) {
 	var out []videoFrame
+	var mjpegPick *videoFrame
 	for {
 		b, key, ts, err := br.Read()
 		if err == io.EOF {
 			break
 		}
-		if err != nil || len(b) == 0 {
-			break
+		if err != nil {
+			return nil, err
 		}
-		out = append(out, videoFrame{
-			timestampMs: ts,
+		if len(b) == 0 {
+			continue
+		}
+		tsMs := timecodeTicksToMs(ts, timecodeScale)
+		f := videoFrame{
+			timestampMs: tsMs,
 			keyframe:    key,
 			payload:     append([]byte(nil), b...),
-		})
+		}
+		if vp8 {
+			if key && tsMs <= targetMs {
+				out = nil
+			}
+			out = append(out, f)
+			if tsMs >= targetMs {
+				break
+			}
+			continue
+		}
+		if tsMs <= targetMs {
+			mjpegPick = &f
+		} else if mjpegPick != nil {
+			break
+		}
 	}
-	return out
+	if vp8 {
+		return out, nil
+	}
+	if mjpegPick != nil {
+		return []videoFrame{*mjpegPick}, nil
+	}
+	return out, nil
 }
 
 func decodeVP8Seek(frames []videoFrame, targetMs int64) (*image.RGBA, bool) {
@@ -131,6 +205,9 @@ func decodeVP8Seek(frames []videoFrame, targetMs int64) (*image.RGBA, bool) {
 }
 
 func decodeMJPEGSeek(frames []videoFrame, targetMs int64) (*image.RGBA, bool) {
+	if len(frames) == 0 {
+		return nil, false
+	}
 	var pick []byte
 	for _, f := range frames {
 		if f.timestampMs <= targetMs {
@@ -139,6 +216,9 @@ func decodeMJPEGSeek(frames []videoFrame, targetMs int64) (*image.RGBA, bool) {
 	}
 	if len(pick) == 0 {
 		pick = frames[0].payload
+	}
+	if len(pick) == 0 {
+		return nil, false
 	}
 	img, _, err := image.Decode(bytes.NewReader(pick))
 	if err != nil {
