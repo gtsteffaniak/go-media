@@ -46,6 +46,12 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	specs := []spec{
 		{"mp4_h264", "video", "MP4 H.264/AAC", "video/mp4_h264.mp4",
 			[]string{"-i", clip, "-c", "copy"}, nil},
+		{"mp4_h264_baseline_1080", "video", "MP4 H.264 Baseline 1080p", "video/mp4_h264_baseline_1080.mp4",
+			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "18", "-an"}, nil},
+		{"mp4_h264_main_1080", "video", "MP4 H.264 Main CABAC 1080p", "video/mp4_h264_main_1080.mp4",
+			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "18", "-an"}, nil},
+		{"mp4_h264_high_1080", "video", "MP4 H.264 High 8x8 1080p", "video/mp4_h264_high_1080.mp4",
+			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "18", "-an"}, nil},
 		{"mov_h264", "video", "MOV H.264", "video/mov_h264.mov",
 			[]string{"-i", clip, "-c", "copy", "-f", "mov"}, nil},
 		{"mkv_h264", "video", "MKV H.264", "video/mkv_h264.mkv",

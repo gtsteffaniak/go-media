@@ -398,7 +398,8 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	goPNG := filepath.Join(thumbDir, base+"_go.png")
 	ffPNG := filepath.Join(thumbDir, base+"_ff.png")
 
-	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
+	kfOnly := assetH264KeyframeOnly(a)
+	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, 10, preset, kfOnly)
 
 	if gErr != nil {
 		res.Status = classifyGoErr(gErr)
@@ -425,16 +426,23 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	res.ThumbGoPath = relReportPath(goPath)
 	res.ThumbFFPath = relReportPath(ffPath)
 
-	f2, err := openAsset(a)
-	if err == nil {
-		if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), opt); err == nil {
-			_ = os.WriteFile(goPNG, goRaw, 0o644)
-		}
-	}
-	if err := ffmpegRasterPNG(a.Path, ffPNG, 10, preset); err == nil {
-		if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
+	if kfOnly {
+		if dPSNR, dSSIM, err := h264DecodeYUVMetrics(a.Path, 10); err == nil {
 			res.PSNRDecode = dPSNR
 			res.SSIMDecode = dSSIM
+		}
+	} else {
+		f2, err := openAsset(a)
+		if err == nil {
+			if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), opt); err == nil {
+				_ = os.WriteFile(goPNG, goRaw, 0o644)
+			}
+		}
+		if err := ffmpegRasterPNG(a.Path, ffPNG, 10, preset, kfOnly); err == nil {
+			if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
+				res.PSNRDecode = dPSNR
+				res.SSIMDecode = dSSIM
+			}
 		}
 	}
 
@@ -469,6 +477,15 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100)
 		return res
 	}
+	if kfOnly && res.PSNRDecode > 0 && res.PSNRDecode < 45 {
+		res.Status = StatusMismatch
+		res.Detail += fmt.Sprintf("; decode gate: PSNR %.1f < 45 dB", res.PSNRDecode)
+		return res
+	}
+	if kfOnly && res.PSNRDecode >= 45 {
+		res.Status = StatusSupported
+		return res
+	}
 	if res.SSIM >= 0.85 || res.PSNR >= 25 {
 		res.Status = StatusSupported
 	} else if tr.Width > 0 {
@@ -477,6 +494,20 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		res.Status = StatusSupported
 	}
 	return res
+}
+
+func assetH264KeyframeOnly(a Asset) bool {
+	if a.Category != "video" {
+		return false
+	}
+	if strings.Contains(a.ID, "h264") || strings.HasPrefix(a.ID, "mp4_h264_") {
+		return true
+	}
+	switch a.ID {
+	case "mp4_sidecar_subs", "mp4_embedded_subs":
+		return true
+	}
+	return false
 }
 
 func classifyGoErr(err error) CapabilityStatus {

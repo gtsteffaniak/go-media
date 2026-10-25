@@ -110,6 +110,9 @@ func loadAssetManifest(assetsDir string) ([]Asset, error) {
 		sidecars           []string
 	}{
 		{"mp4_h264", "video/mp4_h264.mp4", "video", "MP4 H.264/AAC", nil},
+		{"mp4_h264_baseline_1080", "video/mp4_h264_baseline_1080.mp4", "video", "H.264 Baseline 1080p", nil},
+		{"mp4_h264_main_1080", "video/mp4_h264_main_1080.mp4", "video", "H.264 Main CABAC 1080p", nil},
+		{"mp4_h264_high_1080", "video/mp4_h264_high_1080.mp4", "video", "H.264 High 8x8 1080p", nil},
 		{"mov_h264", "video/mov_h264.mov", "video", "MOV H.264", nil},
 		{"mkv_h264", "video/mkv_h264.mkv", "video", "MKV H.264", nil},
 		{"mkv_vp8", "video/mkv_vp8.mkv", "video", "MKV VP8", nil},

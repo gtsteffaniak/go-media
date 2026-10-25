@@ -127,7 +127,8 @@ func ffprobeVersionLine() string {
 }
 
 // ffmpegThumbnailPreset extracts one JPEG frame aligned with a media thumbnail preset.
-func ffmpegThumbnailPreset(path, dest string, seekPercent float64, preset thumbnailPresetConfig) error {
+// When keyframeOnly is true, ffmpeg decodes only IDR/I frames (matches go-media H.264 intra path).
+func ffmpegThumbnailPreset(path, dest string, seekPercent float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
@@ -144,12 +145,15 @@ func ffmpegThumbnailPreset(path, dest string, seekPercent float64, preset thumbn
 	if dur >= 0.5 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
 	}
+	if keyframeOnly {
+		args = append(args, "-skip_frame", "nokey")
+	}
 	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
 	return exec.Command(ffmpeg, args...).Run()
 }
 
 // ffmpegRasterPNG writes a lossless PNG frame using the same seek/scale as thumbnails.
-func ffmpegRasterPNG(path, dest string, seekPercent float64, preset thumbnailPresetConfig) error {
+func ffmpegRasterPNG(path, dest string, seekPercent float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
@@ -164,6 +168,9 @@ func ffmpegRasterPNG(path, dest string, seekPercent float64, preset thumbnailPre
 	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
 	if dur >= 0.5 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
+	}
+	if keyframeOnly {
+		args = append(args, "-skip_frame", "nokey")
 	}
 	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, dest)
 	return exec.Command(ffmpeg, args...).Run()

@@ -1,13 +1,82 @@
-// Package h264 supports go-media parsers.
-
+// Package h264 implements intra-only H.264/AVC keyframe decode for thumbnails.
+//
+// Decoder orchestration is adapted from Eyevinn/hi264 (MIT), with behavioral
+// references to h264bsd and FFmpeg's libavcodec/h264. See THIRD_PARTY_NOTICES.md.
 package h264
 
 import (
+	"fmt"
+	"strings"
+	"image"
+
+	"github.com/Eyevinn/hi264/pkg/decoder"
+	"github.com/Eyevinn/hi264/pkg/frame"
+	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 )
 
-// DecodeKeyframe decodes an H.264 IDR NAL slice to RGBA.
-// Stage 1 (CAVLC) and stage 2 (CABAC) decoders are not implemented yet.
-func DecodeKeyframe(nal []byte, width, height int) ([]byte, int, int, error) {
-	return nil, 0, 0, errs.Unsup("h264 keyframe", "intra decoder not implemented")
+// DecodeKeyframe decodes an H.264 IDR access unit in AVCC form (length-prefixed NALs).
+func DecodeKeyframe(nal []byte, _ int, _ int) ([]byte, int, int, error) {
+	img, err := DecodeAVCC(nil, nal, false)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	b, w, h := rgbaBytes(img)
+	return b, w, h, nil
+}
+
+// DecodeAVCC decodes one sync sample with optional avcC parameter sets prepended.
+func DecodeAVCC(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*image.RGBA, error) {
+	fr, err := decodeFrame(avcc, sample, fast)
+	if err != nil {
+		return nil, err
+	}
+	return frameToRGBA(fr), nil
+}
+
+// DecodeAVCCFrame returns the decoded frame without RGB conversion.
+func DecodeAVCCFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*frame.Frame, error) {
+	return decodeFrame(avcc, sample, fast)
+}
+
+// decodeFrame is exported for tests that compare YUV against ffmpeg.
+func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*frame.Frame, error) {
+	if len(sample) == 0 {
+		return nil, errs.UnsupProfile("h264 keyframe", "empty sample")
+	}
+	data := sample
+	if avcc != nil {
+		if len(avcc.SequenceParameterSets) > 0 {
+			if err := validateSPSNAL(avcc.SequenceParameterSets[0].NALUnit); err != nil {
+				return nil, err
+			}
+		}
+		data = prependParameterSets(avcc, sample)
+	}
+	dec := decoder.New()
+	dec.SkipDeblock = fast
+	frames, err := dec.DecodeIDRAVC(data)
+	if err != nil {
+		return nil, mapDecodeErr(err)
+	}
+	if len(frames) == 0 {
+		return nil, errs.UnsupProfile("h264 keyframe", "no IDR slice in sample")
+	}
+	return frames[0], nil
+}
+
+func mapDecodeErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "P_Skip"), strings.Contains(msg, "reference frame"),
+		strings.Contains(msg, "B slice"), strings.Contains(msg, "inter slice"):
+		return errs.UnsupProfile("h264 keyframe", msg)
+	case strings.Contains(msg, "MBAFF"), strings.Contains(msg, "field_pic"), strings.Contains(msg, "interlaced"):
+		return errs.UnsupProfile("h264 keyframe", msg)
+	default:
+		return fmt.Errorf("h264 decode: %w", err)
+	}
 }

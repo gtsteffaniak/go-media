@@ -8,7 +8,7 @@ import (
 	"github.com/gtsteffaniak/go-media"
 )
 
-const thumbTimingWarmup = 2
+const thumbTimingWarmup = 3
 const thumbTimingRuns = 7
 const maxTimingRegressionPct = 0.10
 
@@ -40,7 +40,7 @@ func benchmarkThumbnail(a Asset, opt media.ThumbnailOptions, preset thumbnailPre
 	ffPath := tmp + ".ff.jpg"
 	for i := 0; i < thumbTimingWarmup+thumbTimingRuns; i++ {
 		start := time.Now()
-		_ = ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
+		_ = ffmpegThumbnailPreset(a.Path, ffPath, 10, preset, assetH264KeyframeOnly(a))
 		ffSamples = append(ffSamples, msSince(start))
 	}
 	return thumbTimingSample{

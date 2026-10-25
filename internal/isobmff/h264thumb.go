@@ -1,0 +1,68 @@
+package isobmff
+
+import (
+	"image"
+	"io"
+
+	"github.com/abema/go-mp4"
+	"github.com/gtsteffaniak/go-media/internal/h264"
+	"github.com/gtsteffaniak/go-media/internal/ioat"
+)
+
+type h264ThumbCtx struct {
+	track int
+	avcc  *mp4.AVCDecoderConfiguration
+	sample []byte
+}
+
+func loadH264Thumb(r io.ReaderAt, size int64, seekPercent float64) (h264ThumbCtx, bool) {
+	info, err := mp4.Probe(ioat.New(r, size))
+	if err != nil {
+		return h264ThumbCtx{}, false
+	}
+	track := -1
+	for i, tr := range info.Tracks {
+		if tr.Codec == mp4.CodecAVC1 {
+			track = i
+			break
+		}
+	}
+	if track < 0 {
+		return h264ThumbCtx{}, false
+	}
+	avcc, ok := AVCDecoderConfig(r, size, track)
+	if !ok {
+		return h264ThumbCtx{}, false
+	}
+	sample, ok := H264SyncSample(r, size, track, seekPercent)
+	if !ok {
+		return h264ThumbCtx{}, false
+	}
+	return h264ThumbCtx{track: track, avcc: avcc, sample: sample}, true
+}
+
+// H264ThumbnailYCbCr decodes an IDR frame to YCbCr for area/box downscale before JPEG encode.
+func H264ThumbnailYCbCr(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*image.YCbCr, bool) {
+	ctx, ok := loadH264Thumb(r, size, seekPercent)
+	if !ok {
+		return nil, false
+	}
+	fr, err := h264.DecodeAVCCFrame(ctx.avcc, ctx.sample, fast)
+	if err != nil || fr == nil {
+		return nil, false
+	}
+	return h264.FrameToYCbCr(fr), true
+}
+
+// H264ThumbnailRGBA seeks to seekPercent and decodes an H.264 IDR frame to RGBA.
+func H264ThumbnailRGBA(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*image.RGBA, bool) {
+	ctx, ok := loadH264Thumb(r, size, seekPercent)
+	if !ok {
+		return nil, false
+	}
+	img, err := h264.DecodeAVCC(ctx.avcc, ctx.sample, fast)
+	if err != nil || img == nil {
+		return nil, false
+	}
+	return img, true
+}

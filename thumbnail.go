@@ -80,11 +80,11 @@ func mapThumbOptions(opt ThumbnailOptions) thumb.Options {
 	return topt
 }
 
-// DecodeH264Keyframe exposes the intra-only H.264 decoder entry point (stub).
+// DecodeH264Keyframe exposes the intra-only H.264 decoder entry point.
 func DecodeH264Keyframe(nal []byte, width, height int) ([]byte, int, int, error) {
 	data, w, h, err := h264.DecodeKeyframe(nal, width, height)
 	if err != nil {
-		return nil, 0, 0, UnsupportedProfile("h264 keyframe", "intra decoder not implemented")
+		return nil, 0, 0, mapErr(err)
 	}
 	return data, w, h, nil
 }

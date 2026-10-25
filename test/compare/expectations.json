@@ -275,12 +275,12 @@
     {
       "assetId": "mov_h264",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mov_h264",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp3_cbr",
@@ -395,12 +395,12 @@
     {
       "assetId": "mp4_embedded_subs",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_embedded_subs",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_h264",
@@ -435,12 +435,12 @@
     {
       "assetId": "mp4_h264",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_h264",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_sidecar_subs",
@@ -475,12 +475,12 @@
     {
       "assetId": "mp4_sidecar_subs",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_sidecar_subs",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "ogg_vorbis",
@@ -681,6 +681,126 @@
       "assetId": "webm_vp9",
       "check": "thumbnail_small",
       "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "thumbnail_small",
+      "expect": "supported"
     }
   ]
 }

@@ -76,6 +76,10 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 			}
 			return img, "decode", nil
 		}
+		// Intra-only IDR decode: skip deblocking for thumbnail latency (see README fast preview).
+		if yimg, ok := isobmff.H264ThumbnailYCbCr(r, size, opt.SeekPercent, true); ok {
+			return yimg, "decode", nil
+		}
 	case format.MKV, format.WebM:
 		tp := matroska.ThumbnailParams{
 			SeekPercent: opt.SeekPercent,

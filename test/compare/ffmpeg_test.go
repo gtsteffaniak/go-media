@@ -2,7 +2,6 @@ package compare_test
 
 import (
 	"encoding/json"
-	"errors"
 	"math"
 	"os"
 	"os/exec"
@@ -62,10 +61,10 @@ func TestDurationMatchesFFprobe(t *testing.T) {
 	}
 }
 
-// TestH264KeyframeUnsupported is a test.
-func TestH264KeyframeUnsupported(t *testing.T) {
+// TestH264KeyframeEmpty is a test.
+func TestH264KeyframeEmpty(t *testing.T) {
 	_, _, _, err := media.DecodeH264Keyframe(nil, 64, 64)
-	if !errors.Is(err, media.ErrUnsupportedProfile) {
-		t.Fatalf("expected ErrUnsupportedProfile, got %v", err)
+	if err == nil {
+		t.Fatal("expected error")
 	}
 }
