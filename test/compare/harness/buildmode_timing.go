@@ -38,8 +38,11 @@ func findRepoRoot(start string) string {
 	dir := start
 	for i := 0; i < 8; i++ {
 		p := filepath.Join(dir, "go.mod")
-		if b, err := os.ReadFile(p); err == nil && strings.Contains(string(b), "gtsteffaniak/go-media") {
-			return dir
+		if b, err := os.ReadFile(p); err == nil {
+			s := string(b)
+			if strings.HasPrefix(s, "module github.com/gtsteffaniak/go-media\n") {
+				return dir
+			}
 		}
 		dir = filepath.Dir(dir)
 	}

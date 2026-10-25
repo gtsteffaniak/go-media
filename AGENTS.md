@@ -16,7 +16,7 @@ Instructions for autonomous coding agents working in this repository.
 | `internal/sniff`, `internal/format`, `internal/detect` | Format detection and IDs. |
 | `internal/isobmff` | MP4/MOV: boxes, sync samples, MJPEG/H.264 thumbnail demux (`abema/go-mp4`). |
 | `internal/matroska` | MKV/WebM: cues, VP8/MJPEG thumbnails. |
-| `internal/h264` | Intra-only H.264 decode for MP4 thumbnails/frames (Main/High; Baseline rejected). **Target:** clean-room decoder here; **do not extend Eyevinn/hi264.** |
+| `internal/h264` | In-tree intra-only H.264 decode (`intradec`, `cabac`, `reconstruct`, …). Main/High supported; Baseline rejected. **Do not add `Eyevinn/hi264`.** |
 | `internal/vp8decode` | VP8 picture → RGBA/YCbCr scale helpers. |
 | `internal/jpegfast` | Fast MJPEG decode for thumbnails. |
 | `internal/thumb` | Thumbnail pipeline: seek, decode, YCbCr/RGBA scale, JPEG/PNG/WebP encode. |
@@ -24,7 +24,6 @@ Instructions for autonomous coding agents working in this repository.
 | `internal/tagread`, `internal/mp3`, `internal/flac`, `internal/ogg`, `internal/wav` | Tags and duration helpers per format. |
 | `internal/subtitle` | Sidecar and MKV subtitle parse/convert. |
 | `internal/errs` | Typed unsupported/profile/corrupt errors. |
-| `third_party/hi264` | **Legacy (remove):** temporary vendored Eyevinn hi264 fork — **do not use for new work**; follow-up PR replaces with `internal/h264` clean-room decode. |
 | `test/compare/harness` | ffmpeg 9.0.2 comparison harness, timing gate, build-mode timings, HTML report. |
 | `docs/` | `COMPARISON.md`, `PROFILING.md`, `FOLLOWUP_H264_CLEANROOM.md`. |
 | `default.pgo` | Checked-in PGO profile for release-style builds. |
@@ -34,7 +33,7 @@ Instructions for autonomous coding agents working in this repository.
 1. **Pure Go only:** `CGO_ENABLED=0` for all builds, tests, and CI. **No WASM.** No spawning ffmpeg inside library code (harness/scripts only).
 2. **License:** MIT. Dependencies must be compatible; vendored code **must** be documented in **`THIRD_PARTY.md`**.
 3. **Go version:** **`go.mod` minimum `go 1.27`**. **CI** uses **`go-version: stable`** + **`check-latest: true`**.
-4. **Do not use [Eyevinn/hi264](https://github.com/Eyevinn/hi264)** as a dependency or vendored base for new features. New H.264 work belongs in **`internal/h264`** (ITU-T H.264, clean-room, ffmpeg/openh264 as references only — no GPL/LGPL copies).
+4. **Do not use [Eyevinn/hi264](https://github.com/Eyevinn/hi264)** as a module or vendored tree. All H.264 decode work stays in **`internal/h264`** (ITU-T H.264; ffmpeg/openh264 as behavioral references only — no GPL/LGPL copies).
 5. **Dependencies:** keep the graph small. **`github.com/Eyevinn/mp4ff`** is allowed **only where it pays for itself** (today: **`avc` SPS/PPS/slice/NAL** parsing in `internal/h264` validation and the legacy decoder path). Do not add mp4ff for MP4 container work — use **`abema/go-mp4`** for boxes/demux.
 6. **SIMD:** Design hot paths for **Go simd / `GOEXPERIMENT=simd`** where practical, alongside **stable amd64 asm** and **`-tags purego`** fallbacks — all **bit-identical** on shared tests. The comparison report records **default / purego / simd** thumbnail timings vs ffmpeg; **the ≤20% gate uses default (in-process) only**.
 7. **Performance policy:** Supported features ≤**20%** slower than **ffmpeg 9.0.2** exec (10% target). Failures → **`ErrUnsupported`** / **`ErrUnsupportedProfile`**. No timing exemptions.

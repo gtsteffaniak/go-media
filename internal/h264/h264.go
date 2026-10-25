@@ -1,7 +1,6 @@
 // Package h264 implements intra-only H.264/AVC keyframe decode for thumbnails.
 //
-// Decoder orchestration is adapted from Eyevinn/hi264 (MIT), with behavioral
-// references to h264bsd and FFmpeg's libavcodec/h264. See THIRD_PARTY_NOTICES.md.
+// Intra-only AVC decode for thumbnails (ITU-T H.264); see internal/h264/intradec and THIRD_PARTY_NOTICES.md.
 package h264
 
 import (

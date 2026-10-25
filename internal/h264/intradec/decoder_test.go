@@ -58,7 +58,7 @@ var goldenTests = map[string]string{
 }
 
 func TestGoldenDecode(t *testing.T) {
-	goldenDir := filepath.Join("..", "..", "..", "third_party", "hi264", "testdata", "golden")
+	goldenDir := filepath.Join("..", "testdata", "golden")
 
 	for name, wantHash := range goldenTests {
 		t.Run(name, func(t *testing.T) {

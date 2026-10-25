@@ -5,7 +5,6 @@ go 1.27
 require github.com/gtsteffaniak/go-media v0.0.0
 
 require (
-	github.com/Eyevinn/hi264 v0.10.0 // indirect
 	github.com/Eyevinn/mp4ff v0.50.0 // indirect
 	github.com/abema/go-mp4 v1.7.4 // indirect
 	github.com/at-wat/ebml-go v0.19.4 // indirect

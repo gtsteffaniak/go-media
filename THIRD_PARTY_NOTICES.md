@@ -1,9 +1,5 @@
 # Third-party notices
 
-## H.264 intra decode (`github.com/Eyevinn/hi264`)
+## H.264 intra decode (`internal/h264`)
 
-`internal/h264` currently orchestrates a **legacy vendored Eyevinn hi264** decode path (MIT, temporary) and validates SPS via **`github.com/Eyevinn/mp4ff/avc`** (MIT). A clean-room replacement is planned in `docs/FOLLOWUP_H264_CLEANROOM.md`. Behavioral references include FFmpeg’s `h264` decoder and openh264; no GPL/LGPL code is copied.
-
-## VP8 video decode (`github.com/gen2brain/vpx/vp8`)
-
-Thumbnail seeking for VP8 in WebM/MKV uses the **gen2brain/vpx** VP8 decoder (libwebp-derived, BSD-style license) via `internal/vp8decode`.
+In-tree intra-only AVC decoder for MP4/MOV thumbnails. SPS/PPS/slice parsing uses **`github.com/Eyevinn/mp4ff/avc`** (MIT). Decode logic is maintained in **`internal/h264`** and validated against ffmpeg (PSNR/SSIM). Design references include ITU-T H.264, FFmpeg `h264`, and openh264; no GPL/LGPL source is copied.
