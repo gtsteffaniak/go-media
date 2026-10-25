@@ -1,9 +1,15 @@
 # Third-party notices
 
-## H.264 intra decode (`github.com/Eyevinn/hi264`)
+See also [THIRD_PARTY.md](THIRD_PARTY.md) for dependency policy.
 
-`internal/h264` currently orchestrates a **legacy vendored Eyevinn hi264** decode path (MIT, temporary) and validates SPS via **`github.com/Eyevinn/mp4ff/avc`** (MIT). A clean-room replacement is planned in `docs/FOLLOWUP_H264_CLEANROOM.md`. Behavioral references include FFmpeg’s `h264` decoder and openh264; no GPL/LGPL code is copied.
+## mgvs/go-openh264 (BSD-2-Clause)
 
-## VP8 video decode (`github.com/gen2brain/vpx/vp8`)
+H.264 slice/macroblock decode in `internal/h264/cleanroom/decode/` is derived from
+[mgvs/go-openh264](https://github.com/mgvs/go-openh264).
 
-Thumbnail seeking for VP8 in WebM/MKV uses the **gen2brain/vpx** VP8 decoder (libwebp-derived, BSD-style license) via `internal/vp8decode`.
+- **Copyright:** Copyright (c) 2026 Oleksandr Zhabotynskyi
+- **License:** BSD-2-Clause — full text in `internal/h264/cleanroom/LICENSE-mgvs-BSD-2`
+- **Notice:** `internal/h264/cleanroom/NOTICE-mgvs`
+
+Source files under `internal/h264/cleanroom/decode/` that retain mgvs lineage include a
+header reference to this notice.

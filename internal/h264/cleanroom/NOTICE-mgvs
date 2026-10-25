@@ -1,0 +1,29 @@
+go-openh264 — pure-Go H.264/AVC decoder (decoding only)
+Copyright (c) 2026 Oleksandr Zhabotynskyi
+
+This product includes software developed as a clean-room Go reimplementation of
+an H.264/AVC decoder written from the ISO/IEC 14496-10 specification, with
+structural reference to:
+
+  * OpenH264 by Cisco Systems, Inc. — https://github.com/cisco/openh264
+    Licensed under the BSD 2-Clause License (see the LICENSE file in this
+    directory). Reference for CABAC, the High-profile 8x8 transform, and the
+    context/threshold tables.
+
+  * The ISO/IEC 14496-10 (H.264 / MPEG-4 Part 10) specification — the primary
+    source of the bitstream syntax, the decoding processes and the
+    variable-length-coding tables.
+
+The BSD 2-Clause license text in the LICENSE file is reproduced from OpenH264 as
+required for redistribution of BSD-licensed derived work.
+
+Patent notice
+-------------
+The H.264/AVC standard is subject to patents held by multiple parties (e.g. the
+MPEG-LA AVC/H.264 pool). Cisco distributes precompiled OpenH264 binaries under a
+royalty-free arrangement that does NOT extend to independently built decoders
+such as this one. Compiling and distributing this software may require a patent
+license depending on jurisdiction and use. This NOTICE is informational and not
+legal advice.
+
+This package decodes only and cannot encode H.264.

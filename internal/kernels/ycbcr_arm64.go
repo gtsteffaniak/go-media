@@ -2,8 +2,14 @@
 
 package kernels
 
+import h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"
+
 // AreaDownRowY averages source luma rows [sy0,sy1) across [x0,x1) into dstY[dx].
 func AreaDownRowY(dstY []byte, dstStride int, dx int, srcY []byte, srcStride int, sy0, sy1, x0, x1 int) {
+	if h264k.KernelSIMD("ycbcr_row") {
+		AreaDownRowYSIMD(dstY, dstStride, dx, srcY, srcStride, sy0, sy1, x0, x1)
+		return
+	}
 	areaDownRowYPortable(dstY, dx, srcY, srcStride, sy0, sy1, x0, x1)
 }
 

@@ -1,22 +1,33 @@
 # Follow-up: clean-room H.264 intra decoder
 
-**Tracked for a stacked PR after thumbnail/PGO/SIMD reporting (#8).**
+## Status (PR #9)
 
-## Goal
+Relocated **Eyevinn/hi264** under `internal/h264/{intradec,cabac,…}` is **unacceptable** and must be deleted once `internal/h264/cleanroom` passes parity and timing gates. See commit `7995631` lineage in PR #9 description.
 
-Remove **`third_party/hi264`** and **`replace github.com/Eyevinn/hi264`**. Implement intra-only **Main/High** decode entirely in **`internal/h264`**, written from **ITU-T H.264** with **ffmpeg** and **openh264** as behavioral references only (no GPL/LGPL source copies; MIT-compatible).
+## Rewrite goals (Graham)
 
-## Must keep
+- **Full rewrite** from **ITU-T H.264** (ffmpeg/openh264 behavioral references only; **no hi264** in any form).
+- **SIMD-first:** `GOEXPERIMENT=simd` / archsimd where applicable, **amd64 asm**, **`-tags purego`** fallbacks; bit-identical on shared kernel tests.
+- **Baseline (CAVLC):** design to pass **≤20%** ffmpeg thumbnail gate; **profile per stage** (demux/NAL, slice syntax, CAVLC entropy, coeff batching, dequant/IDCT, intra pred, plane writes). If gate passes → **supported**; if not → remain **unsupported** with **profile-backed root cause** in docs/PR.
+- **Main/High (CABAC):** decode-only intra; bit-exact YUV vs ffmpeg on harness fixtures.
+- **Thumbnails:** **skip in-loop deblock** on fast path; full deblock optional for parity tests.
+- **Hot path:** **zero allocations** per frame (pooled bitstream state, coeff batches, frame buffers); **PGO** via checked-in `default.pgo`.
 
-- Support matrix: Main/High 8-bit 4:2:0 CABAC, 8×8 transform, scaling lists; **Baseline unsupported** unless it passes the ≤20% ffmpeg gate.
-- Bit-exact **YUV vs ffmpeg** on harness golden fixtures.
-- **`mp4ff/avc`** (or inlined equivalent) only if still the smallest correct SPS/PPS/slice parser — otherwise local parsers in `internal/h264`.
+## Architecture (`internal/h264/cleanroom`)
 
-## SIMD axis
+| Package | Role |
+|---------|------|
+| `bitstream` | **64-bit bit cache** RBSP reader (UE/SE/fixed, `more_rbsp_data`) |
+| `cavlc` | **Table-driven CAVLC**; multi-symbol coeff_token / total_zeros / run_before LUTs |
+| `cabac` | CABAC decode-only (no encoder) |
+| `coeff` | Batched residual levels (luma/chroma, 4×4 / 8×8) |
+| `intrapred` | 16×16 / 4×4 / 8×8 / chroma modes |
+| `pix` | Pooled Y/Cb/Cr planes + crop metadata |
+| `decode` | NAL AU orchestration; `SkipDeblock` for thumbs |
 
-- IDCT/dequant, intra prediction, residual batches, optional deblock, YCbCr downscale, JPEG path — implement **simd / archsimd** variants with asm + purego parity.
+SIMD lives in **`internal/kernels/h264`**: dequant+IDCT+reconstruct, intra pred helpers, 4×4/8×8 plane writes.
 
-## Acceptance
+## Gates (unchanged)
 
-- `go mod tidy` with no `Eyevinn/hi264`.
-- `make compare-gate` green; report build modes unchanged in meaning.
+- `make compare-gate` green; report **buildModeTimings** tiers purego → purego+PGO → purego+PGO+simd (gate uses **in-process asm+PGO** only). Regenerate **`default.pgo`** after rewrite (`make pgo`).
+- Baseline support toggled in `sps.go` only after Baseline passes gate + profiling sign-off.

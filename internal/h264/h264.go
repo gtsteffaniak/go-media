@@ -1,7 +1,6 @@
 // Package h264 implements intra-only H.264/AVC keyframe decode for thumbnails.
 //
-// Decoder orchestration is adapted from Eyevinn/hi264 (MIT), with behavioral
-// references to h264bsd and FFmpeg's libavcodec/h264. See THIRD_PARTY_NOTICES.md.
+// Intra-only AVC decode for thumbnails via internal/h264/cleanroom (no Eyevinn/hi264).
 package h264
 
 import (
@@ -9,7 +8,8 @@ import (
 	"strings"
 	"image"
 
-	"github.com/Eyevinn/hi264/pkg/frame"
+	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom"
+	"github.com/gtsteffaniak/go-media/internal/h264/frame"
 	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 )
@@ -33,6 +33,7 @@ func DecodeAVCC(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*i
 	return frameToRGBA(fr), nil
 }
 
+
 // DecodeAVCCFrame returns the decoded frame without RGB conversion.
 func DecodeAVCCFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*frame.Frame, error) {
 	return decodeFrame(avcc, sample, fast)
@@ -54,14 +55,17 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 	}
 	dec := borrowDecoder(fast)
 	frames, err := dec.DecodeIDRAVC(data)
-	releaseDecoder(dec)
 	if err != nil {
+		releaseDecoder(dec)
 		return nil, mapDecodeErr(err)
 	}
 	if len(frames) == 0 {
+		releaseDecoder(dec)
 		return nil, errs.UnsupProfile("h264 keyframe", "no IDR slice in sample")
 	}
-	return frames[0], nil
+	out := cleanroom.ToFrame(dec, frames[0])
+	releaseDecoder(dec)
+	return out, nil
 }
 
 func mapDecodeErr(err error) error {

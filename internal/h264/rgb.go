@@ -4,12 +4,12 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/Eyevinn/hi264/pkg/frame"
-	"github.com/Eyevinn/hi264/pkg/yuv"
+	"github.com/gtsteffaniak/go-media/internal/h264/frame"
+	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
 func frameToRGBA(f *frame.Frame) *image.RGBA {
-	// Match Eyevinn/hi264 FrameToImageCS defaults (BT.601 limited) when VUI is absent.
+	// BT.601 limited when VUI is absent (thumbnail default).
 	cs := yuv.BT601
 	rng := yuv.LimitedRange
 	if f.ColorDescriptionValid && f.MatrixCoefficients != 0 {

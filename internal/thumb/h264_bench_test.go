@@ -8,7 +8,18 @@ import (
 )
 
 func BenchmarkMP4H264Large(b *testing.B) {
-	path := "../../test/compare/harness/.assets/video/mp4_h264.mp4"
+	benchH264Thumb(b, "../../test/compare/harness/.assets/video/mp4_h264.mp4")
+}
+
+func BenchmarkMP4H264Main1080Large(b *testing.B) {
+	benchH264Thumb(b, "../../test/compare/harness/.assets/video/mp4_h264_main_1080.mp4")
+}
+
+func BenchmarkMP4H264High1080Large(b *testing.B) {
+	benchH264Thumb(b, "../../test/compare/harness/.assets/video/mp4_h264_high_1080.mp4")
+}
+
+func benchH264Thumb(b *testing.B, path string) {
 	f, err := os.Open(path)
 	if err != nil {
 		b.Skip(path)
@@ -24,4 +35,3 @@ func BenchmarkMP4H264Large(b *testing.B) {
 		}
 	}
 }
-
