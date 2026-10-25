@@ -83,9 +83,8 @@ jobs:
       - name: Install static ffmpeg (simd report smoke)
         run: bash scripts/install-ffmpeg.sh
       - name: Build thumbmode simd binary smoke
-        run: |
-          CGO_ENABLED=0 GOEXPERIMENT=simd go build -o /tmp/thumbmode-simd ./test/compare/harness/thumbmode
-          /tmp/thumbmode-simd -h || true
+        working-directory: test/compare/harness
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -o /tmp/thumbmode-simd ./thumbmode
 
   compare-gate:
     name: ffmpeg comparison gate
