@@ -168,7 +168,7 @@ func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailP
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
 		preset.MaxWidth, preset.MaxHeight, scaleFlags)
 	qv := ffmpegQScale(preset.Quality)
-	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-threads", "1"}
+	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
 	if keyframeOnly {
 		args = append(args, "-skip_frame", "nokey")
 	}
@@ -188,7 +188,7 @@ func ffmpegRasterPNG(path, dest string, seekSec float64, preset thumbnailPresetC
 	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
 		preset.MaxWidth, preset.MaxHeight, scaleFlags)
-	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-threads", "1"}
+	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
 	if keyframeOnly {
 		args = append(args, "-skip_frame", "nokey")
 	}
