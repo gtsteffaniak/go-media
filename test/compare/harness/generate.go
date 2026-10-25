@@ -55,7 +55,7 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		{"webm_vp9", "video", "WebM VP9 (thumbnail unsupported)", "video/webm_vp9.webm",
 			[]string{"-i", clip, "-c:v", "libvpx-vp9", "-g", "30", "-crf", "30", "-an"}, nil},
 		{"mjpeg_mp4", "video", "MJPEG in MP4", "video/mjpeg.mp4",
-			[]string{"-i", clip, "-c:v", "mjpeg", "-q:v", "3", "-an", "-t", "2"}, nil},
+			[]string{"-i", clip, "-c:v", "mjpeg", "-q:v", "3", "-an", "-frames:v", "1"}, nil},
 		{"mp3_cbr", "audio", "MP3 CBR + ID3", "audio/mp3_cbr.mp3",
 			[]string{"-f", "lavfi", "-i", audioSrc, "-c:a", "libmp3lame", "-b:a", "128k",
 				"-metadata", "title=Bunny", "-metadata", "artist=go-media", "-metadata", "album=Compare",
@@ -72,7 +72,7 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		{"ogg_vorbis", "audio", "OGG Vorbis", "audio/ogg_vorbis.ogg",
 			[]string{"-f", "lavfi", "-i", audioSrc, "-c:a", "libvorbis", "-metadata", "title=OGG"}, nil},
 		{"opus_ogg", "audio", "Opus in Ogg", "audio/opus.ogg",
-			[]string{"-f", "lavfi", "-i", audioSrc, "-c:a", "libopus"}, nil},
+			[]string{"-f", "lavfi", "-i", audioSrc, "-strict", "-2", "-c:a", "opus"}, nil},
 		{"m4a_aac", "audio", "M4A AAC + tags", "audio/m4a_aac.m4a",
 			[]string{"-f", "lavfi", "-i", audioSrc, "-c:a", "aac", "-b:a", "128k",
 				"-metadata", "title=M4A", "-metadata", "artist=go-media"}, nil},
@@ -113,8 +113,8 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		Description: "MKV with embedded SRT text track",
 	})
 
-	// Sidecar subtitles for mp4_h264 (rename stem sample)
-	sampleMP4 := filepath.Join(outDir, "video/sample_h264.mp4")
+	// Sidecar subtitles: stem must match video base name for ExternalSubtitleTracks.
+	sampleMP4 := filepath.Join(outDir, "video/sample.mp4")
 	if err := copyFile(videoBase, sampleMP4); err != nil {
 		return nil, err
 	}

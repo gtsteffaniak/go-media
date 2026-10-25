@@ -7,6 +7,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
+	"github.com/gtsteffaniak/go-media/internal/mp3"
 	"github.com/gtsteffaniak/go-media/internal/ogg"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
@@ -80,6 +81,9 @@ func streamsForFormat(r io.ReaderAt, size int64, id format.ID) ([]Stream, error)
 		return mapStreams(s), mapErr(err)
 	case format.OGG:
 		s, err := ogg.Streams(r, size)
+		return mapStreams(s), mapErr(err)
+	case format.MP3:
+		s, err := mp3.Streams(r, size)
 		return mapStreams(s), mapErr(err)
 	default:
 		return nil, Unsupported("streams", string(id))

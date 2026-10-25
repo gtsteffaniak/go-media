@@ -29,8 +29,8 @@ jobs:
           cache: true
       - name: Install static ffmpeg
         run: bash scripts/install-ffmpeg.sh
-      - name: Run comparison suite
-        run: bash scripts/run-comparison.sh
+      - name: Run comparison suite (with gate)
+        run: COMPARE_GATE=1 bash scripts/run-comparison.sh
       - name: Upload HTML report
         uses: actions/upload-artifact@v4
         with:

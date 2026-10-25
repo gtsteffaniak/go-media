@@ -125,8 +125,14 @@ func printSummary(report FullReport) {
 	s := report.Summary
 	fmt.Printf("\n=== go-media comparison summary ===\n")
 	fmt.Printf("Assets: %d  Checks: %d\n", s.Assets, s.TotalChecks)
-	for k, v := range s.ByStatus {
-		fmt.Printf("  %s: %d\n", k, v)
+	order := []CapabilityStatus{StatusSupported, StatusTypedUnsupported, StatusMismatch, StatusError, StatusSkipped}
+	for _, st := range order {
+		if v := s.ByStatus[string(st)]; v > 0 {
+			fmt.Printf("  %s: %d\n", st, v)
+		}
+	}
+	if n := s.ByStatus[string(StatusSkipped)]; n > 0 {
+		fmt.Printf("  (skipped = N/A checks: tags on video, artwork without cover, lyrics without .lrc, subtitles on non-sub fixtures, thumbnail on audio)\n")
 	}
 	fmt.Printf("Report JSON: report_site/data/report.json\n")
 }

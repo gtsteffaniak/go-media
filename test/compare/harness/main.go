@@ -16,16 +16,18 @@ func main() {
 	doSeed := fs.Bool("fetch-seed", true, "download/verify seed before generate")
 	doGen := fs.Bool("generate", true, "regenerate asset matrix with ffmpeg")
 	doRun := fs.Bool("run", true, "run comparisons and write report")
+	expectationsPath := fs.String("expectations", "", "path to expectations.json (required with -gate)")
+	gate := fs.Bool("gate", false, "exit non-zero when results differ from expectations")
 	_ = fs.Parse(os.Args[1:])
 
-	if err := runAll(*seedDir, *assetsDir, *reportDir, *doSeed, *doGen, *doRun); err != nil {
+	if err := runAll(*seedDir, *assetsDir, *reportDir, *doSeed, *doGen, *doRun, *expectationsPath, *gate); err != nil {
 		fmt.Fprintf(os.Stderr, "compare: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 // runAll orchestrates seed fetch, asset generation, comparison, and report output.
-func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks bool) error {
+func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks bool, expectationsPath string, gate bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -74,7 +76,21 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 		return err
 	}
 	flat := flattenResults(nested)
-	printSummary(FullReport{Summary: buildSummary(assets, nested), Assets: assets, Results: flat})
+	full := FullReport{Summary: buildSummary(assets, nested), Assets: assets, Results: flat}
+	printSummary(full)
+	if gate {
+		if expectationsPath == "" {
+			return fmt.Errorf("-gate requires -expectations")
+		}
+		exp, err := loadExpectations(expectationsPath)
+		if err != nil {
+			return err
+		}
+		if err := validateGate(exp, full); err != nil {
+			return err
+		}
+		fmt.Println("comparison gate: OK")
+	}
 	return nil
 }
 
@@ -87,33 +103,49 @@ func absUnder(base, p string) string {
 
 // loadAssetManifest rebuilds the asset list from a prior generate run.
 func loadAssetManifest(assetsDir string) ([]Asset, error) {
-	// Minimal rediscovery: walk known layout from generateAssets.
 	var ids = []struct {
 		id, rel, cat, desc string
+		sidecars           []string
 	}{
-		{"mp4_h264", "video/mp4_h264.mp4", "video", "MP4 H.264/AAC"},
-		{"mov_h264", "video/mov_h264.mov", "video", "MOV H.264"},
-		{"mkv_h264", "video/mkv_h264.mkv", "video", "MKV H.264"},
-		{"webm_vp8", "video/webm_vp8.webm", "video", "WebM VP8"},
-		{"webm_vp9", "video/webm_vp9.webm", "video", "WebM VP9"},
-		{"mjpeg_mp4", "video/mjpeg.mp4", "video", "MJPEG in MP4"},
-		{"mp3_cbr", "audio/mp3_cbr.mp3", "audio", "MP3 CBR"},
-		{"mp3_vbr", "audio/mp3_vbr.mp3", "audio", "MP3 VBR"},
-		{"flac_tags", "audio/flac_tags.flac", "audio", "FLAC tags"},
-		{"wav_pcm", "audio/wav_pcm.wav", "audio", "WAV"},
-		{"ogg_vorbis", "audio/ogg_vorbis.ogg", "audio", "OGG Vorbis"},
-		{"opus_ogg", "audio/opus.ogg", "audio", "Opus"},
-		{"m4a_aac", "audio/m4a_aac.m4a", "audio", "M4A AAC"},
-		{"mkv_subtitles", "video/mkv_subtitles.mkv", "video", "MKV subtitles"},
-		{"mp4_sidecar_subs", "video/sample_h264.mp4", "video", "MP4 sidecar subs"},
+		{"mp4_h264", "video/mp4_h264.mp4", "video", "MP4 H.264/AAC", nil},
+		{"mov_h264", "video/mov_h264.mov", "video", "MOV H.264", nil},
+		{"mkv_h264", "video/mkv_h264.mkv", "video", "MKV H.264", nil},
+		{"webm_vp8", "video/webm_vp8.webm", "video", "WebM VP8", nil},
+		{"webm_vp9", "video/webm_vp9.webm", "video", "WebM VP9", nil},
+		{"mjpeg_mp4", "video/mjpeg.mp4", "video", "MJPEG in MP4", nil},
+		{"mp3_cbr", "audio/mp3_cbr.mp3", "audio", "MP3 CBR", nil},
+		{"mp3_vbr", "audio/mp3_vbr.mp3", "audio", "MP3 VBR", nil},
+		{"flac_tags", "audio/flac_tags.flac", "audio", "FLAC tags", []string{
+			filepath.Join(assetsDir, "audio/flac_tags.lrc"),
+		}},
+		{"wav_pcm", "audio/wav_pcm.wav", "audio", "WAV", nil},
+		{"ogg_vorbis", "audio/ogg_vorbis.ogg", "audio", "OGG Vorbis", nil},
+		{"opus_ogg", "audio/opus.ogg", "audio", "Opus", nil},
+		{"m4a_aac", "audio/m4a_aac.m4a", "audio", "M4A AAC", nil},
+		{"mkv_subtitles", "video/mkv_subtitles.mkv", "video", "MKV subtitles", nil},
+		{"mp4_sidecar_subs", "video/sample.mp4", "video", "MP4 sidecar subs", []string{
+			filepath.Join(assetsDir, "video/sample.en.srt"),
+			filepath.Join(assetsDir, "video/sample.en.vtt"),
+			filepath.Join(assetsDir, "video/sample.en.ass"),
+		}},
 	}
 	var assets []Asset
 	for _, row := range ids {
 		p := filepath.Join(assetsDir, row.rel)
 		if _, err := os.Stat(p); err != nil {
-			continue
+			// Legacy sidecar fixture name before sample.mp4 rename.
+			if row.id == "mp4_sidecar_subs" {
+				legacy := filepath.Join(assetsDir, "video/sample_h264.mp4")
+				if _, err2 := os.Stat(legacy); err2 == nil {
+					p = legacy
+				} else {
+					continue
+				}
+			} else {
+				continue
+			}
 		}
-		assets = append(assets, Asset{ID: row.id, Path: p, Category: row.cat, Description: row.desc})
+		assets = append(assets, Asset{ID: row.id, Path: p, Category: row.cat, Description: row.desc, Sidecars: row.sidecars})
 	}
 	if len(assets) == 0 {
 		return nil, fmt.Errorf("no assets in %s (run with -generate)", assetsDir)

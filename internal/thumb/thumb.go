@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"image"
+	"strings"
 	"image/color"
 	"image/jpeg"
 	"image/png"
@@ -90,6 +91,9 @@ func decodeVP8(frame []byte, opt Options) (Result, error) {
 	dec.Init(bytes.NewReader(frame), len(frame))
 	ycbcr, err := dec.DecodeFrame()
 	if err != nil {
+		if isVP8UnsupportedProfile(err) {
+			return Result{}, errs.UnsupProfile("vp8 thumbnail", err.Error())
+		}
 		return Result{}, err
 	}
 	bounds := ycbcr.Bounds()
@@ -167,6 +171,11 @@ func scaleDown(img image.Image, maxW, maxH int) image.Image {
 		nh = 1
 	}
 	return resizeNearest(img, nw, nh)
+}
+
+func isVP8UnsupportedProfile(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "Golden") || strings.Contains(msg, "AltRef")
 }
 
 // resizeNearest implements thumbnail encoding helpers.

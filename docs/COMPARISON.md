@@ -13,17 +13,21 @@ We use the same reference clip as [go-ffmpeg](https://github.com/gtsteffaniak/go
 
 Implementation: `test/compare/harness/seed.go`.
 
-## Headline results (latest local run)
+## Headline results (pinned ffmpeg 9.0.2)
 
 | Metric | Count |
 |--------|------:|
 | Assets | 15 |
 | API checks | 105 |
-| **Supported** (matches ffmpeg within tolerance) | 31 |
-| Typed unsupported (`ErrUnsupported` / profile) | 12 |
-| Mismatch | 9 |
-| Error | 1 |
+| **Supported** (matches ffmpeg within tolerance) | 40 |
+| Typed unsupported (`ErrUnsupported` / profile) | 13 |
+| Mismatch | 0 |
+| Error | 0 |
 | Skipped (not applicable) | 52 |
+
+### Why 52 checks are skipped
+
+Skips are **expected N/A rows**, not failures. Each asset runs seven checks (`duration`, `probe`, `tags`, `artwork`, `lyrics`, `subtitles`, `thumbnail`). A check is skipped when it does not apply to that fixture—for example `tags` on video-only files, `thumbnail` on audio, `lyrics` without an `.lrc` sidecar, or `subtitles` when the asset is not a subtitle-focused case. The CLI summary and `report.json` `detail` field document the reason per row.
 
 **Takeaways**
 
@@ -48,21 +52,24 @@ Implementation: `test/compare/harness/seed.go`.
 
 ## Running the suite
 
-Requirements: Go 1.26+, ffmpeg/ffprobe on `PATH` (CI installs a **pinned static build** via `scripts/install-ffmpeg.sh`).
+Requirements: Go 1.26+, **ffmpeg/ffprobe 9.0.2** on `PATH` (install with `make ffmpeg` or `bash scripts/install-ffmpeg.sh`). Distro ffmpeg versions can change generated fixtures and break the gate.
 
 ```bash
-bash scripts/run-comparison.sh
+make compare          # report only
+make compare-gate     # report + expectations.json gate (CI uses this)
 # open test/compare/report_site/index.html
 ```
 
-Regenerate only fixtures or only comparisons:
+Manifest: [`test/compare/expectations.json`](../test/compare/expectations.json) lists the allowed status for all 105 `(asset, check)` pairs. `COMPARE_GATE=1` or `-gate` fails on any drift.
+
+Regenerate only comparisons (reuse fixtures):
 
 ```bash
 cd test/compare/harness
-CGO_ENABLED=0 go run . -generate=false   # reuse .assets/
+CGO_ENABLED=0 go run . -generate=false -fetch-seed=false
 ```
 
-CI workflow **Comparison** uploads `test/compare/report_site/` as an artifact on every `main` push and pull request.
+CI **Comparison** and **compare-gate** jobs run `make compare-gate` and upload `test/compare/report_site/` as an artifact on every `main` push and pull request.
 
 ## When to use go-ffmpeg instead
 

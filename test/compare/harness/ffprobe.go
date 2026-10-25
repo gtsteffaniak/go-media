@@ -17,13 +17,14 @@ type FFProbeFormat struct {
 
 // FFProbeStream is a simplified stream entry from ffprobe JSON.
 type FFProbeStream struct {
-	Index      int
-	CodecType  string
-	CodecName  string
-	Width      int
-	Height     int
-	SampleRate string
-	Channels   int
+	Index        int
+	CodecType    string
+	CodecName    string
+	Width        int
+	Height       int
+	SampleRate   string
+	Channels     int
+	AttachedPic  int
 }
 
 // FFProbeResult aggregates ffprobe output for one file.
@@ -40,7 +41,7 @@ func probeFFprobe(path string) (FFProbeResult, error) {
 	}
 	out, err := exec.Command(ffprobe,
 		"-v", "error",
-		"-show_entries", "format=format_name,duration:stream=index,codec_type,codec_name,width,height,sample_rate,channels",
+		"-show_entries", "format=format_name,duration:stream=index,codec_type,codec_name,width,height,sample_rate,channels:stream_disposition=attached_pic",
 		"-show_entries", "format_tags=title,artist,album,date,genre",
 		"-of", "json",
 		path,
@@ -62,6 +63,9 @@ func probeFFprobe(path string) (FFProbeResult, error) {
 			Height     int    `json:"height"`
 			SampleRate string `json:"sample_rate"`
 			Channels   int    `json:"channels"`
+			Disposition struct {
+				AttachedPic int `json:"attached_pic"`
+			} `json:"disposition"`
 		} `json:"streams"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
@@ -79,6 +83,7 @@ func probeFFprobe(path string) (FFProbeResult, error) {
 		res.Streams = append(res.Streams, FFProbeStream{
 			Index: s.Index, CodecType: s.CodecType, CodecName: s.CodecName,
 			Width: s.Width, Height: s.Height, SampleRate: s.SampleRate, Channels: s.Channels,
+			AttachedPic: s.Disposition.AttachedPic,
 		})
 	}
 	return res, nil
@@ -132,8 +137,12 @@ func ffmpegThumbnail(path, dest string, seekPercent float64) error {
 		dur = 5
 	}
 	ss := dur * seekPercent / 100.0
-	return exec.Command(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-ss", fmt.Sprintf("%.3f", ss), "-i", path, "-frames:v", "1", "-q:v", "2", dest).Run()
+	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
+	if dur >= 0.5 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
+	}
+	args = append(args, "-i", path, "-frames:v", "1", "-vf", "scale='min(320,iw)':-2", "-q:v", "2", dest)
+	return exec.Command(ffmpeg, args...).Run()
 }
 
 // imagePSNRSSIM compares two PNG/JPEG files via ffmpeg lavfi.
@@ -152,11 +161,30 @@ func imagePSNRSSIM(a, b string) (psnr float64, ssim float64, err error) {
 		return 0, 0, fmt.Errorf("%w: %s", err, text)
 	}
 	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, "psnr_avg:") {
+			for _, field := range strings.Fields(line) {
+				if strings.HasPrefix(field, "psnr_avg:") {
+					psnr, _ = strconv.ParseFloat(strings.TrimPrefix(field, "psnr_avg:"), 64)
+				}
+			}
+		}
 		if strings.Contains(line, "PSNR") && strings.Contains(line, "average:") {
 			fields := strings.Fields(line)
 			for i, f := range fields {
 				if f == "average:" && i+1 < len(fields) {
 					psnr, _ = strconv.ParseFloat(strings.TrimSuffix(fields[i+1], "dB"), 64)
+				}
+			}
+		}
+		if strings.Contains(line, "All:") && strings.Contains(line, "SSIM") == false {
+			for _, field := range strings.Fields(line) {
+				if strings.HasPrefix(field, "All:") {
+					val := strings.TrimPrefix(field, "All:")
+					if val != "inf" && val != "(inf)" {
+						ssim, _ = strconv.ParseFloat(val, 64)
+					} else {
+						ssim = 1
+					}
 				}
 			}
 		}

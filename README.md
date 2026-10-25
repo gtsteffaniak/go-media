@@ -34,7 +34,7 @@ Every feature is checked against real `ffmpeg`/`ffprobe` output on a corpus of r
 - **Metadata and stream info:** field-by-field diffs against ffprobe JSON.
 - **Frame decode:** compared with `ffmpeg -frames:v 1` using PSNR/SSIM thresholds.
 - **Fuzzing:** all parsers and bitstream readers are fuzzed (`go test -fuzz`).
-- **Published results:** run `bash scripts/run-comparison.sh` and open `test/compare/report_site/index.html` (CI uploads the same site as an artifact). Summary: [docs/COMPARISON.md](docs/COMPARISON.md).
+- **Published results:** run `make compare-gate` (pinned ffmpeg 9.0.2) and open `test/compare/report_site/index.html` (CI uploads the same site as an artifact). Summary: [docs/COMPARISON.md](docs/COMPARISON.md).
 
 ## Support matrix (current)
 
@@ -60,7 +60,7 @@ Legend: ✅ Implemented · 🟡 Partial / conditional · 📋 Planned · ❌ Out
 | MP4 / MOV | `stsd`, `tkhd` | ✅ |
 | MKV / WebM | `Tracks` | ✅ |
 | WAV / FLAC / OGG | format headers | ✅ |
-| MP3 | — | 📋 |
+| MP3 | frame header | ✅ |
 
 ### Tags / metadata
 

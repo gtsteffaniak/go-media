@@ -116,7 +116,7 @@ func checkProbe(a Asset) CheckResult {
 		}
 	}
 	vidGo, audGo := streamCounts(info.Streams)
-	vidFF, audFF := ffStreamCounts(ff.Streams)
+	vidFF, audFF := ffStreamCounts(ff.Streams, true)
 	if vidGo != vidFF {
 		diffs = append(diffs, fmt.Sprintf("video streams: go=%d ff=%d", vidGo, vidFF))
 	}
@@ -166,6 +166,7 @@ func checkTags(a Asset) CheckResult {
 	}
 	if len(ff.Format.Tags) == 0 && tags.Title == "" && tags.Artist == "" {
 		res.Status = StatusSkipped
+		res.Detail = "no tags in fixture"
 		return res
 	}
 	var diffs []string
@@ -245,6 +246,7 @@ func checkLyrics(a Asset) CheckResult {
 	expect := len(a.Sidecars) > 0 && strings.HasSuffix(a.Sidecars[0], ".lrc")
 	if !expect {
 		res.Status = StatusSkipped
+		res.Detail = "no lyrics sidecar on fixture"
 		return res
 	}
 	if has {
@@ -289,6 +291,7 @@ func checkSubtitles(a Asset) CheckResult {
 			return res
 		}
 		res.Status = StatusMismatch
+		res.Detail = fmt.Sprintf("expected >=2 sidecar tracks, got %d", len(ext))
 		return res
 	}
 
@@ -324,6 +327,7 @@ func checkSubtitles(a Asset) CheckResult {
 		return res
 	}
 	res.Status = StatusSkipped
+	res.Detail = "subtitles check not applicable for this fixture"
 	return res
 }
 
@@ -332,6 +336,7 @@ func checkThumbnail(a Asset, thumbDir string) CheckResult {
 	res := CheckResult{AssetID: a.ID, Check: CheckThumbnail}
 	if a.Category != "video" {
 		res.Status = StatusSkipped
+		res.Detail = "audio fixture"
 		return res
 	}
 	f, err := openAsset(a)
@@ -406,8 +411,11 @@ func streamCounts(streams []media.Stream) (video, audio int) {
 	return video, audio
 }
 
-func ffStreamCounts(streams []FFProbeStream) (video, audio int) {
+func ffStreamCounts(streams []FFProbeStream, skipAttachedPic bool) (video, audio int) {
 	for _, s := range streams {
+		if skipAttachedPic && s.AttachedPic == 1 {
+			continue
+		}
 		switch s.CodecType {
 		case "video":
 			video++

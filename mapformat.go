@@ -56,6 +56,13 @@ func mapErr(err error) error {
 	if errors.Is(err, errs.Unsupported) {
 		return ErrUnsupported
 	}
+	var prof *errs.ProfileError
+	if errors.As(err, &prof) {
+		return UnsupportedProfile(prof.Op, prof.Reason)
+	}
+	if errors.Is(err, errs.UnsupportedProfile) {
+		return ErrUnsupportedProfile
+	}
 	if errors.Is(err, errs.Corrupt) {
 		return ErrCorrupt
 	}

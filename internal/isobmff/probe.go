@@ -53,7 +53,14 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 				s.Channels = int(tr.MP4A.ChannelCount)
 			}
 		default:
-			continue
+			if tr.Codec != mp4.CodecUnknown {
+				continue
+			}
+			if _, ok := MJPEGFrame(r, size); !ok {
+				continue
+			}
+			s.Type = detect.StreamVideo
+			s.Codec = "mjpeg"
 		}
 		streams = append(streams, s)
 	}
