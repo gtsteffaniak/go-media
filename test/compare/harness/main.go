@@ -68,6 +68,14 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 		return nil
 	}
 
+	expectationsForPolicy := expectationsPath
+	if expectationsForPolicy == "" {
+		expectationsForPolicy = filepath.Join(base, "..", "expectations.json")
+	}
+	if exp, err := loadExpectations(expectationsForPolicy); err == nil {
+		activeTimingGate = timingGatePolicyFromExpectations(exp)
+	}
+
 	nested, err := runComparisons(assets, reportDir)
 	if err != nil {
 		return err

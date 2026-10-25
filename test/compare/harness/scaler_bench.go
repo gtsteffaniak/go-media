@@ -58,7 +58,9 @@ func medianFFmpegThumb(a Asset, preset thumbnailPresetConfig) float64 {
 	for i := 0; i < timingWarmup+timingRuns; i++ {
 		start := time.Now()
 		_ = ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
-		samples = append(samples, msSince(start))
+		if i >= timingWarmup {
+			samples = append(samples, msSince(start))
+		}
 	}
 	sort.Float64s(samples)
 	return samples[len(samples)/2]
@@ -76,11 +78,12 @@ func benchScalerRow(a Asset, preset thumbnailPresetConfig, filter media.Thumbnai
 		}
 		start := time.Now()
 		tr, err := media.Thumbnail(f2, f2.Size(), opt)
-		goSamples = append(goSamples, msSince(start))
-		if err == nil {
+		goMs := msSince(start)
+		if i >= timingWarmup && err == nil {
+			goSamples = append(goSamples, goMs)
 			wStart := time.Now()
 			_ = os.WriteFile(outPath, tr.Data, 0o644)
-			writeSamples = append(writeSamples, msSince(start)+msSince(wStart))
+			writeSamples = append(writeSamples, goMs+msSince(wStart))
 		}
 	}
 	sort.Float64s(goSamples)

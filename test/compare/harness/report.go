@@ -174,6 +174,7 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	var deltaPcts []float64
 	var totalGo, totalFF float64
 	comparable := 0
+	var relaxedRows []TimingRelaxedRow
 	for _, group := range nested {
 		for _, r := range group {
 			s.TotalChecks++
@@ -190,8 +191,21 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 					deltaPcts = append(deltaPcts, *r.TimingDeltaPct)
 				}
 			}
+			if r.TimingGateRelaxed && r.TimingDeltaPct != nil && r.Status == StatusSupported {
+				relaxedRows = append(relaxedRows, TimingRelaxedRow{
+					AssetID:         r.AssetID,
+					Check:           string(r.Check),
+					ThumbPreset:     r.ThumbPreset,
+					TimingDeltaPct:  *r.TimingDeltaPct,
+					TimingGateLimit: r.TimingGateLimitPct,
+					GoMediaWriteMS:  r.GoMediaWriteMS,
+					FFmpegMS:        r.FFmpegMS,
+					Reason:          r.TimingGateRelaxReason,
+				})
+			}
 		}
 	}
+	s.TimingRelaxed = relaxedRows
 	for _, c := range checkNames {
 		m := byCheckStatus[c]
 		s.CapabilityChart = append(s.CapabilityChart, CapabilityBreakdown{

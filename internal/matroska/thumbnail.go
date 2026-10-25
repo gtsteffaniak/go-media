@@ -29,6 +29,94 @@ type ThumbnailParams struct {
 	Scaler int
 }
 
+// VP8PictureAtSeek demuxes and decodes the VP8 frame at seekPercent without RGB conversion.
+func VP8PictureAtSeek(r io.ReaderAt, size int64, seekPercent float64) (*gvp8.Picture, bool) {
+	head, err := readHead(r, size)
+	if err != nil || head.Segment.Info.Duration <= 0 {
+		return nil, false
+	}
+	scale := head.Segment.Info.TimecodeScale
+	if scale == 0 {
+		scale = 1_000_000
+	}
+	durationMs := int64(head.Segment.Info.Duration * float64(scale) / 1e6)
+	if durationMs <= 0 {
+		durationMs = 1
+	}
+	if seekPercent <= 0 {
+		seekPercent = 10
+	}
+	targetMs := int64(float64(durationMs) * seekPercent / 100.0)
+	frames, err := collectVP8FramesForSeek(r, size, targetMs)
+	if err != nil || len(frames) == 0 {
+		return nil, false
+	}
+	pic := decodeVP8SeekPicture(frames, targetMs)
+	if pic == nil {
+		return nil, false
+	}
+	return pic, true
+}
+
+func collectVP8FramesForSeek(r io.ReaderAt, size int64, targetMs int64) ([]videoFrame, error) {
+	head, err := readHead(r, size)
+	if err != nil {
+		return nil, err
+	}
+	scale := head.Segment.Info.TimecodeScale
+	if scale == 0 {
+		scale = 1_000_000
+	}
+	reader := io.NewSectionReader(ioat.New(r, size), 0, size)
+	var demuxFatal error
+	var demuxMu sync.Mutex
+	readers, err := mkvcore.NewSimpleBlockReader(reader, mkvcore.WithOnFatalHandler(func(e error) {
+		demuxMu.Lock()
+		if demuxFatal == nil {
+			demuxFatal = e
+		}
+		demuxMu.Unlock()
+	}))
+	if err != nil {
+		return nil, err
+	}
+	var vp8Track mkvcore.BlockReadCloserWithTrackEntry
+	for _, br := range readers {
+		if br.TrackEntry().CodecID == "V_VP8" {
+			vp8Track = br
+		}
+	}
+	closed := map[mkvcore.BlockReadCloserWithTrackEntry]bool{}
+	closeTrack := func(br mkvcore.BlockReadCloserWithTrackEntry) {
+		if br == nil || closed[br] {
+			return
+		}
+		br.Close()
+		closed[br] = true
+	}
+	for _, br := range readers {
+		if br == nil {
+			continue
+		}
+		if br.TrackEntry().CodecID != "V_VP8" {
+			closeTrack(br)
+		}
+	}
+	defer func() {
+		for _, br := range readers {
+			closeTrack(br)
+		}
+	}()
+	if vp8Track == nil {
+		return nil, nil
+	}
+	frames, err := collectVideoFramesForSeek(vp8Track, scale, targetMs, true)
+	if getDemuxFatal(&demuxMu, &demuxFatal) != nil {
+		return nil, demuxFatal
+	}
+	return frames, err
+}
+
 // ThumbnailRGBA seeks to seekPercent of the file timeline and decodes a VP8 or MJPEG frame.
 // H.264 and other codecs return (nil, false).
 func ThumbnailRGBA(r io.ReaderAt, size int64, p ThumbnailParams) (*image.RGBA, bool) {
@@ -108,9 +196,11 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, p ThumbnailParams) (*image.RGBA, b
 		if err != nil || getDemuxFatal(&demuxMu, &demuxFatal) != nil {
 			return nil, false
 		}
-		if img, ok := decodeVP8Seek(frames, targetMs, p.MaxWidth, p.MaxHeight, p.Scaler); ok {
-			return img, true
+		pic := decodeVP8SeekPicture(frames, targetMs)
+		if pic == nil {
+			return nil, false
 		}
+		return vp8decode.PictureRGBAScaled(pic, p.MaxWidth, p.MaxHeight, p.Scaler), true
 	}
 	if mjpegTrack != nil {
 		frames, err := collectVideoFramesForSeek(mjpegTrack, scale, targetMs, false)
@@ -184,9 +274,9 @@ func collectVideoFramesForSeek(br mkvcore.BlockReadCloserWithTrackEntry, timecod
 	return out, nil
 }
 
-func decodeVP8Seek(frames []videoFrame, targetMs int64, maxW, maxH int, scaler int) (*image.RGBA, bool) {
+func decodeVP8SeekPicture(frames []videoFrame, targetMs int64) *gvp8.Picture {
 	if len(frames) == 0 {
-		return nil, false
+		return nil
 	}
 	start := 0
 	for i, f := range frames {
@@ -199,19 +289,24 @@ func decodeVP8Seek(frames []videoFrame, targetMs int64, maxW, maxH int, scaler i
 	for i := start; i < len(frames); i++ {
 		pic, err := vp8decode.DecodeFramePicture(&dec, frames[i].payload)
 		if err != nil {
-			return nil, false
+			return nil
 		}
 		if pic != nil {
 			last = pic
 		}
 		if frames[i].timestampMs >= targetMs && last != nil {
-			return vp8decode.PictureRGBAScaled(last, maxW, maxH, scaler), true
+			return last
 		}
 	}
-	if last != nil {
-		return vp8decode.PictureRGBAScaled(last, maxW, maxH, scaler), true
+	return last
+}
+
+func decodeVP8Seek(frames []videoFrame, targetMs int64, maxW, maxH int, scaler int) (*image.RGBA, bool) {
+	last := decodeVP8SeekPicture(frames, targetMs)
+	if last == nil {
+		return nil, false
 	}
-	return nil, false
+	return vp8decode.PictureRGBAScaled(last, maxW, maxH, scaler), true
 }
 
 func decodeMJPEGSeek(frames []videoFrame, targetMs int64) (*image.RGBA, bool) {

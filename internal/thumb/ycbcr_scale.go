@@ -7,11 +7,20 @@ import (
 	"sync"
 )
 
-// scaleYCbCrArea downscales a YCbCr image with tile averaging (BT.709 limited RGB out optional path via RGBA).
+// scaleYCbCrArea downscales JPEG/JFIF YCbCr with tile averaging and BT.601 full-range RGB (color.YCbCrToRGB).
 func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int) *image.RGBA {
 	sb := src.Bounds()
 	sw, sh := sb.Dx(), sb.Dy()
 	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+	sx0 := make([]int, dstW)
+	sx1 := make([]int, dstW)
+	for dx := 0; dx < dstW; dx++ {
+		sx0[dx] = sb.Min.X + (dx*sw)/dstW
+		sx1[dx] = sb.Min.X + ((dx+1)*sw)/dstW
+		if sx1[dx] <= sx0[dx] {
+			sx1[dx] = sx0[dx] + 1
+		}
+	}
 	workers := runtime.GOMAXPROCS(0)
 	if workers > dstH {
 		workers = dstH
@@ -31,41 +40,52 @@ func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int) *image.RGBA {
 		go func(yStart, yEnd int) {
 			defer wg.Done()
 			for dy := yStart; dy < yEnd; dy++ {
-		sy0 := sb.Min.Y + (dy*sh)/dstH
-		sy1 := sb.Min.Y + ((dy+1)*sh)/dstH
-		if sy1 <= sy0 {
-			sy1 = sy0 + 1
-		}
-		for dx := 0; dx < dstW; dx++ {
-			sx0 := sb.Min.X + (dx*sw)/dstW
-			sx1 := sb.Min.X + ((dx+1)*sw)/dstW
-			if sx1 <= sx0 {
-				sx1 = sx0 + 1
-			}
-			var ySum, cbSum, crSum, n int
-			for sy := sy0; sy < sy1; sy++ {
-				for sx := sx0; sx < sx1; sx++ {
-					yy := src.Y[src.YOffset(sx, sy)]
-					cb, cr := sampleCbCr(src, sx, sy)
-					ySum += int(yy)
-					cbSum += int(cb)
-					crSum += int(cr)
-					n++
+				sy0 := sb.Min.Y + (dy*sh)/dstH
+				sy1 := sb.Min.Y + ((dy+1)*sh)/dstH
+				if sy1 <= sy0 {
+					sy1 = sy0 + 1
+				}
+				cy0 := sy0 / 2
+				cy1 := (sy1 + 1) / 2
+				dstRow := dy * dst.Stride
+				for dx := 0; dx < dstW; dx++ {
+					x0, x1 := sx0[dx], sx1[dx]
+					var ySum, n int
+					for sy := sy0; sy < sy1; sy++ {
+						yRow := sy * src.YStride
+						for sx := x0; sx < x1; sx++ {
+							ySum += int(src.Y[yRow+sx])
+							n++
+						}
+					}
+					if n == 0 {
+						n = 1
+					}
+					cx0 := x0 / 2
+					cx1 := (x1 + 1) / 2
+					var cbSum, crSum, cn int
+					for cy := cy0; cy < cy1; cy++ {
+						cRow := cy * src.CStride
+						for cx := cx0; cx < cx1; cx++ {
+							cbSum += int(src.Cb[cRow+cx])
+							crSum += int(src.Cr[cRow+cx])
+							cn++
+						}
+					}
+					if cn == 0 {
+						cn = 1
+					}
+					yy := byte(ySum / n)
+					cb := byte(cbSum / cn)
+					cr := byte(crSum / cn)
+					r8, g8, b8 := color.YCbCrToRGB(yy, cb, cr)
+					di := dstRow + dx*4
+					dst.Pix[di+0] = r8
+					dst.Pix[di+1] = g8
+					dst.Pix[di+2] = b8
+					dst.Pix[di+3] = 255
 				}
 			}
-			if n == 0 {
-				n = 1
-			}
-			yy := float64(ySum/n) - 16
-			cb := float64(cbSum/n) - 128
-			cr := float64(crSum/n) - 128
-			di := dy*dst.Stride + dx*4
-			dst.Pix[di+0] = clampU8(1.164*yy + 1.793*cr)
-			dst.Pix[di+1] = clampU8(1.164*yy - 0.213*cb - 0.533*cr)
-			dst.Pix[di+2] = clampU8(1.164*yy + 2.112*cb)
-			dst.Pix[di+3] = 255
-			}
-		}
 		}(y0, y1)
 	}
 	wg.Wait()

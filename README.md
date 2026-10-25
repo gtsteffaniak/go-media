@@ -147,18 +147,17 @@ These are research ideas, not commitments:
 ## Thumbnail API
 
 ```go
-// FileBrowser-style presets (small = fast 256px Q76 bilinear, large = 1280×720 Q90 Catmull-Rom)
+// FileBrowser-style presets (small = 256px Q76 area, large = 1280×720 Q90 area)
 thumb, err := media.ThumbnailSmall(r, size, 10)  // seek 10% into timeline
 thumb, err := media.ThumbnailLarge(r, size, 10)
 
 // Full control
 thumb, err := media.Thumbnail(r, size, media.ThumbnailOptions{
-    MaxWidth: 320, MaxHeight: 240, // aspect preserved
+    MaxWidth: 320, MaxHeight: 240, // aspect preserved (omit Preset to keep these)
     Quality:  85,                   // JPEG 1–100
     Format:   "jpeg",               // jpeg | png | webp-lossless
-    Seek:     10,                   // percent 0–100 (or SeekPercent)
+    SeekPercent: 10,                // percent 0–100
     Filter:   media.ThumbnailFilterArea, // fast | area | balanced | high
-    Preset:   media.ThumbnailPresetLarge, // applies preset fields when set
 })
 png, err := media.ThumbnailRasterPNG(r, size, opt) // lossless scaled decode (metrics / debug)
 

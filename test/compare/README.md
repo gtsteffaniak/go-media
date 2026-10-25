@@ -13,7 +13,7 @@ make ffmpeg
 make compare-gate
 ```
 
-- **Gate manifest:** `expectations.json` (136 rows) — must match `report_site/data/report.json` when `COMPARE_GATE=1`.
+- **Gate manifest:** `expectations.json` (136 rows) — must match `report_site/data/report.json` when `COMPARE_GATE=1`. Optional `timingGate` block sets per-asset thumbnail latency caps (default 10%; `mjpeg_mp4` has relaxed rows — see `summary.timingRelaxed` in the report).
 - **Skip reasons:** N/A checks set `detail` in the report (tags on video, thumbnail on audio, etc.).
 
 The harness module lives in `harness/` so `ffmpeg_test.go` in this directory can remain a lightweight `go test` smoke check against committed `testdata/`. Set `COMPARE_GATE_TEST=1` to run the full gate via `go test` in this package.

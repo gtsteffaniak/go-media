@@ -12,6 +12,8 @@ const thumbTimingWarmup = 2
 const thumbTimingRuns = 7
 const maxTimingRegressionPct = 0.10
 
+var activeTimingGate = defaultTimingGatePolicy()
+
 type thumbTimingSample struct {
 	GoMS    float64
 	WriteMS float64
@@ -29,8 +31,8 @@ func benchmarkThumbnail(a Asset, opt media.ThumbnailOptions, preset thumbnailPre
 		start := time.Now()
 		tr, err := media.Thumbnail(f, f.Size(), opt)
 		goMs := msSince(start)
-		goSamples = append(goSamples, goMs)
-		if err == nil {
+		if i >= thumbTimingWarmup && err == nil {
+			goSamples = append(goSamples, goMs)
 			w0 := time.Now()
 			_ = os.WriteFile(tmp, tr.Data, 0o644)
 			writeSamples = append(writeSamples, goMs+msSince(w0))
@@ -41,7 +43,9 @@ func benchmarkThumbnail(a Asset, opt media.ThumbnailOptions, preset thumbnailPre
 	for i := 0; i < thumbTimingWarmup+thumbTimingRuns; i++ {
 		start := time.Now()
 		_ = ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
-		ffSamples = append(ffSamples, msSince(start))
+		if i >= thumbTimingWarmup {
+			ffSamples = append(ffSamples, msSince(start))
+		}
 	}
 	return thumbTimingSample{
 		GoMS:     medianFloat(goSamples),

@@ -99,12 +99,14 @@ func halve420(p *gvp8.Picture) *gvp8.Picture {
 	if nw < 2 || nh < 2 {
 		return p
 	}
+	ncw := (nw + 1) / 2
+	nch := (nh + 1) / 2
 	out := &gvp8.Picture{
 		Width: nw, Height: nh,
-		YStride: nw, UVStride: nw / 2,
+		YStride: nw, UVStride: ncw,
 		Y: make([]byte, nw*nh),
-		U: make([]byte, (nw/2)*(nh/2)),
-		V: make([]byte, (nw/2)*(nh/2)),
+		U: make([]byte, ncw*nch),
+		V: make([]byte, ncw*nch),
 	}
 	for y := 0; y < nh; y++ {
 		for x := 0; x < nw; x++ {
@@ -114,17 +116,31 @@ func halve420(p *gvp8.Picture) *gvp8.Picture {
 				int(p.Y[(y0+1)*p.YStride+x0]) + int(p.Y[(y0+1)*p.YStride+x0+1]) + 2) / 4)
 		}
 	}
-	for y := 0; y < nh/2; y++ {
-		for x := 0; x < nw/2; x++ {
-			y0 := 2*y
-			x0 := 2*x
-			out.U[y*out.UVStride+x] = byte((int(p.U[y0*p.UVStride+x0]) + int(p.U[y0*p.UVStride+x0+1]) +
-				int(p.U[(y0+1)*p.UVStride+x0]) + int(p.U[(y0+1)*p.UVStride+x0+1]) + 2) / 4)
-			out.V[y*out.UVStride+x] = byte((int(p.V[y0*p.UVStride+x0]) + int(p.V[y0*p.UVStride+x0+1]) +
-				int(p.V[(y0+1)*p.UVStride+x0]) + int(p.V[(y0+1)*p.UVStride+x0+1]) + 2) / 4)
+	for y := 0; y < nch; y++ {
+		for x := 0; x < ncw; x++ {
+			y0 := 2 * y
+			x0 := 2 * x
+			out.U[y*out.UVStride+x] = avgChroma4(p.U, p.UVStride, x0, y0, p.Width, p.Height)
+			out.V[y*out.UVStride+x] = avgChroma4(p.V, p.UVStride, x0, y0, p.Width, p.Height)
 		}
 	}
 	return out
+}
+
+func avgChroma4(plane []byte, stride int, x0, y0, w, h int) byte {
+	x1 := x0 + 1
+	y1 := y0 + 1
+	if x1 >= (w+1)/2 {
+		x1 = x0
+	}
+	if y1 >= (h+1)/2 {
+		y1 = y0
+	}
+	v00 := int(plane[y0*stride+x0])
+	v10 := int(plane[y0*stride+x1])
+	v01 := int(plane[y1*stride+x0])
+	v11 := int(plane[y1*stride+x1])
+	return byte((v00 + v10 + v01 + v11 + 2) / 4)
 }
 
 func scalePictureBilinear(p *gvp8.Picture, tw, th int) *image.RGBA {

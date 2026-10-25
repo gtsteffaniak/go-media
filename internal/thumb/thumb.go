@@ -55,7 +55,7 @@ func Generate(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt
 func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt Options) (image.Image, string, error) {
 	if opt.PreferEmbedded {
 		if data, mime, err := tagread.Artwork(r, size); err == nil {
-			img, err := decodeBytes(data, mime)
+			img, err := decodeBytes(data, mime, opt.MaxWidth, opt.MaxHeight, opt.Fast)
 			if err == nil {
 				return img, "embedded", nil
 			}
@@ -70,7 +70,7 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 	switch fmtID {
 	case format.MP4:
 		if b, ok := isobmff.MJPEGFrame(r, size); ok {
-			img, err := decodeBytes(b, "image/jpeg")
+			img, err := decodeBytes(b, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
 			if err != nil {
 				return nil, "", err
 			}
@@ -91,7 +91,7 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 		}
 	case format.MP3, format.FLAC, format.OGG:
 		if data, mime, err := tagread.Artwork(r, size); err == nil {
-			img, err := decodeBytes(data, mime)
+			img, err := decodeBytes(data, mime, opt.MaxWidth, opt.MaxHeight, opt.Fast)
 			if err == nil {
 				return img, "embedded", nil
 			}
@@ -100,8 +100,8 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 	return nil, "", errs.Unsup("thumbnail", string(fmtID))
 }
 
-func decodeBytes(data []byte, mime string) (image.Image, error) {
-	img, _, err := jpegDecode(data)
+func decodeBytes(data []byte, mime string, maxW, maxH int, fast bool) (image.Image, error) {
+	img, _, err := jpegDecode(data, maxW, maxH, fast)
 	if err != nil {
 		if errors.Is(err, image.ErrFormat) {
 			return nil, errs.Unsup("thumbnail", "unsupported cover image format")
@@ -113,12 +113,24 @@ func decodeBytes(data []byte, mime string) (image.Image, error) {
 
 func encodeImageRaster(img image.Image, opt Options, src string) (Result, error) {
 	mode := scalerFromOptions(opt)
-	if scaled, ok := tryScaleYCbCrSource(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
-		img = scaled
-	} else if needsScale(img, opt.MaxWidth, opt.MaxHeight) {
-		img = scaleImage(img, opt.MaxWidth, opt.MaxHeight, mode)
+	jpegOut := opt.Format == "" || opt.Format == "jpeg"
+	if jpegOut {
+		if scaled, ok := tryScaleYCbCrDown(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
+			img = scaled
+		}
+	}
+	if _, yccOK := img.(*image.YCbCr); !yccOK || !jpegOut {
+		if scaled, ok := tryScaleYCbCrSource(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
+			img = scaled
+		} else if needsScale(img, opt.MaxWidth, opt.MaxHeight) {
+			img = scaleImage(img, opt.MaxWidth, opt.MaxHeight, mode)
+		}
 	}
 	var buf bytes.Buffer
+	if opt.Format == "" || opt.Format == "jpeg" {
+		b := img.Bounds()
+		buf.Grow(b.Dx() * b.Dy() / 4)
+	}
 	switch opt.Format {
 	case "png":
 		if err := png.Encode(&buf, img); err != nil {

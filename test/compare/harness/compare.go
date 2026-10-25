@@ -425,27 +425,39 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	res.ThumbGoPath = relReportPath(goPath)
 	res.ThumbFFPath = relReportPath(ffPath)
 
+	_ = os.Remove(goPNG)
+	decOpt := opt
+	decOpt.Preset = ""
+	decOpt.Fast = false
+	rasterPreset := preset
+	if w, h, ok := videoFrameSize(a.Path); ok {
+		decOpt.MaxWidth = w
+		decOpt.MaxHeight = h
+		rasterPreset.MaxWidth = w
+		rasterPreset.MaxHeight = h
+	}
 	f2, err := openAsset(a)
 	if err == nil {
-		if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), opt); err == nil {
-			_ = os.WriteFile(goPNG, goRaw, 0o644)
-		}
-	}
-	if err := ffmpegRasterPNG(a.Path, ffPNG, 10, preset); err == nil {
-		if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
-			res.PSNRDecode = dPSNR
-			res.SSIMDecode = dSSIM
+		if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), decOpt); err == nil {
+			if err := os.WriteFile(goPNG, goRaw, 0o644); err == nil {
+				if err := ffmpegRasterPNG(a.Path, ffPNG, 10, rasterPreset); err == nil {
+					if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
+						res.PSNRDecode = dPSNR
+						res.SSIMDecode = dSSIM
+					}
+				}
+			}
 		}
 	}
 
 	psnr, ssim, mErr := imagePSNRSSIM(ffPath, goPath)
 	res.PSNR = psnr
 	res.SSIM = ssim
-	if mErr != nil {
-		res.Detail = mErr.Error()
-	}
 	res.Detail = fmt.Sprintf("jpeg PSNR=%.1f SSIM=%.3f decode PSNR=%.1f SSIM=%.3f",
 		res.PSNR, res.SSIM, res.PSNRDecode, res.SSIMDecode)
+	if mErr != nil {
+		res.Detail += "; metrics: " + mErr.Error()
+	}
 
 	timing := benchmarkThumbnail(a, opt, preset)
 	res.GoMediaMS = timing.GoMS
@@ -458,15 +470,23 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		}
 		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
 		res.TimingDeltaPct = &delta
-		if delta > maxTimingRegressionPct {
+		limit, relaxed, relaxReason := activeTimingGate.maxRegression(a.ID, res.Check)
+		res.TimingGateLimitPct = limit
+		res.TimingGateRelaxed = relaxed
+		res.TimingGateRelaxReason = relaxReason
+		if delta > limit+1e-6 {
 			res.TimingGateFail = true
 		}
 	}
 
 	if res.TimingGateFail {
 		res.Status = StatusMismatch
-		res.Detail += fmt.Sprintf("; timing gate: write %.0fms vs ffmpeg %.0fms (%.0f%% > 10%%)",
-			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100)
+		limitPct := res.TimingGateLimitPct * 100
+		if limitPct <= 0 {
+			limitPct = maxTimingRegressionPct * 100
+		}
+		res.Detail += fmt.Sprintf("; timing gate: write %.0fms vs ffmpeg %.0fms (%.0f%% > %.0f%%)",
+			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100, limitPct)
 		return res
 	}
 	if res.SSIM >= 0.85 || res.PSNR >= 25 {

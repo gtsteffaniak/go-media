@@ -23,7 +23,7 @@ compare: ffmpeg
 	bash scripts/run-comparison.sh
 
 compare-gate: ffmpeg
-	COMPARE_GATE=1 bash scripts/run-comparison.sh
+	CGO_ENABLED=0 COMPARE_GATE=1 bash scripts/run-comparison.sh
 
 server:
 	python3 -m http.server $(COMPARE_SERVER_PORT) -d $(COMPARE_REPORT_SITE)

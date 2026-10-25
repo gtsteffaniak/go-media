@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -126,6 +127,20 @@ func ffprobeVersionLine() string {
 	return strings.TrimSpace(lines[0])
 }
 
+// videoFrameSize returns the first video stream dimensions from ffprobe.
+func videoFrameSize(path string) (width, height int, ok bool) {
+	p, err := probeFFprobe(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	for _, s := range p.Streams {
+		if s.CodecType == "video" && s.Width > 0 && s.Height > 0 {
+			return s.Width, s.Height, true
+		}
+	}
+	return 0, 0, false
+}
+
 // ffmpegThumbnailPreset extracts one JPEG frame aligned with a media thumbnail preset.
 func ffmpegThumbnailPreset(path, dest string, seekPercent float64, preset thumbnailPresetConfig) error {
 	ffmpeg, err := lookFFmpeg()
@@ -140,11 +155,11 @@ func ffmpegThumbnailPreset(path, dest string, seekPercent float64, preset thumbn
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
 		preset.MaxWidth, preset.MaxHeight, preset.FFScale)
 	qv := ffmpegQScale(preset.Quality)
-	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
+	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-i", path}
 	if dur >= 0.5 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
 	}
-	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
+	args = append(args, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
 	return exec.Command(ffmpeg, args...).Run()
 }
 
@@ -161,11 +176,11 @@ func ffmpegRasterPNG(path, dest string, seekPercent float64, preset thumbnailPre
 	ss := dur * seekPercent / 100.0
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
 		preset.MaxWidth, preset.MaxHeight, preset.FFScale)
-	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
+	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-i", path}
 	if dur >= 0.5 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
 	}
-	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, dest)
+	args = append(args, "-frames:v", "1", "-vf", vf, dest)
 	return exec.Command(ffmpeg, args...).Run()
 }
 
@@ -215,7 +230,10 @@ func imagePSNR(a, b string) (float64, error) {
 			for _, field := range strings.Fields(line) {
 				if strings.HasPrefix(field, "psnr_avg:") {
 					v, _ := strconv.ParseFloat(strings.TrimPrefix(field, "psnr_avg:"), 64)
-					if v > 0 {
+					if math.IsInf(v, 1) {
+						return 100, nil
+					}
+					if v > 0 && !math.IsInf(v, 0) {
 						return v, nil
 					}
 				}
@@ -225,7 +243,10 @@ func imagePSNR(a, b string) (float64, error) {
 			for _, field := range strings.Fields(line) {
 				if strings.HasPrefix(field, "average:") {
 					v, _ := strconv.ParseFloat(strings.TrimPrefix(field, "average:"), 64)
-					if v > 0 {
+					if math.IsInf(v, 1) {
+						return 100, nil
+					}
+					if v > 0 && !math.IsInf(v, 0) {
 						return v, nil
 					}
 				}
