@@ -70,7 +70,15 @@ func tryScaleYCbCrDown(img image.Image, maxW, maxH int, mode ScalerMode) (image.
 	case *image.YCbCr:
 		ycc = v
 	case *h264.ThumbYCbCr:
+		// YCbCr→JPEG skips custom matrix coeffs; small thumbs keep the RGB path for ffmpeg parity.
 		ycc = v.YCbCr
+		if ycc == nil {
+			return img, false
+		}
+		tw, th := fitThumbSize(ycc.Bounds().Dx(), ycc.Bounds().Dy(), maxW, maxH)
+		if tw <= 320 || th <= 320 {
+			return img, false
+		}
 	}
 	if ycc == nil {
 		return img, false
@@ -80,7 +88,13 @@ func tryScaleYCbCrDown(img image.Image, maxW, maxH int, mode ScalerMode) (image.
 		return img, false
 	}
 	if mode == ScalerArea || mode == ScalerBalanced || mode == ScalerHigh || mode == ScalerFast {
-		return scaleYCbCrAreaDown(ycc, tw, th), true
+		cur := ycc
+		if _, isH264 := img.(*h264.ThumbYCbCr); isH264 {
+			for cur.Bounds().Dx() > tw*2 && cur.Bounds().Dy() > th*2 {
+				cur = halveYCbCr(cur)
+			}
+		}
+		return scaleYCbCrAreaDown(cur, tw, th), true
 	}
 	return img, false
 }
