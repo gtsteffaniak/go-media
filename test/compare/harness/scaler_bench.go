@@ -57,10 +57,9 @@ func medianFFmpegThumb(a Asset, preset thumbnailPresetConfig) float64 {
 	ffPath := filepath.Join(os.TempDir(), "gomedia-ff-bench.jpg")
 	for i := 0; i < timingWarmup+timingRuns; i++ {
 		start := time.Now()
-		_ = ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
-		if i >= timingWarmup {
-			samples = append(samples, msSince(start))
-		}
+		kf := assetH264KeyframeOnly(a)
+		_ = ffmpegThumbnailPreset(a.Path, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
+		samples = append(samples, msSince(start))
 	}
 	sort.Float64s(samples)
 	return samples[len(samples)/2]
@@ -78,12 +77,11 @@ func benchScalerRow(a Asset, preset thumbnailPresetConfig, filter media.Thumbnai
 		}
 		start := time.Now()
 		tr, err := media.Thumbnail(f2, f2.Size(), opt)
-		goMs := msSince(start)
-		if i >= timingWarmup && err == nil {
-			goSamples = append(goSamples, goMs)
+		goSamples = append(goSamples, msSince(start))
+		if err == nil {
 			wStart := time.Now()
 			_ = os.WriteFile(outPath, tr.Data, 0o644)
-			writeSamples = append(writeSamples, goMs+msSince(wStart))
+			writeSamples = append(writeSamples, msSince(start)+msSince(wStart))
 		}
 	}
 	sort.Float64s(goSamples)
@@ -125,7 +123,8 @@ func scalerQuality(a Asset, preset thumbnailPresetConfig, filter media.Thumbnail
 	goPath := filepath.Join(thumbDir, base+"_go.jpg")
 	ffPath := filepath.Join(thumbDir, base+"_ff.jpg")
 	_ = os.WriteFile(goPath, tr.Data, 0o644)
-	_ = ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
+	kf := assetH264KeyframeOnly(a)
+	_ = ffmpegThumbnailPreset(a.Path, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
 	psnr, ssim, err := imagePSNRSSIM(ffPath, goPath)
 	if err != nil {
 		return 0, 0

@@ -3,10 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/gtsteffaniak/go-media"
 )
 
 // FFProbeFormat holds ffprobe format fields used for comparison.
@@ -141,46 +142,78 @@ func videoFrameSize(path string) (width, height int, ok bool) {
 	return 0, 0, false
 }
 
+// thumbnailSeekSeconds returns ffmpeg -ss time aligned with go-media thumbnail seek.
+func thumbnailSeekSeconds(videoPath string, seekPercent float64, keyframeOnly bool) float64 {
+	if keyframeOnly {
+		f, err := openFileAt(videoPath)
+		if err != nil {
+			return 0
+		}
+		sec, err := media.H264KeyframeTimeSec(f, f.Size(), seekPercent)
+		if err != nil {
+			return 0
+		}
+		return sec
+	}
+	dur, err := ffprobeDuration(videoPath)
+	if err != nil || dur <= 0 {
+		dur = 5
+	}
+	if dur < 0.05 {
+		return 0
+	}
+	return dur * seekPercent / 100.0
+}
+
 // ffmpegThumbnailPreset extracts one JPEG frame aligned with a media thumbnail preset.
-func ffmpegThumbnailPreset(path, dest string, seekPercent float64, preset thumbnailPresetConfig) error {
+// seekSec is presentation time in seconds (use stss sync time for H.264 intra thumbnails).
+// When keyframeOnly is true, ffmpeg decodes only IDR/I frames (matches go-media H.264 intra path).
+func ffmpegThumbScaleFlags(preset thumbnailPresetConfig, keyframeOnly bool) string {
+	// go-media H.264 intra thumbnails use area downscale in YCbCr (ThumbnailFilterArea).
+	if keyframeOnly {
+		return "flags=area"
+	}
+	return preset.FFScale
+}
+
+func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
 	}
-	dur, err := ffprobeDuration(path)
-	if err != nil || dur <= 0 {
-		dur = 5
-	}
-	ss := dur * seekPercent / 100.0
+	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-		preset.MaxWidth, preset.MaxHeight, preset.FFScale)
+		preset.MaxWidth, preset.MaxHeight, scaleFlags)
 	qv := ffmpegQScale(preset.Quality)
-	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-i", path}
-	if dur >= 0.5 {
-		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
+	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
+	if keyframeOnly {
+		args = append(args, "-skip_frame", "nokey", "-skip_loop_filter", "all")
 	}
-	args = append(args, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
+	args = append(args, "-threads", "1")
+	if seekSec > 0.001 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
+	}
+	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
 	return exec.Command(ffmpeg, args...).Run()
 }
 
 // ffmpegRasterPNG writes a lossless PNG frame using the same seek/scale as thumbnails.
-func ffmpegRasterPNG(path, dest string, seekPercent float64, preset thumbnailPresetConfig) error {
+func ffmpegRasterPNG(path, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
 	}
-	dur, err := ffprobeDuration(path)
-	if err != nil || dur <= 0 {
-		dur = 5
-	}
-	ss := dur * seekPercent / 100.0
+	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-		preset.MaxWidth, preset.MaxHeight, preset.FFScale)
-	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-i", path}
-	if dur >= 0.5 {
-		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
+		preset.MaxWidth, preset.MaxHeight, scaleFlags)
+	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
+	if keyframeOnly {
+		args = append(args, "-skip_frame", "nokey")
 	}
-	args = append(args, "-frames:v", "1", "-vf", vf, dest)
+	if seekSec > 0.001 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
+	}
+	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, dest)
 	return exec.Command(ffmpeg, args...).Run()
 }
 
@@ -230,10 +263,7 @@ func imagePSNR(a, b string) (float64, error) {
 			for _, field := range strings.Fields(line) {
 				if strings.HasPrefix(field, "psnr_avg:") {
 					v, _ := strconv.ParseFloat(strings.TrimPrefix(field, "psnr_avg:"), 64)
-					if math.IsInf(v, 1) {
-						return 100, nil
-					}
-					if v > 0 && !math.IsInf(v, 0) {
+					if v > 0 {
 						return v, nil
 					}
 				}
@@ -243,10 +273,7 @@ func imagePSNR(a, b string) (float64, error) {
 			for _, field := range strings.Fields(line) {
 				if strings.HasPrefix(field, "average:") {
 					v, _ := strconv.ParseFloat(strings.TrimPrefix(field, "average:"), 64)
-					if math.IsInf(v, 1) {
-						return 100, nil
-					}
-					if v > 0 && !math.IsInf(v, 0) {
+					if v > 0 {
 						return v, nil
 					}
 				}

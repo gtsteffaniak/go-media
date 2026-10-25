@@ -61,5 +61,7 @@ async function captureCompareSlider(assetId, preset, outName) {
 await captureCompareSlider('mjpeg_mp4', 'large', 'mjpeg-thumbnail-side-by-side.png');
 await captureCompareSlider('webm_vp8', 'large', 'vp8-thumbnail-side-by-side.png');
 await captureCompareSlider('mkv_vp8', 'large', 'mkv-vp8-thumbnail-side-by-side.png');
+await captureCompareSlider('mp4_h264', 'large', 'h264-thumbnail-side-by-side.png');
+await captureCompareSlider('mp4_h264_high_1080', 'large', 'h264-1080-high-thumbnail-side-by-side.png');
 
 await browser.close();

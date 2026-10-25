@@ -17,25 +17,74 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: amd64
+            purego: false
+          - os: ubuntu-latest
+            arch: amd64
+            purego: true
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            purego: false
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            purego: true
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
+          check-latest: true
           cache: true
       - name: Install static ffmpeg
+        if: matrix.os == 'ubuntu-latest'
         run: bash scripts/install-ffmpeg.sh
       - name: Generate fixtures
+        if: matrix.os == 'ubuntu-latest' && matrix.purego == false
         run: ./scripts/generate-fixtures.sh
       - name: Vet
-        run: CGO_ENABLED=0 go vet ./...
+        run: |
+          if [ "${{ matrix.purego }}" = "true" ]; then
+            CGO_ENABLED=0 go vet -tags purego ./...
+          else
+            CGO_ENABLED=0 go vet ./...
+          fi
       - name: Test
-        run: CGO_ENABLED=0 go test ./...
-      - name: Fuzz smoke (subtitle)
+        run: |
+          if [ "${{ matrix.purego }}" = "true" ]; then
+            CGO_ENABLED=0 go test -tags purego ./...
+          else
+            CGO_ENABLED=0 go test ./...
+          fi
+      - name: Fuzz smoke (subtitle, amd64 default only)
+        if: matrix.os == 'ubuntu-latest' && matrix.purego == false
         run: CGO_ENABLED=0 go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
+
+  test-simd-experiment:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+          cache: true
+      - name: Test GOEXPERIMENT=simd kernels
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/...
+      - name: Install static ffmpeg (simd report smoke)
+        run: bash scripts/install-ffmpeg.sh
+      - name: Build thumbmode simd binary smoke
+        working-directory: test/compare/harness
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -o /tmp/thumbmode-simd ./thumbmode
 
   compare-gate:
     name: ffmpeg comparison gate
@@ -46,10 +95,13 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
+          check-latest: true
           cache: true
       - name: Install static ffmpeg
         run: bash scripts/install-ffmpeg.sh
+      - name: Verify PGO profile
+        run: test -s default.pgo
       - name: Comparison gate
         run: make compare-gate
       - name: Upload HTML report

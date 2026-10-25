@@ -15,6 +15,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
+	"github.com/gtsteffaniak/go-media/internal/vp8decode"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
 )
 
@@ -69,14 +70,28 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 
 	switch fmtID {
 	case format.MP4:
-		if b, ok := isobmff.MJPEGFrame(r, size); ok {
+		if b, ok := isobmff.MJPEGFrame(r, size, opt.SeekPercent); ok {
 			img, err := decodeBytes(b, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
 			if err != nil {
 				return nil, "", err
 			}
 			return img, "decode", nil
 		}
+		// Intra-only IDR decode: skip deblocking for thumbnail latency (see README fast preview).
+		if yimg, err := isobmff.H264ThumbnailYCbCr(r, size, opt.SeekPercent, true); err != nil {
+			return nil, "", err
+		} else if yimg != nil {
+			return yimg, "decode", nil
+		}
 	case format.MKV, format.WebM:
+		jpegOut := opt.Format == "" || opt.Format == "jpeg"
+		if jpegOut {
+			if pic, ok := matroska.VP8PictureAtSeek(r, size, opt.SeekPercent); ok {
+				if ycc := vp8decode.PictureYCbCr(pic); ycc != nil {
+					return ycc, "decode", nil
+				}
+			}
+		}
 		tp := matroska.ThumbnailParams{
 			SeekPercent: opt.SeekPercent,
 			MaxWidth:    opt.MaxWidth,
@@ -127,7 +142,7 @@ func encodeImageRaster(img image.Image, opt Options, src string) (Result, error)
 		}
 	}
 	var buf bytes.Buffer
-	if opt.Format == "" || opt.Format == "jpeg" {
+	if jpegOut {
 		b := img.Bounds()
 		buf.Grow(b.Dx() * b.Dy() / 4)
 	}

@@ -4,6 +4,8 @@ import (
 	"image"
 	"runtime"
 	"sync"
+
+	"github.com/gtsteffaniak/go-media/internal/kernels"
 )
 
 // scaleYCbCrAreaDown returns a downscaled YCbCr image (area average), keeping JPEG fast paths in YCbCr.
@@ -46,40 +48,12 @@ func scaleYCbCrAreaDown(src *image.YCbCr, dstW, dstH int) *image.YCbCr {
 				if sy1 <= sy0 {
 					sy1 = sy0 + 1
 				}
-				cy0 := sy0 / 2
-				cy1 := (sy1 + 1) / 2
 				for dx := 0; dx < dstW; dx++ {
 					x0, x1 := sx0[dx], sx1[dx]
-					var ySum, n int
-					for sy := sy0; sy < sy1; sy++ {
-						yRow := sy * src.YStride
-						for sx := x0; sx < x1; sx++ {
-							ySum += int(src.Y[yRow+sx])
-							n++
-						}
-					}
-					if n == 0 {
-						n = 1
-					}
 					x := dx
 					y := dy
-					dst.Y[dst.YOffset(x, y)] = byte(ySum / n)
-					cx0 := x0 / 2
-					cx1 := (x1 + 1) / 2
-					var cbSum, crSum, cn int
-					for cy := cy0; cy < cy1; cy++ {
-						cRow := cy * src.CStride
-						for cx := cx0; cx < cx1; cx++ {
-							cbSum += int(src.Cb[cRow+cx])
-							crSum += int(src.Cr[cRow+cx])
-							cn++
-						}
-					}
-					if cn == 0 {
-						cn = 1
-					}
-					dst.Cb[dst.COffset(x, y)] = byte(cbSum / cn)
-					dst.Cr[dst.COffset(x, y)] = byte(crSum / cn)
+					kernels.AreaDownRowY(dst.Y, dst.YStride, dst.YOffset(x, y), src.Y, src.YStride, sy0, sy1, x0, x1)
+					kernels.AreaDownChromaTile(dst.Cb, dst.Cr, dst.CStride, x, y, src.Cb, src.Cr, src.CStride, sy0, sy1, x0, x1)
 				}
 			}
 		}(y0, y1)

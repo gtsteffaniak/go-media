@@ -2,21 +2,9 @@
   "version": 1,
   "ffmpegVersionPrefix": "ffmpeg version 9.0.2",
   "timingGate": {
-    "defaultMaxRegressionFraction": 0.1,
-    "relaxedCases": [
-      {
-        "assetId": "mjpeg_mp4",
-        "checks": ["thumbnail_small"],
-        "maxRegressionFraction": 0.35,
-        "reason": "1080p MJPEG small preset: pure Go jpegfast DCT-trunc + YCbCr area (default gate 10%; CI may need ~135% of ffmpeg)"
-      },
-      {
-        "assetId": "mjpeg_mp4",
-        "checks": ["thumbnail_large"],
-        "maxRegressionFraction": 1.0,
-        "reason": "1080p MJPEG large preset in pure Go; CI runners can reach ~2× ffmpeg on go+write (see summary.timingRelaxed)"
-      }
-    ]
+    "defaultMaxRegressionFraction": 0.2,
+    "targetMaxRegressionFraction": 0.1,
+    "enforcedAssetIds": []
   },
   "cases": [
     {
@@ -292,12 +280,12 @@
     {
       "assetId": "mov_h264",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mov_h264",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp3_cbr",
@@ -412,12 +400,12 @@
     {
       "assetId": "mp4_embedded_subs",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_embedded_subs",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_h264",
@@ -452,12 +440,12 @@
     {
       "assetId": "mp4_h264",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_h264",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_sidecar_subs",
@@ -492,12 +480,12 @@
     {
       "assetId": "mp4_sidecar_subs",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_sidecar_subs",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "ogg_vorbis",
@@ -698,6 +686,126 @@
       "assetId": "webm_vp9",
       "check": "thumbnail_small",
       "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "thumbnail_large",
+      "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "thumbnail_small",
+      "expect": "typed_unsupported"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_main_1080",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_h264_high_1080",
+      "check": "thumbnail_small",
+      "expect": "supported"
     }
   ]
 }

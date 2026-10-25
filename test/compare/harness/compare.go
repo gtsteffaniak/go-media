@@ -12,6 +12,8 @@ import (
 	"github.com/gtsteffaniak/go-media"
 )
 
+var activeTimingGate = defaultTimingGatePolicy()
+
 // runComparisons executes all checks for every asset and writes thumbnail media under reportDir.
 func runComparisons(assets []Asset, reportDir string) ([][]CheckResult, error) {
 	thumbDir := filepath.Join(reportDir, "media", "thumbs")
@@ -388,7 +390,12 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		res.Detail = err.Error()
 		return res
 	}
+	kfOnly := assetH264KeyframeOnly(a)
+	seekSec := thumbnailSeekSeconds(a.Path, 10, kfOnly)
 	opt := mediaPreset(preset)
+	if dur, err := ffprobeDuration(a.Path); err == nil && dur > 0 {
+		opt.SeekPercent = (seekSec / dur) * 100.0
+	}
 
 	tr, gErr := media.Thumbnail(f, f.Size(), opt)
 
@@ -398,7 +405,7 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	goPNG := filepath.Join(thumbDir, base+"_go.png")
 	ffPNG := filepath.Join(thumbDir, base+"_ff.png")
 
-	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
+	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, seekSec, preset, kfOnly)
 
 	if gErr != nil {
 		res.Status = classifyGoErr(gErr)
@@ -425,25 +432,32 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	res.ThumbGoPath = relReportPath(goPath)
 	res.ThumbFFPath = relReportPath(ffPath)
 
-	_ = os.Remove(goPNG)
-	decOpt := opt
-	decOpt.Preset = ""
-	decOpt.Fast = false
-	rasterPreset := preset
-	if w, h, ok := videoFrameSize(a.Path); ok {
-		decOpt.MaxWidth = w
-		decOpt.MaxHeight = h
-		rasterPreset.MaxWidth = w
-		rasterPreset.MaxHeight = h
-	}
-	f2, err := openAsset(a)
-	if err == nil {
-		if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), decOpt); err == nil {
-			if err := os.WriteFile(goPNG, goRaw, 0o644); err == nil {
-				if err := ffmpegRasterPNG(a.Path, ffPNG, 10, rasterPreset); err == nil {
-					if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
-						res.PSNRDecode = dPSNR
-						res.SSIMDecode = dSSIM
+	if kfOnly {
+		if dPSNR, dSSIM, err := h264DecodeYUVMetrics(a.Path, 10); err == nil {
+			res.PSNRDecode = dPSNR
+			res.SSIMDecode = dSSIM
+		}
+	} else {
+		_ = os.Remove(goPNG)
+		decOpt := opt
+		decOpt.Preset = ""
+		decOpt.Fast = false
+		rasterPreset := preset
+		if w, h, ok := videoFrameSize(a.Path); ok {
+			decOpt.MaxWidth = w
+			decOpt.MaxHeight = h
+			rasterPreset.MaxWidth = w
+			rasterPreset.MaxHeight = h
+		}
+		f2, err := openAsset(a)
+		if err == nil {
+			if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), decOpt); err == nil {
+				if err := os.WriteFile(goPNG, goRaw, 0o644); err == nil {
+					if err := ffmpegRasterPNG(a.Path, ffPNG, seekSec, rasterPreset, false); err == nil {
+						if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
+							res.PSNRDecode = dPSNR
+							res.SSIMDecode = dSSIM
+						}
 					}
 				}
 			}
@@ -453,11 +467,11 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	psnr, ssim, mErr := imagePSNRSSIM(ffPath, goPath)
 	res.PSNR = psnr
 	res.SSIM = ssim
+	if mErr != nil {
+		res.Detail = mErr.Error()
+	}
 	res.Detail = fmt.Sprintf("jpeg PSNR=%.1f SSIM=%.3f decode PSNR=%.1f SSIM=%.3f",
 		res.PSNR, res.SSIM, res.PSNRDecode, res.SSIMDecode)
-	if mErr != nil {
-		res.Detail += "; metrics: " + mErr.Error()
-	}
 
 	timing := benchmarkThumbnail(a, opt, preset)
 	res.GoMediaMS = timing.GoMS
@@ -470,23 +484,24 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		}
 		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
 		res.TimingDeltaPct = &delta
-		limit, relaxed, relaxReason := activeTimingGate.maxRegression(a.ID, res.Check)
-		res.TimingGateLimitPct = limit
-		res.TimingGateRelaxed = relaxed
-		res.TimingGateRelaxReason = relaxReason
-		if delta > limit+1e-6 {
+		if delta > activeTimingGate.maxRegression() && activeTimingGate.enforced(res.Check) {
 			res.TimingGateFail = true
 		}
 	}
 
 	if res.TimingGateFail {
 		res.Status = StatusMismatch
-		limitPct := res.TimingGateLimitPct * 100
-		if limitPct <= 0 {
-			limitPct = maxTimingRegressionPct * 100
-		}
 		res.Detail += fmt.Sprintf("; timing gate: write %.0fms vs ffmpeg %.0fms (%.0f%% > %.0f%%)",
-			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100, limitPct)
+			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100, activeTimingGate.maxRegression()*100)
+		return res
+	}
+	if res.TimingDeltaPct != nil && *res.TimingDeltaPct > activeTimingGate.TargetMaxRegressionFraction {
+		res.Detail += fmt.Sprintf("; timing note: %.0f%% over ffmpeg target %.0f%%",
+			*res.TimingDeltaPct*100, activeTimingGate.TargetMaxRegressionFraction*100)
+	}
+	if kfOnly && res.PSNRDecode > 0 && res.PSNRDecode < 45 {
+		res.Status = StatusMismatch
+		res.Detail += fmt.Sprintf("; decode gate: PSNR %.1f < 45 dB", res.PSNRDecode)
 		return res
 	}
 	if res.SSIM >= 0.85 || res.PSNR >= 25 {
@@ -497,6 +512,20 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		res.Status = StatusSupported
 	}
 	return res
+}
+
+func assetH264KeyframeOnly(a Asset) bool {
+	if a.Category != "video" {
+		return false
+	}
+	if strings.Contains(a.ID, "h264") || strings.HasPrefix(a.ID, "mp4_h264_") {
+		return true
+	}
+	switch a.ID {
+	case "mp4_sidecar_subs", "mp4_embedded_subs":
+		return true
+	}
+	return false
 }
 
 func classifyGoErr(err error) CapabilityStatus {

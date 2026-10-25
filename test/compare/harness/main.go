@@ -68,13 +68,7 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 		return nil
 	}
 
-	expectationsForPolicy := expectationsPath
-	if expectationsForPolicy == "" {
-		expectationsForPolicy = filepath.Join(base, "..", "expectations.json")
-	}
-	if exp, err := loadExpectations(expectationsForPolicy); err == nil {
-		activeTimingGate = timingGatePolicyFromExpectations(exp)
-	}
+	loadTimingGatePolicy(reportDir, expectationsPath)
 
 	nested, err := runComparisons(assets, reportDir)
 	if err != nil {
@@ -82,10 +76,12 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 	}
 	thumbDir := filepath.Join(reportDir, "media", "thumbs")
 	_scalerBenchmarks = runScalerBenchmarks(assets, thumbDir)
+	flat := flattenResults(nested)
+	repoRoot := findRepoRoot(base)
+	_buildModeTimings = collectBuildModeTimings(assets, flat, repoRoot)
 	if err := writeReport(reportDir, assets, nested); err != nil {
 		return err
 	}
-	flat := flattenResults(nested)
 	full := FullReport{Summary: buildSummary(assets, nested), Assets: assets, Results: flat}
 	printSummary(full)
 	if gate {
@@ -104,6 +100,18 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 	return nil
 }
 
+func loadTimingGatePolicy(reportDir, expectationsPath string) {
+	path := expectationsPath
+	if path == "" {
+		path = filepath.Join(reportDir, "..", "expectations.json")
+	}
+	exp, err := loadExpectations(path)
+	if err != nil {
+		return
+	}
+	activeTimingGate = timingGatePolicyFromExpectations(exp)
+}
+
 func absUnder(base, p string) string {
 	if filepath.IsAbs(p) {
 		return p
@@ -118,6 +126,9 @@ func loadAssetManifest(assetsDir string) ([]Asset, error) {
 		sidecars           []string
 	}{
 		{"mp4_h264", "video/mp4_h264.mp4", "video", "MP4 H.264/AAC", nil},
+		{"mp4_h264_baseline_1080", "video/mp4_h264_baseline_1080.mp4", "video", "H.264 Baseline 1080p", nil},
+		{"mp4_h264_main_1080", "video/mp4_h264_main_1080.mp4", "video", "H.264 Main CABAC 1080p", nil},
+		{"mp4_h264_high_1080", "video/mp4_h264_high_1080.mp4", "video", "H.264 High 8x8 1080p", nil},
 		{"mov_h264", "video/mov_h264.mov", "video", "MOV H.264", nil},
 		{"mkv_h264", "video/mkv_h264.mkv", "video", "MKV H.264", nil},
 		{"mkv_vp8", "video/mkv_vp8.mkv", "video", "MKV VP8", nil},

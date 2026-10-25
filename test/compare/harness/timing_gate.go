@@ -2,20 +2,17 @@ package main
 
 // TimingGatePolicy configures thumbnail latency gates (see expectations.json timingGate).
 type TimingGatePolicy struct {
-	DefaultMaxRegressionFraction float64           `json:"defaultMaxRegressionFraction"`
-	RelaxedCases                 []TimingGateRelax `json:"relaxedCases"`
-}
-
-// TimingGateRelax allows a higher regression fraction for specific asset/check rows.
-type TimingGateRelax struct {
-	AssetID                   string      `json:"assetId"`
-	Checks                    []CheckName `json:"checks"`
-	MaxRegressionFraction     float64     `json:"maxRegressionFraction"`
-	Reason                    string      `json:"reason,omitempty"`
+	DefaultMaxRegressionFraction float64 `json:"defaultMaxRegressionFraction"`
+	TargetMaxRegressionFraction  float64 `json:"targetMaxRegressionFraction"`
+	// EnforcedAssetIDs is deprecated: when empty, every thumbnail_large/small check applies the gate.
+	EnforcedAssetIDs []string `json:"enforcedAssetIds,omitempty"`
 }
 
 func defaultTimingGatePolicy() TimingGatePolicy {
-	return TimingGatePolicy{DefaultMaxRegressionFraction: maxTimingRegressionPct}
+	return TimingGatePolicy{
+		DefaultMaxRegressionFraction: maxTimingRegressionPct,
+		TargetMaxRegressionFraction:  targetTimingRegressionPct,
+	}
 }
 
 func timingGatePolicyFromExpectations(exp ExpectationsFile) TimingGatePolicy {
@@ -26,27 +23,19 @@ func timingGatePolicyFromExpectations(exp ExpectationsFile) TimingGatePolicy {
 	if p.DefaultMaxRegressionFraction <= 0 {
 		p.DefaultMaxRegressionFraction = maxTimingRegressionPct
 	}
+	if p.TargetMaxRegressionFraction <= 0 {
+		p.TargetMaxRegressionFraction = targetTimingRegressionPct
+	}
 	return p
 }
 
-func (p TimingGatePolicy) maxRegression(assetID string, check CheckName) (limit float64, relaxed bool, reason string) {
-	limit = p.DefaultMaxRegressionFraction
+func (p TimingGatePolicy) enforced(check CheckName) bool {
+	return check == CheckThumbnailLarge || check == CheckThumbnailSmall
+}
+
+func (p TimingGatePolicy) maxRegression() float64 {
 	if p.DefaultMaxRegressionFraction <= 0 {
-		limit = maxTimingRegressionPct
+		return maxTimingRegressionPct
 	}
-	def := limit
-	for _, r := range p.RelaxedCases {
-		if r.AssetID != assetID || r.MaxRegressionFraction <= 0 {
-			continue
-		}
-		for _, c := range r.Checks {
-			if c == check {
-				if r.MaxRegressionFraction > limit {
-					limit = r.MaxRegressionFraction
-				}
-				return limit, limit > def, r.Reason
-			}
-		}
-	}
-	return limit, false, ""
+	return p.DefaultMaxRegressionFraction
 }

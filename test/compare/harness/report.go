@@ -23,7 +23,7 @@ func writeReport(reportDir string, assets []Asset, results [][]CheckResult) erro
 	flat := flattenResults(results)
 	enrichResults(flat, prev)
 	summary := buildSummary(assets, nestedFromFlat(flat))
-	report := FullReport{Summary: summary, Assets: assets, Results: flat, ScalerBenchmarks: _scalerBenchmarks}
+	report := FullReport{Summary: summary, Assets: assets, Results: flat, ScalerBenchmarks: _scalerBenchmarks, BuildModeTimings: _buildModeTimings}
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}

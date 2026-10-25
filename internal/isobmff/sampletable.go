@@ -38,7 +38,15 @@ func SyncSampleNumbers(r io.ReaderAt, size int64, trackIndex int) ([]uint32, err
 
 // KeyframeSamples returns file offsets and sizes for sync samples (stss).
 func KeyframeSamples(r io.ReaderAt, size int64, trackIndex int) ([]SampleRef, error) {
-	refs, err := SampleRefs(r, size, trackIndex)
+	info, err := mp4.Probe(ioat.New(r, size))
+	if err != nil {
+		return nil, err
+	}
+	return keyframeSamplesFromInfo(r, size, trackIndex, info)
+}
+
+func keyframeSamplesFromInfo(r io.ReaderAt, size int64, trackIndex int, info *mp4.ProbeInfo) ([]SampleRef, error) {
+	refs, err := sampleRefsFromInfo(r, size, trackIndex, info)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +71,52 @@ func SampleRefs(r io.ReaderAt, size int64, trackIndex int) ([]SampleRef, error) 
 	if err != nil {
 		return nil, err
 	}
+	return sampleRefsFromInfo(r, size, trackIndex, info)
+}
+
+// pickSampleByTimeFromInfo selects the sample whose PTS is closest to seekPercent of track duration.
+func pickSampleByTimeFromInfo(info *mp4.ProbeInfo, trackIndex int, refs []SampleRef, seekPercent float64) (SampleRef, bool) {
+	if trackIndex < 0 || trackIndex >= len(info.Tracks) || len(refs) == 0 {
+		return SampleRef{}, false
+	}
+	if seekPercent <= 0 {
+		seekPercent = 10
+	}
+	if seekPercent > 100 {
+		seekPercent = 100
+	}
+	tr := info.Tracks[trackIndex]
+	if tr.Timescale == 0 || len(tr.Samples) == 0 {
+		return refs[0], true
+	}
+	durTicks := tr.Duration
+	if durTicks == 0 {
+		var sum uint64
+		for _, s := range tr.Samples {
+			sum += uint64(s.TimeDelta)
+		}
+		durTicks = sum
+	}
+	target := uint64(float64(durTicks) * seekPercent / 100.0)
+	best := refs[0]
+	bestDelta := uint64(1 << 62)
+	for _, ref := range refs {
+		pts := samplePTS(tr.Samples, ref.Index)
+		var delta uint64
+		if pts >= target {
+			delta = pts - target
+		} else {
+			delta = target - pts
+		}
+		if delta < bestDelta {
+			bestDelta = delta
+			best = ref
+		}
+	}
+	return best, true
+}
+
+func sampleRefsFromInfo(r io.ReaderAt, size int64, trackIndex int, info *mp4.ProbeInfo) ([]SampleRef, error) {
 	if trackIndex < 0 || trackIndex >= len(info.Tracks) {
 		return nil, errs.Unsup("sample table", "track index out of range")
 	}

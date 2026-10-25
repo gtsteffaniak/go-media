@@ -18,7 +18,7 @@ func TestMJPEGFrameData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, ok := MJPEGFrame(ioat.New(f, st.Size()), st.Size())
+	b, ok := MJPEGFrame(ioat.New(f, st.Size()), st.Size(), 10)
 	if !ok || len(b) < 10 {
 		t.Fatalf("mjpeg frame: ok=%v len=%d", ok, len(b))
 	}

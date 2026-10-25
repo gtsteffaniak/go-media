@@ -7,8 +7,8 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
-// MJPEGFrame returns the first JPEG sample from an MJPEG-in-MP4 track using the sample table.
-func MJPEGFrame(r io.ReaderAt, size int64) ([]byte, bool) {
+// MJPEGFrame returns a JPEG sample from an MJPEG-in-MP4 track at seekPercent of duration.
+func MJPEGFrame(r io.ReaderAt, size int64, seekPercent float64) ([]byte, bool) {
 	info, err := mp4.Probe(ioat.New(r, size))
 	if err != nil {
 		return nil, false
@@ -32,7 +32,10 @@ func MJPEGFrame(r io.ReaderAt, size int64) ([]byte, bool) {
 	if err != nil || len(refs) == 0 {
 		return nil, false
 	}
-	ref := refs[0]
+	ref, ok := pickSampleByTimeFromInfo(info, videoTrack, refs, seekPercent)
+	if !ok {
+		ref = refs[0]
+	}
 	if ref.Size <= 0 {
 		return nil, false
 	}

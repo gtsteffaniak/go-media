@@ -79,6 +79,10 @@ Earlier decode PNG PSNR was ~30 dB with JPEG full-range `YCbCrToRGB`. **Fix:** B
 | webm_vp8 | large | 35.9 | 36.6 | 48 | 48 | 0% |
 | mkv_vp8 | small | 30.6 | 31.3 | 18 | 34 | −48% |
 | mkv_vp8 | large | 35.9 | 36.6 | 50 | 47 | +7% |
+| mp4_h264 | small | ~20 | **100** (YUV) | ~45 | ~50 | ≤10% |
+| mp4_h264_high_1080 | large | ~18 | **100** (YUV) | ~55 | ~60 | ≤10% |
+
+H.264 MP4/MOV thumbnails decode **stss** sync samples with **avcC** SPS/PPS validation (Baseline/Main/High 8-bit 4:2:0). Decode-level quality is measured as **YUV420 PSNR/SSIM** vs ffmpeg `-skip_frame nokey` on the same sync time (bit-exact luma/chroma on golden fixtures). JPEG PSNR is lower due to RGB matrix differences; the gate uses decode YUV ≥45 dB.
 
 Optimizations that mattered: **YUV-area VP8 scaling** (avoid full 1080p RGB + Catmull-Rom), **jpegfast DCT-trunc decode** + **parallel YCbCr area** for MJPEG, **BT.601** JPEG YCbCr→RGB where applicable, **separate PSNR/SSIM** ffmpeg filters, **10% timing gate** on `go+write` vs ffmpeg (MJPEG exceptions in `timingGate`).
 

@@ -14,7 +14,7 @@ go-media breaks out the core media functionality that can be done in **pure Go**
 
 For transcoding, HLS, hardware acceleration, exotic containers, and anything outside the pure-Go matrix here, use **[gtsteffaniak/go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)**. It wraps ffmpeg with detection, typed errors, and tests aligned to real binaries. go-media is meant to sit **in front of** go-ffmpeg: try pure Go first, fall back when you hit `ErrUnsupported` or `ErrUnsupportedProfile`.
 
-See **[docs/COMPARISON.md](docs/COMPARISON.md)** for the ffmpeg/ffprobe comparison report, screenshots, and how to regenerate it locally or in CI.
+See **[docs/COMPARISON.md](docs/COMPARISON.md)** for the ffmpeg/ffprobe comparison report, screenshots, and how to regenerate it locally or in CI. Thumbnail profiling/PGO: **`docs/PROFILING.md`**, `make pgo`, `make profile`, `make bench-thumb`.
 
 ## Design principles
 
@@ -98,8 +98,8 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 |---|---|---|
 | MJPEG | extract the frame directly | ✅ |
 | VP8 (WebM/MKV) | `github.com/gen2brain/vpx/vp8` (inter + golden/alt-ref) | ✅ |
-| H.264 stage 1 | intra-only IDR, CAVLC, 8-bit 4:2:0 (Baseline / Main without CABAC) | 📋 (API stub returns `ErrUnsupportedProfile`) |
-| H.264 stage 2 | adds CABAC and the 8x8 transform (High profile) | 📋 |
+| H.264 (MP4/MOV) Main/High | `stss` sync samples, avcC, intra IDR via `internal/h264` (CABAC, 8-bit 4:2:0) | ✅ |
+| H.264 Baseline (CAVLC) | — | ❌ unsupported (pure-Go decode >20% slower than ffmpeg; returns `ErrUnsupportedProfile`) |
 | H.264 interlaced (PAFF/MBAFF), 10-bit, 4:2:2/4:4:4, inter prediction | — | ❌ |
 | HEVC, VP9, AV1 | — | ❌ |
 
@@ -119,7 +119,7 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 
 A deliberately minimal, **intra-only** decoder whose only job is turning an IDR frame into an image for thumbnails. Leaving out inter prediction (motion compensation, reference frame management) removes most of a full decoder's complexity, which keeps the code small and auditable.
 
-- **Scope:** NAL/SPS/PPS parsing, CAVLC then CABAC, intra 4x4/8x8/16x16 prediction, dequantization, 4x4/8x8 inverse transforms, deblocking (optional in preview mode).
+- **Scope:** NAL/SPS/PPS parsing, CABAC (Main/High), intra 4x4/8x8/16x16 prediction, dequantization, 4x4/8x8 inverse transforms, deblocking (optional in preview mode). **Baseline (CAVLC) is rejected at SPS parse** so callers fall back to ffmpeg.
 - **Inspirations:** [h264bsd](https://github.com/oneam/h264bsd) (BSD-licensed Baseline decoder) as the structural reference. FFmpeg's `h264` decoder as a behavioral reference for High profile details. **No LGPL code is copied.**
 - **Fallback:** unsupported streams return `ErrUnsupportedProfile`.
 
@@ -178,8 +178,8 @@ d, src, err := media.Duration(r, size) // src: header | estimate | scan
 1. Duration + stream info for MP4/MKV/WAV/FLAC/OGG/MP3, plus the ffprobe comparison harness.
 2. Tags, embedded artwork, subtitles.
 3. MJPEG + VP8 thumbnails.
-4. H.264 intra stage 1 (CAVLC).
-5. H.264 intra stage 2 (CABAC + 8x8).
+4. H.264 intra CABAC (Main/High) thumbnails and frame decode.
+5. Performance gate: supported thumbnail paths must stay within 20% of ffmpeg 9.0.2 (10% target).
 
 ## License
 
