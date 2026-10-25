@@ -145,6 +145,9 @@ func thumbnailSeekSeconds(videoPath string, seekPercent float64, keyframeOnly bo
 	if err != nil || dur <= 0 {
 		dur = 5
 	}
+	if dur < 0.05 {
+		return 0
+	}
 	return dur * seekPercent / 100.0
 }
 
