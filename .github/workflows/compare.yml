@@ -30,7 +30,7 @@ jobs:
       - name: Install static ffmpeg
         run: bash scripts/install-ffmpeg.sh
       - name: Run comparison suite (with gate)
-        run: COMPARE_GATE=1 bash scripts/run-comparison.sh
+        run: make compare-gate
       - name: Upload HTML report
         uses: actions/upload-artifact@v4
         with:

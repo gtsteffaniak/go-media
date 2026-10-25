@@ -438,16 +438,28 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 			res.SSIMDecode = dSSIM
 		}
 	} else {
+		_ = os.Remove(goPNG)
+		decOpt := opt
+		decOpt.Preset = ""
+		decOpt.Fast = false
+		rasterPreset := preset
+		if w, h, ok := videoFrameSize(a.Path); ok {
+			decOpt.MaxWidth = w
+			decOpt.MaxHeight = h
+			rasterPreset.MaxWidth = w
+			rasterPreset.MaxHeight = h
+		}
 		f2, err := openAsset(a)
 		if err == nil {
-			if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), opt); err == nil {
-				_ = os.WriteFile(goPNG, goRaw, 0o644)
-			}
-		}
-		if err := ffmpegRasterPNG(a.Path, ffPNG, seekSec, preset, kfOnly); err == nil {
-			if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
-				res.PSNRDecode = dPSNR
-				res.SSIMDecode = dSSIM
+			if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), decOpt); err == nil {
+				if err := os.WriteFile(goPNG, goRaw, 0o644); err == nil {
+					if err := ffmpegRasterPNG(a.Path, ffPNG, seekSec, rasterPreset, false); err == nil {
+						if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
+							res.PSNRDecode = dPSNR
+							res.SSIMDecode = dSSIM
+						}
+					}
+				}
 			}
 		}
 	}

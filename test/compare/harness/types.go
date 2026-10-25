@@ -47,6 +47,11 @@ type CheckResult struct {
 	// TimingDeltaPct is (goMediaWriteMs - ffmpegMs) / ffmpegMs for supported/mismatch rows only (median of 7 runs).
 	TimingDeltaPct *float64 `json:"timingDeltaPct,omitempty"`
 	TimingGateFail bool             `json:"timingGateFail,omitempty"`
+	// TimingGateLimitPct is the allowed (go+write−ffmpeg)/ffmpeg fraction for this row (default 0.10).
+	TimingGateLimitPct float64 `json:"timingGateLimitPct,omitempty"`
+	// TimingGateRelaxed is true when this row uses an expectations.json timingGate relaxed case (e.g. MJPEG 20%).
+	TimingGateRelaxed bool `json:"timingGateRelaxed,omitempty"`
+	TimingGateRelaxReason string `json:"timingGateRelaxReason,omitempty"`
 	Detail        string           `json:"detail,omitempty"`
 	DurationDelta float64          `json:"durationDeltaSec,omitempty"`
 	FieldDiffs    []string         `json:"fieldDiffs,omitempty"`
@@ -62,6 +67,18 @@ type CheckResult struct {
 	PrevTimingDelta *float64 `json:"prevTimingDeltaPct,omitempty"`
 	TimingRegression *bool   `json:"timingRegression,omitempty"`
 	StatusRegression *bool   `json:"statusRegression,omitempty"`
+}
+
+// TimingRelaxedRow documents a thumbnail row that passed under a relaxed timing gate.
+type TimingRelaxedRow struct {
+	AssetID         string  `json:"assetId"`
+	Check           string  `json:"check"`
+	ThumbPreset     string  `json:"thumbPreset,omitempty"`
+	TimingDeltaPct  float64 `json:"timingDeltaPct"`
+	TimingGateLimit float64 `json:"timingGateLimitPct"`
+	GoMediaWriteMS  float64 `json:"goMediaWriteMs"`
+	FFmpegMS        float64 `json:"ffmpegMs"`
+	Reason          string  `json:"reason,omitempty"`
 }
 
 // TimingAggregate summarizes latency across comparable rows.
@@ -102,6 +119,7 @@ type ReportSummary struct {
 	FFprobeVersion  string         `json:"ffprobeVersion"`
 	GoMediaModule   string         `json:"goMediaModule"`
 	Timing          TimingAggregate           `json:"timing"`
+	TimingRelaxed   []TimingRelaxedRow        `json:"timingRelaxed,omitempty"`
 	CapabilityChart []CapabilityBreakdown     `json:"capabilityBreakdown"`
 	PreviousRun     *PreviousRunSummary       `json:"previousRun,omitempty"`
 }

@@ -365,6 +365,16 @@ function renderReport(report) {
     const pr = s.previousRun;
     timingLine += ` · prev run ${pr.generatedAt} (${pr.timingRegressions} timing regressions, ${pr.statusRegressions} status regressions)`;
   }
+  if (s.timingRelaxed?.length) {
+    timingLine +=
+      ' · MJPEG relaxed gate: ' +
+      s.timingRelaxed
+        .map(
+          (r) =>
+            `${r.assetId} ${r.check} Δ${(r.timingDeltaPct * 100).toFixed(0)}% (cap ${(r.timingGateLimitPct * 100).toFixed(0)}%)`,
+        )
+        .join('; ');
+  }
   document.getElementById('timing-meta').textContent = timingLine;
 
   const cards = document.getElementById('summary-cards');
@@ -510,25 +520,36 @@ function renderReport(report) {
     });
   }
 
-  renderScalerTable(report.scalerBenchmarks || []);
-  renderCharts(report);
-}
-
-function renderScalerTable(rows) {
-  const tbody = document.querySelector('#scaler-table tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  rows.sort((a, b) => a.preset.localeCompare(b.preset) || a.assetId.localeCompare(b.assetId) || a.deltaPct - b.deltaPct);
-  for (const r of rows) {
-    const tr = document.createElement('tr');
-    const deltaClass = r.deltaPct <= 0.1 ? 'delta-good' : 'delta-bad';
-    tr.innerHTML = `<td>${r.assetId}</td><td>${r.preset}</td><td>${r.scaler}</td>
-      <td>${r.goMediaMs?.toFixed(1) ?? '—'}</td><td>${r.goWriteMs?.toFixed(1) ?? '—'}</td>
-      <td>${r.ffmpegMs?.toFixed(1) ?? '—'}</td>
-      <td class="${deltaClass}">${r.deltaPct != null ? (r.deltaPct * 100).toFixed(0) + '%' : '—'}</td>
-      <td>${r.psnr?.toFixed(1) ?? '—'}</td><td>${r.ssim?.toFixed(3) ?? '—'}</td>`;
-    tbody.appendChild(tr);
+  const scalerRows = report.scalerBenchmarks || [];
+  const renderScalerBody = (sortKey, sortDir) => {
+    const tbody = document.querySelector('#scaler-table tbody');
+    if (!tbody) return;
+    const rows = [...scalerRows];
+    rows.sort((a, b) => {
+      const av = a[sortKey] ?? '';
+      const bv = b[sortKey] ?? '';
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return (av - bv) * sortDir;
+      }
+      return String(av).localeCompare(String(bv)) * sortDir;
+    });
+    tbody.innerHTML = '';
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      const deltaClass = r.deltaPct <= 0.1 ? 'delta-good' : 'delta-bad';
+      tr.innerHTML = `<td>${r.assetId}</td><td>${r.preset}</td><td>${r.scaler}</td>
+        <td>${r.goMediaMs?.toFixed(1) ?? '—'}</td><td>${r.goWriteMs?.toFixed(1) ?? '—'}</td>
+        <td>${r.ffmpegMs?.toFixed(1) ?? '—'}</td>
+        <td class="${deltaClass}">${r.deltaPct != null ? (r.deltaPct * 100).toFixed(0) + '%' : '—'}</td>
+        <td>${r.psnr?.toFixed(1) ?? '—'}</td><td>${r.ssim?.toFixed(3) ?? '—'}</td>`;
+      tbody.appendChild(tr);
+    }
+  };
+  const scalerTable = document.getElementById('scaler-table');
+  if (scalerTable) {
+    makeSortable(scalerTable, () => scalerRows, renderScalerBody)();
   }
+  renderCharts(report);
 }
 
 async function loadReport() {

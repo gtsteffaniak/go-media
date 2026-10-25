@@ -101,21 +101,21 @@
   </section>
 
   <section id="scaler-section">
-    <h2>Scaler benchmark (vs ffmpeg lanczos/bilinear)</h2>
+    <h2>Scaler benchmark (vs ffmpeg area)</h2>
     <p class="hint">Median of 7 timed runs after 2 warmup iterations. Δ% uses go-media encode+write vs full ffmpeg exec. PSNR/SSIM vs matching preset JPEG.</p>
     <div class="table-scroll">
       <table id="scaler-table" class="sortable">
         <thead>
           <tr>
-            <th>Asset</th>
-            <th>Preset</th>
-            <th>Scaler</th>
-            <th>go ms</th>
-            <th>go+write ms</th>
-            <th>ffmpeg ms</th>
-            <th>Δ%</th>
-            <th>PSNR</th>
-            <th>SSIM</th>
+            <th data-sort="assetId">Asset</th>
+            <th data-sort="preset">Preset</th>
+            <th data-sort="scaler">Scaler</th>
+            <th data-sort="goMediaMs">go ms</th>
+            <th data-sort="goWriteMs">go+write ms</th>
+            <th data-sort="ffmpegMs">ffmpeg ms</th>
+            <th data-sort="deltaPct">Δ%</th>
+            <th data-sort="psnr">PSNR</th>
+            <th data-sort="ssim">SSIM</th>
           </tr>
         </thead>
         <tbody></tbody>

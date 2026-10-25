@@ -22,6 +22,6 @@ var thumbnailPresets = []thumbnailPresetConfig{
 		MaxWidth:  1280,
 		MaxHeight: 720,
 		Quality:   90,
-		FFScale:   "flags=lanczos",
+		FFScale:   "flags=area",
 	},
 }

@@ -128,6 +128,20 @@ func ffprobeVersionLine() string {
 	return strings.TrimSpace(lines[0])
 }
 
+// videoFrameSize returns the first video stream dimensions from ffprobe.
+func videoFrameSize(path string) (width, height int, ok bool) {
+	p, err := probeFFprobe(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	for _, s := range p.Streams {
+		if s.CodecType == "video" && s.Width > 0 && s.Height > 0 {
+			return s.Width, s.Height, true
+		}
+	}
+	return 0, 0, false
+}
+
 // thumbnailSeekSeconds returns ffmpeg -ss time aligned with go-media thumbnail seek.
 func thumbnailSeekSeconds(videoPath string, seekPercent float64, keyframeOnly bool) float64 {
 	if keyframeOnly {
