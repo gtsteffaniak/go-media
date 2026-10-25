@@ -90,7 +90,7 @@ func maxGranule(buf []byte) (uint64, bool) {
 		}
 		granule := uint64(buf[i+6]) | uint64(buf[i+7])<<8 | uint64(buf[i+8])<<16 | uint64(buf[i+9])<<24 |
 			uint64(buf[i+10])<<32 | uint64(buf[i+11])<<40 | uint64(buf[i+12])<<48 | uint64(buf[i+13])<<56
-		if granule > maxG {
+		if granule != ^uint64(0) && granule > maxG {
 			maxG = granule
 			found = true
 		}
