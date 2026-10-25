@@ -388,7 +388,12 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		res.Detail = err.Error()
 		return res
 	}
+	kfOnly := assetH264KeyframeOnly(a)
+	seekSec := thumbnailSeekSeconds(a.Path, 10, kfOnly)
 	opt := mediaPreset(preset)
+	if dur, err := ffprobeDuration(a.Path); err == nil && dur > 0 {
+		opt.SeekPercent = (seekSec / dur) * 100.0
+	}
 
 	tr, gErr := media.Thumbnail(f, f.Size(), opt)
 
@@ -398,8 +403,6 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	goPNG := filepath.Join(thumbDir, base+"_go.png")
 	ffPNG := filepath.Join(thumbDir, base+"_ff.png")
 
-	kfOnly := assetH264KeyframeOnly(a)
-	seekSec := thumbnailSeekSeconds(a.Path, 10, kfOnly)
 	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, seekSec, preset, kfOnly)
 
 	if gErr != nil {
