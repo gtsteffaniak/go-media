@@ -2,7 +2,7 @@
 
 ## H.264 intra decode (`github.com/Eyevinn/hi264`)
 
-`internal/h264` uses the **Eyevinn hi264** IDR decoder (MIT) for CAVLC/CABAC intra slice decode, with SPS validation via **Eyevinn mp4ff** (`avc` package). Structural and behavioral references include [h264bsd](https://github.com/oneam/h264bsd) and FFmpeg’s `h264` decoder; no LGPL code is copied.
+`internal/h264` currently orchestrates a **legacy vendored Eyevinn hi264** decode path (MIT, temporary) and validates SPS via **`github.com/Eyevinn/mp4ff/avc`** (MIT). A clean-room replacement is planned in `docs/FOLLOWUP_H264_CLEANROOM.md`. Behavioral references include FFmpeg’s `h264` decoder and openh264; no GPL/LGPL code is copied.
 
 ## VP8 video decode (`github.com/gen2brain/vpx/vp8`)
 

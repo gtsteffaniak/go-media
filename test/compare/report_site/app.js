@@ -203,6 +203,46 @@ function initCompareSlider(sliderOrRoot, { onZoom } = {}) {
   return { getPct: () => pct, setPct: apply };
 }
 
+function renderBuildModeChart(modeRows) {
+  const canvas = document.getElementById('chart-build-modes');
+  if (!canvas || !modeRows.length) return;
+  const keys = [...new Set(modeRows.map((r) => `${r.assetId}:${r.thumbPreset}`))].sort();
+  const modes = ['default', 'purego', 'simd'];
+  const datasets = modes.map((mode, i) => {
+    const colors = ['#5b9bd5', '#a8d08d', '#f4b183'];
+    return {
+      label: mode,
+      data: keys.map((k) => {
+        const [assetId, preset] = k.split(':');
+        const row = modeRows.find((r) => r.assetId === assetId && r.thumbPreset === preset && r.buildMode === mode);
+        return row ? row.timingDeltaPct * 100 : null;
+      }),
+      backgroundColor: colors[i],
+      borderRadius: 3,
+    };
+  });
+  chartInstances.push(new Chart(canvas, {
+    type: 'bar',
+    data: { labels: keys, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#e7ecf3' } },
+        title: { display: true, text: 'Δ% vs ffmpeg (go+write)', color: '#e7ecf3' },
+      },
+      scales: {
+        x: { ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45 }, grid: { color: '#2a3544' } },
+        y: {
+          ticks: { color: '#9aa8bc', callback: (v) => v + '%' },
+          grid: { color: '#2a3544' },
+          title: { display: true, text: '20% gate', color: '#c55' },
+        },
+      },
+    },
+  }));
+}
+
 function renderCharts(report) {
   destroyCharts();
   const s = report.summary;
@@ -519,6 +559,22 @@ function renderReport(report) {
       onZoom: (pct) => openThumbCompareLightbox(card, pct),
     });
   }
+
+  const modeRows = report.buildModeTimings || [];
+  const modeTbody = document.querySelector('#buildmode-table tbody');
+  if (modeTbody) {
+    modeTbody.innerHTML = '';
+    for (const r of modeRows) {
+      const tr = document.createElement('tr');
+      const deltaClass = r.timingGatePass ? 'delta-good' : 'delta-bad';
+      tr.innerHTML = `<td>${r.assetId}</td><td>${r.thumbPreset}</td><td>${r.buildMode}</td>
+        <td>${r.goMediaWriteMs?.toFixed(1) ?? '—'}</td><td>${r.ffmpegMs?.toFixed(1) ?? '—'}</td>
+        <td class="${deltaClass}">${(r.timingDeltaPct * 100).toFixed(0)}%</td>
+        <td class="${deltaClass}">${r.timingGatePass ? 'pass' : 'fail'}</td>`;
+      modeTbody.appendChild(tr);
+    }
+  }
+  renderBuildModeChart(modeRows);
 
   const scalerRows = report.scalerBenchmarks || [];
   const renderScalerBody = (sortKey, sortDir) => {

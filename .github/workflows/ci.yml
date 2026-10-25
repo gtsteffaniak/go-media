@@ -80,6 +80,12 @@ jobs:
           cache: true
       - name: Test GOEXPERIMENT=simd kernels
         run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/...
+      - name: Install static ffmpeg (simd report smoke)
+        run: bash scripts/install-ffmpeg.sh
+      - name: Build thumbmode simd binary smoke
+        run: |
+          CGO_ENABLED=0 GOEXPERIMENT=simd go build -o /tmp/thumbmode-simd ./test/compare/harness/thumbmode
+          /tmp/thumbmode-simd -h || true
 
   compare-gate:
     name: ffmpeg comparison gate

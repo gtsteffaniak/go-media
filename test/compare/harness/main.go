@@ -76,10 +76,12 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 	}
 	thumbDir := filepath.Join(reportDir, "media", "thumbs")
 	_scalerBenchmarks = runScalerBenchmarks(assets, thumbDir)
+	flat := flattenResults(nested)
+	repoRoot := findRepoRoot(base)
+	_buildModeTimings = collectBuildModeTimings(assets, flat, repoRoot)
 	if err := writeReport(reportDir, assets, nested); err != nil {
 		return err
 	}
-	flat := flattenResults(nested)
 	full := FullReport{Summary: buildSummary(assets, nested), Assets: assets, Results: flat}
 	printSummary(full)
 	if gate {

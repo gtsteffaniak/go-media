@@ -126,8 +126,9 @@ type ReportSummary struct {
 
 // FullReport is serialized to report_site/data/report.json for the static dashboard.
 type FullReport struct {
-	Summary          ReportSummary   `json:"summary"`
-	Assets           []Asset         `json:"assets"`
-	Results          []CheckResult   `json:"results"`
-	ScalerBenchmarks []ScalerBenchRow `json:"scalerBenchmarks,omitempty"`
+	Summary          ReportSummary        `json:"summary"`
+	Assets           []Asset              `json:"assets"`
+	Results          []CheckResult        `json:"results"`
+	ScalerBenchmarks []ScalerBenchRow     `json:"scalerBenchmarks,omitempty"`
+	BuildModeTimings []BuildModeTimingRow  `json:"buildModeTimings,omitempty"`
 }

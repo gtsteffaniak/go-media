@@ -100,6 +100,30 @@
     </div>
   </section>
 
+  <section id="buildmode-section">
+    <h2>Thumbnail timing by build mode (vs ffmpeg)</h2>
+    <p class="hint">Median go+write ms per variant: <code>default</code> (asm + PGO), <code>purego</code> (<code>-tags purego</code>), <code>simd</code> (<code>GOEXPERIMENT=simd</code>). Gate applies to <strong>default</strong> in-process timings only.</p>
+    <div class="chart-box tall">
+      <div class="chart-wrap"><canvas id="chart-build-modes"></canvas></div>
+    </div>
+    <div class="table-scroll">
+      <table id="buildmode-table" class="sortable">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th>Preset</th>
+            <th>Mode</th>
+            <th>go+write ms</th>
+            <th>ffmpeg ms</th>
+            <th>Δ%</th>
+            <th>≤20% gate</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
   <section id="scaler-section">
     <h2>Scaler benchmark (vs ffmpeg area)</h2>
     <p class="hint">Median of 7 timed runs after 2 warmup iterations. Δ% uses go-media encode+write vs full ffmpeg exec. PSNR/SSIM vs matching preset JPEG.</p>

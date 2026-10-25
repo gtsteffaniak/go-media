@@ -14,73 +14,51 @@ Instructions for autonomous coding agents working in this repository.
 |------|------|
 | **Repo root (`package media`)** | Public API: `Probe`, `Duration`, tags, subtitles, `Thumbnail*` / presets, `H264KeyframeYUV420`, errors (`ErrUnsupported`, `ErrUnsupportedProfile`). |
 | `internal/sniff`, `internal/format`, `internal/detect` | Format detection and IDs. |
-| `internal/isobmff` | MP4/MOV: boxes, sync samples, MJPEG/H.264 thumbnail demux. |
+| `internal/isobmff` | MP4/MOV: boxes, sync samples, MJPEG/H.264 thumbnail demux (`abema/go-mp4`). |
 | `internal/matroska` | MKV/WebM: cues, VP8/MJPEG thumbnails. |
-| `internal/h264` | Intra-only H.264 decode for MP4 thumbnails/frames (Main/High; Baseline rejected). |
+| `internal/h264` | Intra-only H.264 decode for MP4 thumbnails/frames (Main/High; Baseline rejected). **Target:** clean-room decoder here; **do not extend Eyevinn/hi264.** |
 | `internal/vp8decode` | VP8 picture → RGBA/YCbCr scale helpers. |
 | `internal/jpegfast` | Fast MJPEG decode for thumbnails. |
 | `internal/thumb` | Thumbnail pipeline: seek, decode, YCbCr/RGBA scale, JPEG/PNG/WebP encode. |
-| `internal/kernels` | Hot loops: YCbCr area downscale; **amd64 asm** + **`purego`** fallback (must match bit-for-bit). |
+| `internal/kernels` | Hot loops: YCbCr area downscale, reconstruct helpers; **amd64 asm** + **`purego`** + optional **`GOEXPERIMENT=simd`** (bit-identical tests). |
 | `internal/tagread`, `internal/mp3`, `internal/flac`, `internal/ogg`, `internal/wav` | Tags and duration helpers per format. |
 | `internal/subtitle` | Sidecar and MKV subtitle parse/convert. |
 | `internal/errs` | Typed unsupported/profile/corrupt errors. |
-| `third_party/hi264` | Vendored, patched H.264 decoder (`replace` in `go.mod`); see `THIRD_PARTY.md`. |
-| `test/compare/harness` | ffmpeg 9.0.2 comparison harness, timing gate, HTML report. |
-| `test/compare/report_site` | Generated report UI (not committed; CI uploads artifacts). |
-| `docs/` | `COMPARISON.md`, `PROFILING.md`, `comparison/*.png` (Playwright captures). |
-| `scripts/` | ffmpeg install, comparison runner, PGO regen, doc screenshots. |
+| `third_party/hi264` | **Legacy (remove):** temporary vendored Eyevinn hi264 fork — **do not use for new work**; follow-up PR replaces with `internal/h264` clean-room decode. |
+| `test/compare/harness` | ffmpeg 9.0.2 comparison harness, timing gate, build-mode timings, HTML report. |
+| `docs/` | `COMPARISON.md`, `PROFILING.md`, `FOLLOWUP_H264_CLEANROOM.md`. |
 | `default.pgo` | Checked-in PGO profile for release-style builds. |
 
 ## Hard rules
 
 1. **Pure Go only:** `CGO_ENABLED=0` for all builds, tests, and CI. **No WASM.** No spawning ffmpeg inside library code (harness/scripts only).
-2. **License:** MIT. Dependencies must be compatible; vendored or materially patched code **must** be documented in **`THIRD_PARTY.md`** (and notices as needed).
-3. **Go version:** **`go.mod` minimum `go 1.27`** (no `toolchain` pin). **CI** uses `actions/setup-go` with **`go-version: stable`** and **`check-latest: true`**.
-4. **SIMD:** Production paths use **`internal/kernels`** Plan9 assembly on amd64 with **CPU dispatch** and a **`-tags purego`** portable implementation. Implementations **must be bit-identical** on shared tests. **`GOEXPERIMENT=simd`** is an **optional, non-blocking** experiment only—not a shipping requirement.
-5. **Performance policy:** Supported features must be at most **20% slower** than an **ffmpeg 9.0.2 exec** round trip for the same operation (thumbnail: median **go+write** vs ffmpeg; **10% target**). Anything that cannot meet the gate is **unsupported**: return **`ErrUnsupported`** or **`ErrUnsupportedProfile`**. **No timing exemptions** or relaxed asset lists in `expectations.json`.
-6. **Quality:** Validate against real ffmpeg/ffprobe output. Thumbnail JPEG rows use **PSNR/SSIM** vs ffmpeg; H.264 intra paths also check **decode YUV PSNR/SSIM** where the harness applies.
+2. **License:** MIT. Dependencies must be compatible; vendored code **must** be documented in **`THIRD_PARTY.md`**.
+3. **Go version:** **`go.mod` minimum `go 1.27`**. **CI** uses **`go-version: stable`** + **`check-latest: true`**.
+4. **Do not use [Eyevinn/hi264](https://github.com/Eyevinn/hi264)** as a dependency or vendored base for new features. New H.264 work belongs in **`internal/h264`** (ITU-T H.264, clean-room, ffmpeg/openh264 as references only — no GPL/LGPL copies).
+5. **Dependencies:** keep the graph small. **`github.com/Eyevinn/mp4ff`** is allowed **only where it pays for itself** (today: **`avc` SPS/PPS/slice/NAL** parsing in `internal/h264` validation and the legacy decoder path). Do not add mp4ff for MP4 container work — use **`abema/go-mp4`** for boxes/demux.
+6. **SIMD:** Design hot paths for **Go simd / `GOEXPERIMENT=simd`** where practical, alongside **stable amd64 asm** and **`-tags purego`** fallbacks — all **bit-identical** on shared tests. The comparison report records **default / purego / simd** thumbnail timings vs ffmpeg; **the ≤20% gate uses default (in-process) only**.
+7. **Performance policy:** Supported features ≤**20%** slower than **ffmpeg 9.0.2** exec (10% target). Failures → **`ErrUnsupported`** / **`ErrUnsupportedProfile`**. No timing exemptions.
+8. **Quality:** PSNR/SSIM vs ffmpeg; H.264 intra decode YUV metrics on keyframe fixtures.
 
 ## Thumbnail presets (FileBrowser-aligned)
 
-- **`small`:** fast listing thumb — **256×256 max**, JPEG Q **76**, area downscale, `Fast` preview where applicable.
-- **`large`:** high-quality preview — **1280×720 max**, JPEG Q **90**, area downscale (not the small/fast path).
-
-Output is **JPEG** by default; **PNG** / **lossless WebP** optional. Decoding happens in-process; presets are exposed as `media.ThumbnailSmall`, `media.ThumbnailLarge`, and `media.Thumbnail` with `ThumbnailOptions`.
-
-**Supported decode paths (current):** MJPEG-in-MP4, H.264 Main/High intra in MP4/MOV, VP8 in WebM/MKV. **H.264 Baseline (CAVLC)** and **H.264 in Matroska** are unsupported for performance/API reasons.
+- **`small`:** 256×256 max, JPEG Q **76**, area downscale, fast preview where applicable.
+- **`large`:** 1280×720 max, JPEG Q **90**, area downscale.
 
 ## How to test
 
 ```bash
-CGO_ENABLED=0 go vet ./...
 CGO_ENABLED=0 go test ./...
 CGO_ENABLED=0 go test -tags purego ./...
-make compare-gate          # pinned ffmpeg 9.0.2; COMPARE_GATE=1
-make pgo                   # ./scripts/regenerate-pgo.sh → default.pgo
-make bench-thumb           # stage benchmarks in internal/thumb
-make profile               # benches + cpuprofile summary
+make compare-gate
+make pgo && make profile && make bench-thumb
 ```
 
-- Fuzz smoke (CI): `go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle`
-- Details: `test/compare/README.md`, `docs/PROFILING.md`
-
-Regenerate **`default.pgo`** when thumbnail/hot-path code changes materially; CI checks `test -s default.pgo`.
-
-## Report site and doc screenshots
-
-1. `make compare` or `make compare-gate` → `test/compare/report_site/`
-2. `make compare-docs` (or `python3 scripts/capture-comparison-docs.py`) serves the report and uses **Playwright** to write **`docs/comparison/*.png`**
-3. Captures are **full-size** regions of the live report; thumbnail cards use the **ffmpeg / go-media** compare slider (labels in the report UI). Do not commit harness `.assets/` or `report_site/data/` junk—only intentional doc PNGs.
+Report: `test/compare/report_site/` includes **build mode** charts (`buildModeTimings` in `report.json`).
 
 ## CI and PR workflow
 
-- **Triggers:** `push` to **`main`** and **`pull_request`** only (see `.github/workflows/ci.yml`). Do not add cursor-branded workflow names or references.
-- **Matrix:** amd64 + arm64, default and **`-tags purego`**, **Go stable** on all jobs, compare-gate on ubuntu with PGO check, optional **`GOEXPERIMENT=simd`** job (`continue-on-error: true`).
-- **CodeRabbit:** keep **docstring coverage ≥ 80%** on touched public API where the bot measures it.
-- **Before finishing a PR:** **`make compare-gate` and CI green**; **resolve every CodeRabbit comment**, including threads opened **after your last push**; update `expectations.json` when behavior or support matrix changes.
-
-## Agent hygiene
-
-- Minimize diff scope; match existing style; no bench binaries (`*.test`), profiles other than **`default.pgo`**, or generated report trees in commits.
-- When rejecting a codec for performance, wire **`typed_unsupported`** in `test/compare/expectations.json` and propagate **`ErrUnsupportedProfile`** through the public API.
-- Read **`README.md`** support matrix before changing user-visible capability.
+- Triggers: **`push` to `main`**, **`pull_request`**. No cursor-branded workflow names.
+- Matrix: amd64/arm64, default/`purego`, **Go stable**, compare-gate (PGO check), **`GOEXPERIMENT=simd`** job (kernels + report simd subprocess timings; non-blocking for merge).
+- **CodeRabbit:** docstring coverage ≥ **80%** on touched public API.
+- **Before finishing:** CI green; resolve all CodeRabbit threads.
