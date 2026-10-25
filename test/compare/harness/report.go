@@ -23,7 +23,7 @@ func writeReport(reportDir string, assets []Asset, results [][]CheckResult) erro
 	flat := flattenResults(results)
 	enrichResults(flat, prev)
 	summary := buildSummary(assets, nestedFromFlat(flat))
-	report := FullReport{Summary: summary, Assets: assets, Results: flat}
+	report := FullReport{Summary: summary, Assets: assets, Results: flat, ScalerBenchmarks: _scalerBenchmarks}
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
@@ -64,7 +64,11 @@ func enrichResults(flat []CheckResult, prev *FullReport) {
 	for i := range flat {
 		r := &flat[i]
 		if r.FFmpegMS > 0 {
-			pct := (r.GoMediaMS - r.FFmpegMS) / r.FFmpegMS
+			goMs := r.GoMediaMS
+			if r.GoMediaWriteMS > 0 {
+				goMs = r.GoMediaWriteMS
+			}
+			pct := (goMs - r.FFmpegMS) / r.FFmpegMS
 			r.TimingDeltaPct = &pct
 		}
 		if pr, ok := prevByKey[resultKey(*r)]; ok {
@@ -98,6 +102,7 @@ func enrichResults(flat []CheckResult, prev *FullReport) {
 }
 
 var _lastPrevSummary *PreviousRunSummary
+var _scalerBenchmarks []ScalerBenchRow
 
 func resultKey(r CheckResult) string {
 	return r.AssetID + "\x00" + string(r.Check)

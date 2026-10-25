@@ -157,7 +157,7 @@ thumb, err := media.Thumbnail(r, size, media.ThumbnailOptions{
     Quality:  85,                   // JPEG 1–100
     Format:   "jpeg",               // jpeg | png | webp-lossless
     Seek:     10,                   // percent 0–100 (or SeekPercent)
-    Filter:   media.ThumbnailFilterHigh,
+    Filter:   media.ThumbnailFilterArea, // fast | area | balanced | high
     Preset:   media.ThumbnailPresetLarge, // applies preset fields when set
 })
 png, err := media.ThumbnailRasterPNG(r, size, opt) // lossless scaled decode (metrics / debug)

@@ -72,6 +72,8 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 	if err != nil {
 		return err
 	}
+	thumbDir := filepath.Join(reportDir, "media", "thumbs")
+	_scalerBenchmarks = runScalerBenchmarks(assets, thumbDir)
 	if err := writeReport(reportDir, assets, nested); err != nil {
 		return err
 	}

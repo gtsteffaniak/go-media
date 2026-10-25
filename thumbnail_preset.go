@@ -14,9 +14,13 @@ const (
 type ThumbnailFilter string
 
 const (
-	// ThumbnailFilterFast uses bilinear scaling (lower CPU).
+	// ThumbnailFilterFast uses ApproxBiLinear (fastest draw path).
 	ThumbnailFilterFast ThumbnailFilter = "fast"
-	// ThumbnailFilterHigh uses Catmull-Rom scaling (sharper).
+	// ThumbnailFilterArea uses tile averaging (ffmpeg area-like, best for large ratios).
+	ThumbnailFilterArea ThumbnailFilter = "area"
+	// ThumbnailFilterBalanced box-prescale then bilinear (default large preset).
+	ThumbnailFilterBalanced ThumbnailFilter = "balanced"
+	// ThumbnailFilterHigh box-prescale then Catmull-Rom (sharpest).
 	ThumbnailFilterHigh ThumbnailFilter = "high"
 )
 
@@ -27,13 +31,13 @@ func ApplyPreset(opt *ThumbnailOptions, preset ThumbnailPreset) {
 		opt.MaxWidth = 256
 		opt.MaxHeight = 256
 		opt.Quality = 76
-		opt.Filter = ThumbnailFilterFast
+		opt.Filter = ThumbnailFilterArea
 		opt.Fast = true
 	case ThumbnailPresetLarge:
 		opt.MaxWidth = 1280
 		opt.MaxHeight = 720
 		opt.Quality = 90
-		opt.Filter = ThumbnailFilterHigh
+		opt.Filter = ThumbnailFilterArea
 		opt.Fast = false
 	}
 	if preset != "" {

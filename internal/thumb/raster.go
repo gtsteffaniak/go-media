@@ -13,8 +13,12 @@ func RasterPNG(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, op
 	if err != nil {
 		return nil, "", err
 	}
-	fl := filterFromOptions(opt)
-	img = scaleDown(img, opt.MaxWidth, opt.MaxHeight, fl)
+	mode := scalerFromOptions(opt)
+	if scaled, ok := tryScaleYCbCrSource(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
+		img = scaled
+	} else if needsScale(img, opt.MaxWidth, opt.MaxHeight) {
+		img = scaleImage(img, opt.MaxWidth, opt.MaxHeight, mode)
+	}
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		return nil, "", err

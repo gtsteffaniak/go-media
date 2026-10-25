@@ -20,9 +20,19 @@ type videoFrame struct {
 	payload     []byte
 }
 
+// ThumbnailParams configures VP8/MJPEG thumbnail decode and downscale.
+type ThumbnailParams struct {
+	SeekPercent float64
+	MaxWidth    int
+	MaxHeight   int
+	// Scaler is internal/thumb.ScalerMode as int (0 = default high).
+	Scaler int
+}
+
 // ThumbnailRGBA seeks to seekPercent of the file timeline and decodes a VP8 or MJPEG frame.
 // H.264 and other codecs return (nil, false).
-func ThumbnailRGBA(r io.ReaderAt, size int64, seekPercent float64) (*image.RGBA, bool) {
+func ThumbnailRGBA(r io.ReaderAt, size int64, p ThumbnailParams) (*image.RGBA, bool) {
+	seekPercent := p.SeekPercent
 	head, err := readHead(r, size)
 	if err != nil || head.Segment.Info.Duration <= 0 {
 		return nil, false
@@ -98,7 +108,7 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, seekPercent float64) (*image.RGBA,
 		if err != nil || getDemuxFatal(&demuxMu, &demuxFatal) != nil {
 			return nil, false
 		}
-		if img, ok := decodeVP8Seek(frames, targetMs); ok {
+		if img, ok := decodeVP8Seek(frames, targetMs, p.MaxWidth, p.MaxHeight, p.Scaler); ok {
 			return img, true
 		}
 	}
@@ -174,7 +184,7 @@ func collectVideoFramesForSeek(br mkvcore.BlockReadCloserWithTrackEntry, timecod
 	return out, nil
 }
 
-func decodeVP8Seek(frames []videoFrame, targetMs int64) (*image.RGBA, bool) {
+func decodeVP8Seek(frames []videoFrame, targetMs int64, maxW, maxH int, scaler int) (*image.RGBA, bool) {
 	if len(frames) == 0 {
 		return nil, false
 	}
@@ -185,21 +195,21 @@ func decodeVP8Seek(frames []videoFrame, targetMs int64) (*image.RGBA, bool) {
 		}
 	}
 	var dec gvp8.Decoder
-	var last *image.RGBA
+	var last *gvp8.Picture
 	for i := start; i < len(frames); i++ {
-		img, err := vp8decode.DecodeFrame(&dec, frames[i].payload)
+		pic, err := vp8decode.DecodeFramePicture(&dec, frames[i].payload)
 		if err != nil {
 			return nil, false
 		}
-		if img != nil {
-			last = img
+		if pic != nil {
+			last = pic
 		}
 		if frames[i].timestampMs >= targetMs && last != nil {
-			return last, true
+			return vp8decode.PictureRGBAScaled(last, maxW, maxH, scaler), true
 		}
 	}
 	if last != nil {
-		return last, true
+		return vp8decode.PictureRGBAScaled(last, maxW, maxH, scaler), true
 	}
 	return nil, false
 }

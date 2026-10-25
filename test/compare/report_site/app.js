@@ -404,12 +404,30 @@ function renderReport(report) {
         <span class="compare-label left">ffmpeg</span>
         <span class="compare-label right">go-media</span>
       </div>
-      <p>JPEG PSNR ${r.psnr?.toFixed(1) ?? '—'} SSIM ${r.ssim?.toFixed(3) ?? '—'} · decode PSNR ${r.psnrDecode?.toFixed(1) ?? '—'} SSIM ${r.ssimDecode?.toFixed(3) ?? '—'} · go ${r.goMediaMs?.toFixed(1) ?? '—'}ms ffmpeg ${r.ffmpegMs?.toFixed(1) ?? '—'}ms ${deltaPctCell(r.timingDeltaPct)}</p>`;
+      <p>JPEG PSNR ${r.psnr?.toFixed(1) ?? '—'} SSIM ${r.ssim?.toFixed(3) ?? '—'} · decode PSNR ${r.psnrDecode?.toFixed(1) ?? '—'} SSIM ${r.ssimDecode?.toFixed(3) ?? '—'} · go ${r.goMediaMs?.toFixed(1) ?? '—'}ms write ${r.goMediaWriteMs?.toFixed(1) ?? '—'}ms ffmpeg ${r.ffmpegMs?.toFixed(1) ?? '—'}ms ${deltaPctCell(r.timingDeltaPct)}</p>`;
     grid.appendChild(card);
     initCompareSlider(card);
   }
 
+  renderScalerTable(report.scalerBenchmarks || []);
   renderCharts(report);
+}
+
+function renderScalerTable(rows) {
+  const tbody = document.querySelector('#scaler-table tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  rows.sort((a, b) => a.preset.localeCompare(b.preset) || a.assetId.localeCompare(b.assetId) || a.deltaPct - b.deltaPct);
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const deltaClass = r.deltaPct <= 0.1 ? 'delta-good' : 'delta-bad';
+    tr.innerHTML = `<td>${r.assetId}</td><td>${r.preset}</td><td>${r.scaler}</td>
+      <td>${r.goMediaMs?.toFixed(1) ?? '—'}</td><td>${r.goWriteMs?.toFixed(1) ?? '—'}</td>
+      <td>${r.ffmpegMs?.toFixed(1) ?? '—'}</td>
+      <td class="${deltaClass}">${r.deltaPct != null ? (r.deltaPct * 100).toFixed(0) + '%' : '—'}</td>
+      <td>${r.psnr?.toFixed(1) ?? '—'}</td><td>${r.ssim?.toFixed(3) ?? '—'}</td>`;
+    tbody.appendChild(tr);
+  }
 }
 
 async function loadReport() {

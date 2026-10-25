@@ -27,6 +27,7 @@ type Options struct {
 	JPEGQuality    int    // 1–100; used when Quality is zero
 	Quality        int    // 1–100 preferred JPEG quality
 	Filter         Filter
+	Scaler         ScalerMode
 	Fast           bool
 	PreferEmbedded bool
 }
@@ -76,7 +77,13 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 			return img, "decode", nil
 		}
 	case format.MKV, format.WebM:
-		if img, ok := matroska.ThumbnailRGBA(r, size, opt.SeekPercent); ok {
+		tp := matroska.ThumbnailParams{
+			SeekPercent: opt.SeekPercent,
+			MaxWidth:    opt.MaxWidth,
+			MaxHeight:   opt.MaxHeight,
+			Scaler:      int(scalerFromOptions(opt)),
+		}
+		if img, ok := matroska.ThumbnailRGBA(r, size, tp); ok {
 			return img, "decode", nil
 		}
 		if matroska.HasH264Video(r, size) {
@@ -94,7 +101,7 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 }
 
 func decodeBytes(data []byte, mime string) (image.Image, error) {
-	img, _, err := image.Decode(bytes.NewReader(data))
+	img, _, err := jpegDecode(data)
 	if err != nil {
 		if errors.Is(err, image.ErrFormat) {
 			return nil, errs.Unsup("thumbnail", "unsupported cover image format")
@@ -105,8 +112,12 @@ func decodeBytes(data []byte, mime string) (image.Image, error) {
 }
 
 func encodeImageRaster(img image.Image, opt Options, src string) (Result, error) {
-	fl := filterFromOptions(opt)
-	img = scaleDown(img, opt.MaxWidth, opt.MaxHeight, fl)
+	mode := scalerFromOptions(opt)
+	if scaled, ok := tryScaleYCbCrSource(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
+		img = scaled
+	} else if needsScale(img, opt.MaxWidth, opt.MaxHeight) {
+		img = scaleImage(img, opt.MaxWidth, opt.MaxHeight, mode)
+	}
 	var buf bytes.Buffer
 	switch opt.Format {
 	case "png":
@@ -142,6 +153,18 @@ func clampQuality(q int) int {
 		return 100
 	}
 	return q
+}
+
+func needsScale(img image.Image, maxW, maxH int) bool {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if maxW <= 0 {
+		maxW = w
+	}
+	if maxH <= 0 {
+		maxH = h
+	}
+	return w > maxW || h > maxH
 }
 
 func normalizeOptions(opt *Options) {

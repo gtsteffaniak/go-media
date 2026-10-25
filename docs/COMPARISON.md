@@ -29,30 +29,47 @@ Implementation: `test/compare/harness/seed.go`.
 
 Skips are **expected N/A rows**, not failures. Each asset runs eight checks (`duration`, `probe`, `tags`, `artwork`, `lyrics`, `subtitles`, `thumbnail_small`, `thumbnail_large`). A check is skipped when it does not apply to that fixture—for example `tags` on video-only files, thumbnails on audio, `lyrics` without an `.lrc` sidecar, or `subtitles` when the asset is not a subtitle-focused case. The CLI summary and `report.json` `detail` field document the reason per row.
 
-**Takeaways**
+## Timing methodology
 
-- **Duration + probe** are strong on MP4/MOV/MKV/WebM, WAV/FLAC/OGG/MP3/M4A fixtures derived from the seed or synthetic audio.
-- **Tags + artwork** align for ID3, Vorbis, and MP4 `ilst` on the generated audio matrix; FLAC embedded pictures are detected.
-- **Subtitles**: sidecar SRT/VTT/ASS convert to WebVTT; MKV embedded SRT extracts; MP4 embedded `tx3g` + `stpp` (ffmpeg-generated) list and extract with cue text verified; `wvtt` parsing is unit-tested (pinned ffmpeg cannot mux WebVTT into ISOBMFF).
-- **Thumbnails**: two presets (FileBrowser-style **small** and **large**) with ffmpeg-matched scale/quality filters. Metrics use separate ffmpeg `psnr` and `ssim` lavfi filters on the same frame, resolution, and seek (10% of timeline). **Decode** rows compare lossless PNG rasters before JPEG; **JPEG** rows include encode/scale loss.
-- **Artwork**: cover detection uses `attached_pic` disposition (not full-motion MJPEG video).
+Thumbnail rows compare **median latency over 7 timed runs after 2 warmup iterations**:
 
-### Thumbnail metrics (corrected harness)
+| Column | Meaning |
+|--------|---------|
+| **ffmpeg ms** | Full process spawn + `-ss` seek + decode + scale + JPEG encode + write (same as CLI) |
+| **go-media ms** | In-process `media.Thumbnail` only |
+| **go+write ms** | Thumbnail generation + `os.WriteFile` (FileBrowser-style) |
+| **Δ%** | `(go+write − ffmpeg) / ffmpeg` — **gate fails when Δ% > 10%** on supported thumbnail checks |
 
-Earlier reports showed **SSIM ≈ 1.0 with PSNR ~25–28 dB**, which is inconsistent. Root cause: a combined lavfi `psnr`+`ssim` chain and a parser that treated PSNR’s `All:1.000000 (inf)` line as SSIM. The harness now runs **separate** `psnr` and `ssim` filters at `-loglevel info`, compares decode rasters as PNG, then final JPEG, and aligns presets with ffmpeg (`thumbnail_preset.go` in the harness).
+## Scaler benchmark (vs ffmpeg bilinear / lanczos)
 
-| Asset | Preset | JPEG PSNR | JPEG SSIM | Decode PSNR | Decode SSIM | go-media ms | ffmpeg ms | Δ% |
-|-------|--------|----------:|----------:|------------:|------------:|------------:|----------:|---:|
-| mjpeg_mp4 | small | 26.1 | 0.749 | 26.3 | 0.782 | 23 | 22 | +6% |
-| mjpeg_mp4 | large | 37.7 | 0.960 | 40.3 | 0.989 | 143 | 40 | +258% |
-| webm_vp8 | small | 28.5 | 0.859 | 28.0 | 0.912 | 32 | 33 | −1% |
-| webm_vp8 | large | 32.7 | 0.976 | 30.1 | 0.978 | 134 | 46 | +191% |
-| mkv_vp8 | small | 28.5 | 0.859 | 28.0 | 0.912 | 36 | 30 | +22% |
-| mkv_vp8 | large | 32.7 | 0.976 | 30.1 | 0.978 | 135 | 41 | +231% |
+The harness benchmarks `fast`, `area`, `balanced`, and `high` on `webm_vp8`, `mkv_vp8`, and `mjpeg_mp4` for both presets. Results are in `report.json` → `scalerBenchmarks` and the report site **Scaler benchmark** table. PSNR/SSIM are vs the matching preset ffmpeg JPEG.
 
-**Quality fixes in go-media:** nearest-neighbor downscale was replaced with `golang.org/x/image/draw` — bilinear (**fast** / small preset) and Catmull-Rom (**high** / large preset). JPEG quality and max dimensions now follow explicit `ThumbnailOptions` / presets instead of a single hard-coded path.
+| Asset | Preset | Winner | go+write | ffmpeg | Δ% | PSNR | SSIM | Why |
+|-------|--------|--------|---------:|-------:|---:|-----:|-----:|-----|
+| mkv_vp8 | small | area / fast | ~18 ms | ~35 ms | −48% | 30.6 | 0.882 | Large downscale ratio; area tile mean ≈ ffmpeg `area` |
+| mkv_vp8 | large | area | ~48 ms | ~46 ms | +5% | 35.9 | 0.975 | YUV box prescale + area RGB; within 10% gate |
+| webm_vp8 | large | area | ~48 ms | ~48 ms | 0% | 35.9 | 0.975 | Same VP8 path as MKV |
+| mjpeg_mp4 | small | area | ~9 ms | ~18 ms | −47% | — | — | YCbCr area scale (no full-res RGB) |
+| mjpeg_mp4 | large | area | ~19 ms | ~21 ms | −8% | — | — | 960px-wide MJPEG fixture + YCbCr area |
 
-**Timing:** small presets stay near ffmpeg (often within ~25%); **large** presets cost roughly **2–3×** ffmpeg CPU because pure-Go VP8 decode plus high-quality scaling dominates.
+**Defaults (presets):** both **small** and **large** use `ThumbnailFilterArea` (`area` tile averaging). `balanced` / `high` add a final bilinear or Catmull-Rom pass after integer box prescale; quality is similar on VP8 but **high** is slightly slower on large WebM. `fast` (ApproxBiLinear) is competitive on VP8 but worse on huge MJPEG downscales.
+
+### VP8 decode vs ffmpeg (root cause of ~30 dB decode PSNR)
+
+Earlier decode PNG PSNR was ~30 dB with JPEG full-range `YCbCrToRGB`. **Fix:** BT.709 **limited-range** YUV→RGB (matching ffmpeg `swscale` for HD), scale in **YUV** (box prescale + area/bilinear) before RGB, and only convert at output resolution. **After:** decode PSNR **~36–47 dB** depending on asset (VP8 ~36.6 dB large, MJPEG decode higher on downscaled fixture).
+
+### Thumbnail metrics @ 10% seek (production presets)
+
+| Asset | Preset | JPEG PSNR | Decode PSNR | go+write ms | ffmpeg ms | Δ% |
+|-------|--------|----------:|------------:|------------:|----------:|---:|
+| mjpeg_mp4 | small | 27.2 | 26.2 | 9 | 18 | −47% |
+| mjpeg_mp4 | large | 28.6 | 46.7 | 19 | 21 | −8% |
+| webm_vp8 | small | 30.6 | 31.3 | 17 | 36 | −52% |
+| webm_vp8 | large | 35.9 | 36.6 | 48 | 48 | 0% |
+| mkv_vp8 | small | 30.6 | 31.3 | 18 | 34 | −48% |
+| mkv_vp8 | large | 35.9 | 36.6 | 50 | 47 | +7% |
+
+Optimizations that mattered: **YUV-area VP8 scaling** (avoid full 1080p RGB + Catmull-Rom), **parallel YCbCr area** for MJPEG, **BT.709 limited** color matrix, **separate PSNR/SSIM** ffmpeg filters, **10% timing gate** on `go+write` vs ffmpeg.
 
 ## Report dashboard
 
@@ -91,7 +108,7 @@ make compare-docs     # compare + Playwright screenshots for docs/comparison/
 
 Doc screenshots (`docs/comparison/*.png`) are **browser captures** of the rendered report (`test/compare/report_site/index.html?capture=1`), not composited images. The MJPEG and VP8 shots use the report’s clip-path compare slider (ffmpeg / go-media labels). Regenerate with `make compare-docs` (requires Node + `npm install` under `scripts/` on first run).
 
-`report.json` includes per-row `timingDeltaPct` ((go-media − ffmpeg) / ffmpeg), `psnr` / `ssim` (JPEG) and `psnrDecode` / `ssimDecode` (PNG raster), aggregate timing stats, capability breakdown, and optional regression flags when a previous `data/report.json` is present on disk before the run.
+`report.json` includes per-row `goMediaMs`, `goMediaWriteMs`, `timingDeltaPct`, `psnr` / `ssim` (JPEG) and `psnrDecode` / `ssimDecode` (PNG raster), `scalerBenchmarks`, aggregate timing stats, capability breakdown, and optional regression flags when a previous `data/report.json` is present on disk before the run.
 
 Manifest: [`test/compare/expectations.json`](../test/compare/expectations.json) lists the allowed status for all 136 `(asset, check)` pairs. `COMPARE_GATE=1` or `-gate` fails on any drift.
 

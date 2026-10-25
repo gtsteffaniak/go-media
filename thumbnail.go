@@ -49,28 +49,35 @@ func mapThumbOptions(opt ThumbnailOptions) thumb.Options {
 	if opt.Seek > 0 {
 		seek = opt.Seek
 	}
-	fl := thumb.FilterHigh
-	switch opt.Filter {
-	case ThumbnailFilterFast:
-		fl = thumb.FilterFast
-	case ThumbnailFilterHigh:
-		fl = thumb.FilterHigh
-	default:
-		if opt.Fast {
-			fl = thumb.FilterFast
-		}
-	}
-	return thumb.Options{
+	topt := thumb.Options{
 		MaxWidth:       opt.MaxWidth,
 		MaxHeight:      opt.MaxHeight,
 		SeekPercent:    seek,
 		Format:         opt.Format,
 		JPEGQuality:    opt.JPEGQuality,
 		Quality:        opt.Quality,
-		Filter:         fl,
 		Fast:           opt.Fast,
 		PreferEmbedded: opt.PreferEmbedded,
 	}
+	switch opt.Filter {
+	case ThumbnailFilterFast:
+		topt.Scaler = thumb.ScalerFast
+	case ThumbnailFilterArea:
+		topt.Scaler = thumb.ScalerArea
+	case ThumbnailFilterBalanced:
+		topt.Scaler = thumb.ScalerBalanced
+	case ThumbnailFilterHigh:
+		topt.Scaler = thumb.ScalerHigh
+	case "":
+		if opt.Fast {
+			topt.Scaler = thumb.ScalerArea
+		} else {
+			topt.Scaler = thumb.ScalerBalanced
+		}
+	default:
+		topt.Scaler = thumb.ScalerBalanced
+	}
+	return topt
 }
 
 // DecodeH264Keyframe exposes the intra-only H.264 decoder entry point (stub).

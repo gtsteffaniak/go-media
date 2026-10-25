@@ -42,9 +42,11 @@ type CheckResult struct {
 	Check         CheckName        `json:"check"`
 	Status        CapabilityStatus `json:"status"`
 	GoMediaMS     float64          `json:"goMediaMs"`
+	GoMediaWriteMS float64         `json:"goMediaWriteMs,omitempty"`
 	FFmpegMS      float64          `json:"ffmpegMs,omitempty"`
-	// TimingDeltaPct is (goMediaMs - ffmpegMs) / ffmpegMs when ffmpegMs > 0.
+	// TimingDeltaPct is (goMediaWriteMs - ffmpegMs) / ffmpegMs when ffmpegMs > 0 (median of 7 runs).
 	TimingDeltaPct *float64 `json:"timingDeltaPct,omitempty"`
+	TimingGateFail bool             `json:"timingGateFail,omitempty"`
 	Detail        string           `json:"detail,omitempty"`
 	DurationDelta float64          `json:"durationDeltaSec,omitempty"`
 	FieldDiffs    []string         `json:"fieldDiffs,omitempty"`
@@ -106,7 +108,8 @@ type ReportSummary struct {
 
 // FullReport is serialized to report_site/data/report.json for the static dashboard.
 type FullReport struct {
-	Summary ReportSummary `json:"summary"`
-	Assets  []Asset       `json:"assets"`
-	Results []CheckResult `json:"results"`
+	Summary          ReportSummary   `json:"summary"`
+	Assets           []Asset         `json:"assets"`
+	Results          []CheckResult   `json:"results"`
+	ScalerBenchmarks []ScalerBenchRow `json:"scalerBenchmarks,omitempty"`
 }

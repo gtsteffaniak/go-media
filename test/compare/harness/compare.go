@@ -389,10 +389,23 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		return res
 	}
 	opt := mediaPreset(preset)
+	timing := benchmarkThumbnail(a, opt, preset)
+	res.GoMediaMS = timing.GoMS
+	res.GoMediaWriteMS = timing.WriteMS
+	res.FFmpegMS = timing.FFmpegMS
+	if res.FFmpegMS > 0 {
+		goCmp := res.GoMediaWriteMS
+		if goCmp <= 0 {
+			goCmp = res.GoMediaMS
+		}
+		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
+		res.TimingDeltaPct = &delta
+		if delta > maxTimingRegressionPct {
+			res.TimingGateFail = true
+		}
+	}
 
-	start := time.Now()
 	tr, gErr := media.Thumbnail(f, f.Size(), opt)
-	res.GoMediaMS = msSince(start)
 
 	base := a.ID + "_" + preset.Name
 	goPath := filepath.Join(thumbDir, base+"_go.jpg")
@@ -402,13 +415,7 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	res.ThumbGoPath = relReportPath(goPath)
 	res.ThumbFFPath = relReportPath(ffPath)
 
-	ffStart := time.Now()
 	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
-	res.FFmpegMS = msSince(ffStart)
-	if res.FFmpegMS > 0 {
-		delta := (res.GoMediaMS - res.FFmpegMS) / res.FFmpegMS
-		res.TimingDeltaPct = &delta
-	}
 
 	if gErr != nil {
 		res.Status = classifyGoErr(gErr)
@@ -447,6 +454,12 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	}
 	res.Detail = fmt.Sprintf("jpeg PSNR=%.1f SSIM=%.3f decode PSNR=%.1f SSIM=%.3f",
 		res.PSNR, res.SSIM, res.PSNRDecode, res.SSIMDecode)
+	if res.TimingGateFail {
+		res.Status = StatusMismatch
+		res.Detail += fmt.Sprintf("; timing gate: write %.0fms vs ffmpeg %.0fms (%.0f%% > 10%%)",
+			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100)
+		return res
+	}
 	if res.SSIM >= 0.85 || res.PSNR >= 25 {
 		res.Status = StatusSupported
 	} else if tr.Width > 0 {

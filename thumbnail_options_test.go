@@ -11,8 +11,8 @@ func TestThumbnailPresetSmall(t *testing.T) {
 	if opt.MaxWidth != 256 || opt.Quality != 76 {
 		t.Fatalf("small preset: %+v", opt)
 	}
-	if opt.Filter != media.ThumbnailFilterFast {
-		t.Fatalf("expected fast filter, got %s", opt.Filter)
+	if opt.Filter != media.ThumbnailFilterArea {
+		t.Fatalf("expected area filter, got %s", opt.Filter)
 	}
 }
 
@@ -21,8 +21,8 @@ func TestThumbnailPresetLarge(t *testing.T) {
 	if opt.MaxWidth != 1280 || opt.Quality != 90 {
 		t.Fatalf("large preset: %+v", opt)
 	}
-	if opt.Filter != media.ThumbnailFilterHigh {
-		t.Fatalf("expected high filter, got %s", opt.Filter)
+	if opt.Filter != media.ThumbnailFilterArea {
+		t.Fatalf("expected area filter for large preset, got %s", opt.Filter)
 	}
 }
 

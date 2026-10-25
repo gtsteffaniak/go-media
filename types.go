@@ -97,7 +97,7 @@ type ThumbnailOptions struct {
 	Quality int
 	// JPEGQuality is the legacy JPEG quality field (1–100).
 	JPEGQuality int
-	// Filter selects fast (bilinear) or high (Catmull-Rom) downscaling.
+	// Filter selects the scaler: fast, area, balanced, or high (see ThumbnailFilter* constants).
 	Filter ThumbnailFilter
 	// Preset applies FileBrowser-style small/large defaults when set.
 	Preset ThumbnailPreset

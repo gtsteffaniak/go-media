@@ -100,6 +100,29 @@
     </div>
   </section>
 
+  <section id="scaler-section">
+    <h2>Scaler benchmark (vs ffmpeg lanczos/bilinear)</h2>
+    <p class="hint">Median of 7 timed runs after 2 warmup iterations. Δ% uses go-media encode+write vs full ffmpeg exec. PSNR/SSIM vs matching preset JPEG.</p>
+    <div class="table-scroll">
+      <table id="scaler-table" class="sortable">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th>Preset</th>
+            <th>Scaler</th>
+            <th>go ms</th>
+            <th>go+write ms</th>
+            <th>ffmpeg ms</th>
+            <th>Δ%</th>
+            <th>PSNR</th>
+            <th>SSIM</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
   <section id="thumbs-section">
     <h2>Thumbnail comparisons</h2>
     <p class="hint">Drag the divider to compare ffmpeg (left) vs go-media (right). Click an image to expand.</p>
