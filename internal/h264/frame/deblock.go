@@ -1,6 +1,6 @@
 package frame
 
-import "github.com/Eyevinn/hi264/internal/slice"
+import "github.com/gtsteffaniak/go-media/internal/h264/slice"
 
 // H.264 deblocking filter lookup tables (Tables 8-16 to 8-18 of the spec).
 // Indexed by indexA/indexB = qp + 52 + offset. First 52 entries are zero-padding,

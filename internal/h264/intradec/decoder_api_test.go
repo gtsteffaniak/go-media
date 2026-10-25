@@ -1,4 +1,8 @@
-package decoder
+//go:build ignore
+
+// Encoder-backed API tests live with third_party/hi264 until encode is vendored in-tree.
+
+package intradec
 
 import (
 	"encoding/binary"
@@ -7,7 +11,7 @@ import (
 	"github.com/Eyevinn/mp4ff/avc"
 
 	"github.com/Eyevinn/hi264/pkg/encode"
-	"github.com/Eyevinn/hi264/pkg/yuv"
+	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
 func TestDecodeAnnexB(t *testing.T) {

@@ -1,8 +1,8 @@
 // Package context implements CABAC context model initialization for H.264/AVC
 // as specified in section 9.3.1 of the standard.
-package context
+package h264context
 
-import "github.com/Eyevinn/hi264/internal/cabac"
+import "github.com/gtsteffaniak/go-media/internal/h264/cabac"
 
 // Models holds all 1024 CABAC context models for a slice.
 type Models [1024]cabac.CtxState

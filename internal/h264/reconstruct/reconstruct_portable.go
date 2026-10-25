@@ -1,4 +1,4 @@
-package kernels
+package reconstruct
 
 func reconstructLuma4x4Portable(yPlane []byte, stride int, px, py int, pred [4][4]uint8, residual [16]int32) {
 	for y := range 4 {

@@ -1,4 +1,4 @@
-package context
+package h264context
 
 import "testing"
 

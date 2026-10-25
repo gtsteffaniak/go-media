@@ -1,4 +1,4 @@
-package context
+package h264context
 
 // cabacContextInitPB contains the (m, n) initialization values for P/B-slices.
 // Transcribed from FFmpeg cabac_context_init_PB (3 init_idc sets x 1024 entries).

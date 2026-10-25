@@ -3,9 +3,9 @@ package slice
 import (
 	"fmt"
 
-	"github.com/Eyevinn/hi264/internal/cabac"
-	"github.com/Eyevinn/hi264/internal/cavlc"
-	"github.com/Eyevinn/hi264/internal/context"
+	"github.com/gtsteffaniak/go-media/internal/h264/cabac"
+	"github.com/gtsteffaniak/go-media/internal/h264/cavlc"
+	"github.com/gtsteffaniak/go-media/internal/h264/h264context"
 )
 
 // DecodeSliceData decodes all macroblocks in an I-slice.
@@ -18,7 +18,7 @@ func DecodeSliceData(sliceData []byte, sliceQPY int, mbWidth, mbHeight int,
 	totalMBs := mbWidth * mbHeight
 
 	// Initialize context models for I-slice
-	models := context.InitModels(sliceQPY, 2, 0) // sliceType=2 for I
+	models := h264context.InitModels(sliceQPY, 2, 0) // sliceType=2 for I
 
 	// Initialize CABAC decoder
 	dec, err := cabac.NewDecoder(sliceData)

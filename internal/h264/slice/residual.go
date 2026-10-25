@@ -1,7 +1,7 @@
 package slice
 
 import (
-	"github.com/Eyevinn/hi264/internal/cabac"
+	"github.com/gtsteffaniak/go-media/internal/h264/cabac"
 )
 
 // Block category constants (Table 9-42).

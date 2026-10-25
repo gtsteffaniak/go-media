@@ -1,4 +1,4 @@
-package context
+package h264context
 
 // cabacContextInitI contains the (m, n) initialization values for I-slices.
 // Transcribed from FFmpeg cabac_context_init_I (1024 entries).

@@ -1,5 +1,5 @@
-// Package decoder implements the top-level H.264/AVC decoder orchestration.
-package decoder
+// Package intradec implements intra H.264/AVC decode orchestration.
+package intradec
 
 import (
 	"encoding/binary"
@@ -7,14 +7,14 @@ import (
 
 	"github.com/Eyevinn/mp4ff/avc"
 
-	"github.com/Eyevinn/hi264/internal/cabac"
-	"github.com/Eyevinn/hi264/internal/cavlc"
-	"github.com/Eyevinn/hi264/internal/kernels"
-	"github.com/Eyevinn/hi264/internal/context"
-	"github.com/Eyevinn/hi264/internal/pred"
-	"github.com/Eyevinn/hi264/internal/slice"
-	"github.com/Eyevinn/hi264/internal/transform"
-	"github.com/Eyevinn/hi264/pkg/frame"
+	"github.com/gtsteffaniak/go-media/internal/h264/cabac"
+	"github.com/gtsteffaniak/go-media/internal/h264/cavlc"
+	"github.com/gtsteffaniak/go-media/internal/h264/reconstruct"
+	"github.com/gtsteffaniak/go-media/internal/h264/h264context"
+	"github.com/gtsteffaniak/go-media/internal/h264/pred"
+	"github.com/gtsteffaniak/go-media/internal/h264/slice"
+	"github.com/gtsteffaniak/go-media/internal/h264/transform"
+	"github.com/gtsteffaniak/go-media/internal/h264/frame"
 )
 
 // Decoder is the H.264/AVC decoder.
@@ -398,7 +398,7 @@ func (d *Decoder) decodePSkip(nalu []byte) (*frame.Frame, error) {
 		if err2 != nil {
 			return nil, fmt.Errorf("CABAC P_Skip: init decoder: %w", err2)
 		}
-		models := context.InitModels(sliceQPY, 0, int(sh.CabacInitIDC))
+		models := h264context.InitModels(sliceQPY, 0, int(sh.CabacInitIDC))
 		ctx := models[:]
 
 		totalMBs := ((width + 15) / 16) * ((height + 15) / 16)
@@ -661,7 +661,7 @@ func reconstructI4x4(sc *slice.SliceContext, f *frame.Frame,
 			coeffs[zigzag4x4[j]] = mb.LumaLevel4x4[i][j]
 		}
 		residual := transform.DequantInverse4x4(coeffs, mb.QPY, sl)
-		kernels.ReconstructLuma4x4(f.Y, f.StrideY, x0+bx, y0+by, predBlock, residual)
+		reconstruct.ReconstructLuma4x4(f.Y, f.StrideY, x0+bx, y0+by, predBlock, residual)
 	}
 
 	return nil

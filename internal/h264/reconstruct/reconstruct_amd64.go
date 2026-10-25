@@ -1,6 +1,6 @@
 //go:build amd64 && !purego
 
-package kernels
+package reconstruct
 
 import "unsafe"
 

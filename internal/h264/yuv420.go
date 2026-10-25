@@ -3,7 +3,7 @@ package h264
 import (
 	"image"
 
-	"github.com/Eyevinn/hi264/pkg/frame"
+	"github.com/gtsteffaniak/go-media/internal/h264/frame"
 	"github.com/abema/go-mp4"
 )
 

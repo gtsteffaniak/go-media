@@ -3,7 +3,7 @@ package slice
 import (
 	"fmt"
 
-	"github.com/Eyevinn/hi264/internal/cavlc"
+	"github.com/gtsteffaniak/go-media/internal/h264/cavlc"
 )
 
 // DecodeMBTypeIntraCAVLC decodes mb_type for I-slices using CAVLC (ue(v)).

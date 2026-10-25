@@ -4,8 +4,8 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/Eyevinn/hi264/pkg/frame"
-	"github.com/Eyevinn/hi264/pkg/yuv"
+	"github.com/gtsteffaniak/go-media/internal/h264/frame"
+	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
 func frameToRGBA(f *frame.Frame) *image.RGBA {

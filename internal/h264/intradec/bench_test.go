@@ -1,4 +1,4 @@
-package decoder
+package intradec
 
 import (
 	"os"
@@ -10,7 +10,7 @@ import (
 
 // BenchmarkDecodeCABAC benchmarks decoding a CABAC IDR frame (Main profile).
 func BenchmarkDecodeCABAC(b *testing.B) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "golden", "profile_main.264"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "third_party", "hi264", "testdata", "golden", "profile_main.264"))
 	if err != nil {
 		b.Fatalf("read input: %v", err)
 	}
@@ -28,7 +28,7 @@ func BenchmarkDecodeCABAC(b *testing.B) {
 
 // BenchmarkDecodeCAVLC benchmarks decoding a CAVLC IDR frame (Baseline profile).
 func BenchmarkDecodeCAVLC(b *testing.B) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "golden", "cavlc_baseline.264"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "third_party", "hi264", "testdata", "golden", "cavlc_baseline.264"))
 	if err != nil {
 		b.Fatalf("read input: %v", err)
 	}
@@ -46,7 +46,7 @@ func BenchmarkDecodeCAVLC(b *testing.B) {
 
 // BenchmarkDecodeHD benchmarks decoding a larger HD frame.
 func BenchmarkDecodeHD(b *testing.B) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "golden", "res_hd.264"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "third_party", "hi264", "testdata", "golden", "res_hd.264"))
 	if err != nil {
 		b.Fatalf("read input: %v", err)
 	}

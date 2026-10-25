@@ -1,9 +1,9 @@
-package kernels
+package reconstruct
 
 import (
 	"testing"
 
-	"github.com/Eyevinn/hi264/internal/transform"
+	"github.com/gtsteffaniak/go-media/internal/h264/transform"
 )
 
 func TestReconstructLuma4x4MatchesPortablePath(t *testing.T) {

@@ -1,4 +1,4 @@
-package decoder
+package intradec
 
 import (
 	"crypto/sha256"
@@ -58,7 +58,7 @@ var goldenTests = map[string]string{
 }
 
 func TestGoldenDecode(t *testing.T) {
-	goldenDir := filepath.Join("..", "..", "testdata", "golden")
+	goldenDir := filepath.Join("..", "..", "..", "third_party", "hi264", "testdata", "golden")
 
 	for name, wantHash := range goldenTests {
 		t.Run(name, func(t *testing.T) {

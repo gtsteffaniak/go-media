@@ -3,8 +3,8 @@
 package slice
 
 import (
-	"github.com/Eyevinn/hi264/internal/cabac"
-	"github.com/Eyevinn/hi264/internal/cavlc"
+	"github.com/gtsteffaniak/go-media/internal/h264/cabac"
+	"github.com/gtsteffaniak/go-media/internal/h264/cavlc"
 )
 
 // MBType constants for I-slices (Table 7-11) and P-slices (Table 7-10).
