@@ -8,7 +8,13 @@ Pure-Go media primitives: duration, metadata, subtitles, and keyframe thumbnails
 
 go-media breaks out the core media functionality that can be done in **pure Go** (`CGO_ENABLED=0`, no external binaries, no WASM) so apps like [FileBrowser Quantum](https://github.com/gtsteffaniak/filebrowser) can skip spawning `ffmpeg`/`ffprobe` for common cases.
 
-**This is not an ffmpeg replacement.** go-media is a **fast path**: when it can't handle a file it returns a typed error (`ErrUnsupported`, `ErrUnsupportedProfile`, ...) and the caller falls back to ffmpeg (for example through [gtsteffaniak/go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)). Even limited coverage is better than starting a process for every file.
+**This is not an ffmpeg replacement.** go-media is a **fast path**: when it can't handle a file it returns a typed error (`ErrUnsupported`, `ErrUnsupportedProfile`, ...) and the caller falls back to ffmpeg.
+
+### Use go-ffmpeg for full media capability
+
+For transcoding, HLS, hardware acceleration, exotic containers, and anything outside the pure-Go matrix here, use **[gtsteffaniak/go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)**. It wraps ffmpeg with detection, typed errors, and tests aligned to real binaries. go-media is meant to sit **in front of** go-ffmpeg: try pure Go first, fall back when you hit `ErrUnsupported` or `ErrUnsupportedProfile`.
+
+See **[docs/COMPARISON.md](docs/COMPARISON.md)** for the ffmpeg/ffprobe comparison report, screenshots, and how to regenerate it locally or in CI.
 
 ## Design principles
 
@@ -28,7 +34,7 @@ Every feature is checked against real `ffmpeg`/`ffprobe` output on a corpus of r
 - **Metadata and stream info:** field-by-field diffs against ffprobe JSON.
 - **Frame decode:** compared with `ffmpeg -frames:v 1` using PSNR/SSIM thresholds.
 - **Fuzzing:** all parsers and bitstream readers are fuzzed (`go test -fuzz`).
-- **Published results:** a compatibility report lives in this repo and is updated as the corpus grows.
+- **Published results:** run `bash scripts/run-comparison.sh` and open `test/compare/report_site/index.html` (CI uploads the same site as an artifact). Summary: [docs/COMPARISON.md](docs/COMPARISON.md).
 
 ## Support matrix (current)
 
