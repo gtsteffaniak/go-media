@@ -1,0 +1,48 @@
+package media_test
+
+import (
+	"os"
+	"testing"
+	"time"
+
+	"github.com/gtsteffaniak/go-media"
+)
+
+func openFixture(t *testing.T, name string) (*os.File, int64) {
+	f, err := os.Open("testdata/" + name)
+	if err != nil {
+		t.Skip("missing fixture, run scripts/generate-fixtures.sh:", err)
+	}
+	st, _ := f.Stat()
+	return f, st.Size()
+}
+
+func TestDurationWAV(t *testing.T) {
+	f, size := openFixture(t, "silence.wav")
+	defer f.Close()
+	dr, err := media.Duration(f, size)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dr.Duration < 900*time.Millisecond || dr.Duration > 1100*time.Millisecond {
+		t.Fatalf("expected ~1s, got %v", dr.Duration)
+	}
+	if dr.Source != media.SourceHeader {
+		t.Fatalf("expected header source, got %q", dr.Source)
+	}
+}
+
+func TestProbeFLAC(t *testing.T) {
+	f, size := openFixture(t, "tone.flac")
+	defer f.Close()
+	info, err := media.Probe(f, size)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Tags.Title != "Test Tone" {
+		t.Fatalf("title %q", info.Tags.Title)
+	}
+	if info.Duration < 900*time.Millisecond {
+		t.Fatalf("duration %v", info.Duration)
+	}
+}
