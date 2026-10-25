@@ -29,5 +29,5 @@ SIMD lives in **`internal/kernels/h264`**: dequant+IDCT+reconstruct, intra pred 
 
 ## Gates (unchanged)
 
-- `make compare-gate` green; **buildModeTimings** default / purego / simd (gate uses **default** only).
+- `make compare-gate` green; report **buildModeTimings** tiers purego → purego+PGO → purego+PGO+simd (gate uses **in-process asm+PGO** only). Regenerate **`default.pgo`** after rewrite (`make pgo`).
 - Baseline support toggled in `sps.go` only after Baseline passes gate + profiling sign-off.

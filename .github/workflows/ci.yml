@@ -101,7 +101,9 @@ jobs:
       - name: Install static ffmpeg
         run: bash scripts/install-ffmpeg.sh
       - name: Verify PGO profile
-        run: test -s default.pgo
+        run: test -s default.pgo && test -s default.pgo.provenance.json
+      - name: Check PGO freshness
+        run: make check-pgo
       - name: Comparison gate
         run: make compare-gate
       - name: Upload HTML report

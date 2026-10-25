@@ -16,6 +16,7 @@
     <h1>go-media vs ffmpeg / ffprobe</h1>
     <p id="meta">Loading…</p>
     <p id="timing-meta" class="sub-meta"></p>
+    <p id="gate-build-meta" class="sub-meta"></p>
   </header>
 
   <section class="cards" id="summary-cards"></section>
@@ -86,12 +87,10 @@
             <th data-sort="assetId">Asset</th>
             <th data-sort="check">Check</th>
             <th data-sort="status">Status</th>
-            <th data-sort="goMediaMs">go-media (ms)</th>
-            <th data-sort="ffmpegMs">ffmpeg (ms)</th>
-            <th data-sort="timingDeltaPct">Δ timing %</th>
-            <th data-sort="durationDeltaSec">Δ duration</th>
-            <th data-sort="psnr">PSNR</th>
-            <th data-sort="ssim">SSIM</th>
+            <th data-sort="goMediaWriteMs">go+write ms</th>
+            <th data-sort="ffmpegMs">ffmpeg ms</th>
+            <th data-sort="timingDeltaPct">Δ%</th>
+            <th>Gate</th>
             <th>Detail</th>
           </tr>
         </thead>
@@ -101,22 +100,29 @@
   </section>
 
   <section id="buildmode-section">
-    <h2>Thumbnail timing by build mode (vs ffmpeg)</h2>
-    <p class="hint">Median go+write ms per variant: <code>default</code> (asm + PGO), <code>purego</code> (<code>-tags purego</code>), <code>simd</code> (<code>GOEXPERIMENT=simd</code>). Gate applies to <strong>default</strong> in-process timings only.</p>
+    <h2>Thumbnail timing: stacked build tiers (vs ffmpeg)</h2>
+    <p class="hint" id="buildmode-hint">Three incremental tiers (subprocess thumbmode): (1) <code>purego</code> — no PGO, no asm/SIMD; (2) <code>purego_pgo</code>; (3) <code>purego_pgo_simd</code>. The <strong>≤20% support gate</strong> uses the shipped in-process build only (see header).</p>
     <div class="chart-box tall">
+      <h3>Δ% vs ffmpeg by tier</h3>
       <div class="chart-wrap"><canvas id="chart-build-modes"></canvas></div>
+    </div>
+    <div class="chart-box tall">
+      <h3>go+write ms by tier (stacked)</h3>
+      <div class="chart-wrap"><canvas id="chart-build-modes-ms"></canvas></div>
     </div>
     <div class="table-scroll">
       <table id="buildmode-table" class="sortable">
         <thead>
           <tr>
+            <th>Tier</th>
             <th>Asset</th>
             <th>Preset</th>
             <th>Mode</th>
             <th>go+write ms</th>
             <th>ffmpeg ms</th>
-            <th>Δ%</th>
-            <th>≤20% gate</th>
+            <th>Δ% vs ffmpeg</th>
+            <th>Δ% vs prev tier</th>
+            <th>≤20% vs ffmpeg</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -147,16 +153,14 @@
     </div>
   </section>
 
-  <section id="thumbs-section">
-    <h2>Thumbnail comparisons</h2>
-    <p class="hint">Drag the divider to compare ffmpeg (left) vs go-media (right). Click a preview to enlarge (still draggable in the zoom view).</p>
-    <div id="thumb-grid"></div>
+  <section id="thumb-grid-section">
+    <h2>Thumbnail compare</h2>
+    <div id="thumb-grid" class="thumb-grid"></div>
   </section>
 
   <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true">
     <button type="button" class="lightbox-close" aria-label="Close">×</button>
     <div id="lightbox-body"></div>
-    <p id="lightbox-caption"></p>
   </div>
 
   <script src="app.js"></script>

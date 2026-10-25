@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-10-25T14:50:00Z",
+  "gitHead": "634d8fe4e7e22dd10a76380238d7367839d311cd",
+  "profileSha256": "355b46e5a3a381ff463540d5c37ad5b29d9e1cea01c5df1a023a4122c883e72d",
+  "workloads": [
+    "Run make pgo to merge MJPEG/H.264 Main/High/WebM thumbnail benches + Baseline CAVLC decode"
+  ],
+  "hotPathGlobs": [
+    "internal/thumb/**/*.go",
+    "internal/h264/**/*.go",
+    "internal/kernels/**/*.go",
+    "internal/isobmff/**/*.go",
+    "internal/matroska/**/*.go",
+    "internal/jpegfast/**/*.go"
+  ]
+}

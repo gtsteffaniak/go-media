@@ -203,41 +203,71 @@ function initCompareSlider(sliderOrRoot, { onZoom } = {}) {
   return { getPct: () => pct, setPct: apply };
 }
 
-function renderBuildModeChart(modeRows) {
+const BUILD_MODE_ORDER = ['purego', 'purego_pgo', 'purego_pgo_simd'];
+const BUILD_MODE_LABELS = {
+  purego: '1 · purego',
+  purego_pgo: '2 · purego+PGO',
+  purego_pgo_simd: '3 · purego+PGO+simd',
+};
+
+function renderBuildModeCharts(modeRows) {
   const canvas = document.getElementById('chart-build-modes');
+  const canvasMs = document.getElementById('chart-build-modes-ms');
   if (!canvas || !modeRows.length) return;
   const keys = [...new Set(modeRows.map((r) => `${r.assetId}:${r.thumbPreset}`))].sort();
-  const modes = ['default', 'purego', 'simd'];
-  const datasets = modes.map((mode, i) => {
-    const colors = ['#5b9bd5', '#a8d08d', '#f4b183'];
-    return {
-      label: mode,
-      data: keys.map((k) => {
-        const [assetId, preset] = k.split(':');
-        const row = modeRows.find((r) => r.assetId === assetId && r.thumbPreset === preset && r.buildMode === mode);
-        return row ? row.timingDeltaPct * 100 : null;
-      }),
-      backgroundColor: colors[i],
-      borderRadius: 3,
-    };
-  });
+  const colors = ['#6b7a90', '#5b9bd5', '#3dd68c'];
+  const deltaDatasets = BUILD_MODE_ORDER.map((mode, i) => ({
+    label: BUILD_MODE_LABELS[mode] || mode,
+    data: keys.map((k) => {
+      const [assetId, preset] = k.split(':');
+      const row = modeRows.find((r) => r.assetId === assetId && r.thumbPreset === preset && r.buildMode === mode);
+      return row ? row.timingDeltaPct * 100 : null;
+    }),
+    backgroundColor: colors[i],
+    borderRadius: 3,
+  }));
   chartInstances.push(new Chart(canvas, {
     type: 'bar',
-    data: { labels: keys, datasets },
+    data: { labels: keys, datasets: deltaDatasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: { labels: { color: '#e7ecf3' } },
-        title: { display: true, text: 'Δ% vs ffmpeg (go+write)', color: '#e7ecf3' },
+        title: { display: false },
       },
       scales: {
         x: { ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45 }, grid: { color: '#2a3544' } },
         y: {
           ticks: { color: '#9aa8bc', callback: (v) => v + '%' },
           grid: { color: '#2a3544' },
-          title: { display: true, text: '20% gate', color: '#c55' },
+          title: { display: true, text: 'Δ% vs ffmpeg (20% gate)', color: '#c55' },
         },
+      },
+    },
+  }));
+
+  if (!canvasMs) return;
+  const msDatasets = BUILD_MODE_ORDER.map((mode, i) => ({
+    label: BUILD_MODE_LABELS[mode] || mode,
+    data: keys.map((k) => {
+      const [assetId, preset] = k.split(':');
+      const row = modeRows.find((r) => r.assetId === assetId && r.thumbPreset === preset && r.buildMode === mode);
+      return row ? row.goMediaWriteMs : null;
+    }),
+    backgroundColor: colors[i],
+    borderRadius: 3,
+  }));
+  chartInstances.push(new Chart(canvasMs, {
+    type: 'bar',
+    data: { labels: keys, datasets: msDatasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#e7ecf3' } } },
+      scales: {
+        x: { stacked: true, ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45 }, grid: { color: '#2a3544' } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: '#9aa8bc' }, grid: { color: '#2a3544' }, title: { display: true, text: 'ms', color: '#9aa8bc' } },
       },
     },
   }));
@@ -416,6 +446,13 @@ function renderReport(report) {
         .join('; ');
   }
   document.getElementById('timing-meta').textContent = timingLine;
+  const gateEl = document.getElementById('gate-build-meta');
+  if (gateEl) {
+    const gate = s.timingGateBuild || 'amd64_asm_kernels_pgo_in_process';
+    const tiers = (s.buildModeTiers || []).join(' · ');
+    gateEl.textContent =
+      `Support gate (≤20%): in-process ${gate} (asm kernels + -pgo=default.pgo, not purego). Report tiers: ${tiers || 'purego → purego+PGO → purego+PGO+simd'}.`;
+  }
 
   const cards = document.getElementById('summary-cards');
   cards.innerHTML = '';
@@ -564,17 +601,37 @@ function renderReport(report) {
   const modeTbody = document.querySelector('#buildmode-table tbody');
   if (modeTbody) {
     modeTbody.innerHTML = '';
+    const byKey = {};
     for (const r of modeRows) {
+      const k = `${r.assetId}:${r.thumbPreset}`;
+      if (!byKey[k]) byKey[k] = {};
+      byKey[k][r.buildMode] = r;
+    }
+    const sorted = [...modeRows].sort(
+      (a, b) =>
+        (a.assetId + a.thumbPreset).localeCompare(b.assetId + b.thumbPreset) ||
+        (a.tier || 0) - (b.tier || 0),
+    );
+    for (const r of sorted) {
       const tr = document.createElement('tr');
       const deltaClass = r.timingGatePass ? 'delta-good' : 'delta-bad';
-      tr.innerHTML = `<td>${r.assetId}</td><td>${r.thumbPreset}</td><td>${r.buildMode}</td>
+      const prevMode = BUILD_MODE_ORDER[(r.tier || 1) - 2];
+      let inc = '—';
+      if (prevMode) {
+        const prev = byKey[`${r.assetId}:${r.thumbPreset}`]?.[prevMode];
+        if (prev && prev.goMediaWriteMs > 0) {
+          inc = `${(((r.goMediaWriteMs - prev.goMediaWriteMs) / prev.goMediaWriteMs) * 100).toFixed(0)}%`;
+        }
+      }
+      tr.innerHTML = `<td>${r.tier ?? '—'}</td><td>${r.assetId}</td><td>${r.thumbPreset}</td><td>${r.buildMode}</td>
         <td>${r.goMediaWriteMs?.toFixed(1) ?? '—'}</td><td>${r.ffmpegMs?.toFixed(1) ?? '—'}</td>
         <td class="${deltaClass}">${(r.timingDeltaPct * 100).toFixed(0)}%</td>
+        <td>${inc}</td>
         <td class="${deltaClass}">${r.timingGatePass ? 'pass' : 'fail'}</td>`;
       modeTbody.appendChild(tr);
     }
   }
-  renderBuildModeChart(modeRows);
+  renderBuildModeCharts(modeRows);
 
   const scalerRows = report.scalerBenchmarks || [];
   const renderScalerBody = (sortKey, sortDir) => {

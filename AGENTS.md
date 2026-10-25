@@ -35,9 +35,10 @@ Instructions for autonomous coding agents working in this repository.
 3. **Go version:** **`go.mod` minimum `go 1.27`**. **CI** uses **`go-version: stable`** + **`check-latest: true`**.
 4. **Do not use [Eyevinn/hi264](https://github.com/Eyevinn/hi264)** as a module or vendored tree. All H.264 decode work stays in **`internal/h264`** (ITU-T H.264; ffmpeg/openh264 as behavioral references only — no GPL/LGPL copies).
 5. **Dependencies:** keep the graph small. **`github.com/Eyevinn/mp4ff`** is allowed **only where it pays for itself** (today: **`avc` SPS/PPS/slice/NAL** parsing in `internal/h264` validation and the legacy decoder path). Do not add mp4ff for MP4 container work — use **`abema/go-mp4`** for boxes/demux.
-6. **SIMD:** Design hot paths for **Go simd / `GOEXPERIMENT=simd`** where practical, alongside **stable amd64 asm** and **`-tags purego`** fallbacks — all **bit-identical** on shared tests. The comparison report records **default / purego / simd** thumbnail timings vs ffmpeg; **the ≤20% gate uses default (in-process) only**.
-7. **Performance policy:** Supported features ≤**20%** slower than **ffmpeg 9.0.2** exec (10% target). Failures → **`ErrUnsupported`** / **`ErrUnsupportedProfile`**. No timing exemptions.
-8. **Quality:** PSNR/SSIM vs ffmpeg; H.264 intra decode YUV metrics on keyframe fixtures.
+6. **SIMD:** Design hot paths for **Go simd / `GOEXPERIMENT=simd`** where practical, alongside **stable amd64 asm** and **`-tags purego`** fallbacks — all **bit-identical** on shared tests. The comparison report records **three stacked tiers** vs ffmpeg: **(1) purego**, **(2) purego + PGO**, **(3) purego + PGO + simd** (subprocess thumbmode). **The ≤20% support gate uses the shipped in-process build only:** **amd64 asm kernels + `-pgo=default.pgo`** (not purego). See `docs/PROFILING.md`.
+7. **PGO:** Keep **`default.pgo`** and **`default.pgo.provenance.json`** in sync with hot paths (`make pgo` after corpus/decoder changes). Harness uses `GOFLAGS=-pgo=default.pgo`. CI runs **`make check-pgo`** (warn if stale).
+8. **Performance policy:** Supported features ≤**20%** slower than **ffmpeg 9.0.2** exec (10% target). Failures → **`ErrUnsupported`** / **`ErrUnsupportedProfile`**. No timing exemptions.
+9. **Quality:** PSNR/SSIM vs ffmpeg; H.264 intra decode YUV metrics on keyframe fixtures.
 
 ## Thumbnail presets (FileBrowser-aligned)
 
@@ -53,11 +54,11 @@ make compare-gate
 make pgo && make profile && make bench-thumb
 ```
 
-Report: `test/compare/report_site/` includes **build mode** charts (`buildModeTimings` in `report.json`).
+Report: `test/compare/report_site/` includes **stacked build tiers** (`buildModeTimings`: purego → purego+PGO → purego+PGO+simd) and documents **`timingGateBuild`** in `report.json`.
 
 ## CI and PR workflow
 
 - Triggers: **`push` to `main`**, **`pull_request`**. No cursor-branded workflow names.
-- Matrix: amd64/arm64, default/`purego`, **Go stable**, compare-gate (PGO check), **`GOEXPERIMENT=simd`** job (kernels + report simd subprocess timings; non-blocking for merge).
+- Matrix: amd64/arm64, default/`purego`, **Go stable**, compare-gate (`default.pgo` + **check-pgo** warn), **`GOEXPERIMENT=simd`** job (kernels + tier-3 thumbmode smoke; non-blocking for merge).
 - **CodeRabbit:** docstring coverage ≥ **80%** on touched public API.
 - **Before finishing:** CI green; resolve all CodeRabbit threads.

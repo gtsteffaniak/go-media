@@ -163,6 +163,12 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	s.FFmpegVersion = ffmpegVersionLine()
 	s.FFprobeVersion = ffprobeVersionLine()
 	s.GoMediaModule = "github.com/gtsteffaniak/go-media"
+	s.TimingGateBuild = ShippedTimingGateBuild
+	s.BuildModeTiers = []string{
+		"1: purego (no PGO, no asm/SIMD)",
+		"2: purego + PGO (-pgo=default.pgo)",
+		"3: purego + PGO + GOEXPERIMENT=simd",
+	}
 	checkNames := []CheckName{
 		CheckDuration, CheckProbe, CheckTags, CheckArtwork,
 		CheckLyrics, CheckSubtitles, CheckThumbnailSmall, CheckThumbnailLarge,
