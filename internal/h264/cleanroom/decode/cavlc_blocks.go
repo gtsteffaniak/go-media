@@ -10,12 +10,17 @@ var zigzag4x4 = [16]int{0, 1, 4, 8, 5, 2, 3, 6, 9, 12, 13, 10, 7, 11, 14, 15}
 // coefficients in scan order (index = scan position), of length maxNumCoeff,
 // plus the number of nonzero ones. nC — the neighbor context (or -1 for chroma DC).
 func residualBlockCAVLC(r *bitstream.Reader, nC, maxNumCoeff int) ([]int32, int) {
+	if maxNumCoeff > 16 {
+		panic("residualBlockCAVLC: maxNumCoeff > 16")
+	}
 	trailingOnes, totalCoeff := decodeCoeffToken(r, nC)
-	coeff := make([]int32, maxNumCoeff)
+	var coeffBuf [16]int32
+	coeff := coeffBuf[:maxNumCoeff]
 	if totalCoeff == 0 {
 		return coeff, 0
 	}
-	levels := readLevels(r, trailingOnes, totalCoeff)
+	var levelBuf [16]int32
+	levels := readLevelsInto(r, trailingOnes, totalCoeff, levelBuf[:totalCoeff])
 
 	zerosLeft := 0
 	if totalCoeff < maxNumCoeff {
@@ -26,7 +31,8 @@ func residualBlockCAVLC(r *bitstream.Reader, nC, maxNumCoeff int) ([]int32, int)
 		}
 	}
 
-	runs := make([]int, totalCoeff)
+	var runsBuf [16]int
+	runs := runsBuf[:totalCoeff]
 	for i := 0; i < totalCoeff-1; i++ {
 		if zerosLeft > 0 {
 			runs[i] = decodeRunBefore(r, zerosLeft)

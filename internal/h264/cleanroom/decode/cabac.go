@@ -44,32 +44,31 @@ type cabacCtx struct {
 	mps   uint8 // valMPS 0/1
 }
 
+const numCabacCtx = 460
+
 // cabacEngine — the binary arithmetic decoder and the context model array.
 type cabacEngine struct {
 	r          *bitstream.Reader
 	codIRange  uint32
 	codIOffset uint32
-	ctx        []cabacCtx
+	ctx        [numCabacCtx]cabacCtx
 }
 
-// newCabacEngine initializes the engine registers. The slice data must already
-// be byte aligned (cabac_alignment_one_bit consumed by the caller). Context
-// models are initialized separately (see context initialization).
-func newCabacEngine(r *bitstream.Reader, numCtx int) *cabacEngine {
-	return &cabacEngine{
-		r:          r,
-		codIRange:  510,
-		codIOffset: r.U(9),
-		ctx:        make([]cabacCtx, numCtx),
-	}
+// resetCabacEngine initializes registers and context models for a new slice.
+// The RBSP must already be byte aligned (cabac_alignment_one_bit consumed).
+func (e *cabacEngine) resetCabacEngine(r *bitstream.Reader, sliceQP, model int) {
+	e.r = r
+	e.codIRange = 510
+	e.codIOffset = r.U(9)
+	e.initContexts(sliceQP, model)
 }
 
 // newCabacDecoder builds an engine with the full 460 context models and
 // initializes them from sliceQP (ISO/IEC 14496-10). model selects the init set:
 // 0 for an I-slice, cabac_init_idc+1 for P/B.
 func newCabacDecoder(r *bitstream.Reader, sliceQP, model int) *cabacEngine {
-	e := newCabacEngine(r, len(cabacInitConsts))
-	e.initContexts(sliceQP, model)
+	e := &cabacEngine{}
+	e.resetCabacEngine(r, sliceQP, model)
 	return e
 }
 

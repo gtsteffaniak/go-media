@@ -72,7 +72,7 @@ func (sd *sliceDecoder) decodeMB8x8Cabac(addr int) error {
 		var res [64]int32
 		var tc int
 		if cbpLuma&(1<<uint(blk8)) != 0 {
-			scan, n := residualBlockCABAC(cb, resLumaDC8, 0, 0)
+			scan, n := residualBlockCABAC(sd, resLumaDC8, 0, 0)
 			tc = n
 			res = inverseTransform8x8(dequant8x8(inverseScan8x8(scan), qp))
 		}
@@ -104,8 +104,8 @@ func (sd *sliceDecoder) decodeMB8x8Cabac(addr int) error {
 // with the top-right or p[7,-1] substitution), left (8), corner.
 func (sd *sliceDecoder) luma8x8Neighbors(gx, gy, px0, py0 int) (top, left []byte, corner byte, availTop, availLeft, availTL, availTR bool) {
 	f := sd.frame
-	top = make([]byte, 16)
-	left = make([]byte, 8)
+	top = sd.nTop8[:]
+	left = sd.nLeft8[:]
 	availTop = gy > 0 && sd.recon4[(gy-1)*sd.w4+gx]
 	availLeft = gx > 0 && sd.recon4[gy*sd.w4+gx-1]
 	availTL = gx > 0 && gy > 0 && sd.recon4[(gy-1)*sd.w4+gx-1]

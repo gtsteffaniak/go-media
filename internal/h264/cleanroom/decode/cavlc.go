@@ -15,10 +15,13 @@ func readLevelPrefix(r *bitstream.Reader) int {
 	return n
 }
 
-// readLevels reads the levels of TotalCoeff coefficients (order — from highest
-// frequency to lowest), per the ISO/IEC 14496-10 specification.
+// readLevels reads coefficient levels into dst (len ≥ totalCoeff).
 func readLevels(r *bitstream.Reader, trailingOnes, totalCoeff int) []int32 {
-	level := make([]int32, totalCoeff)
+	var buf [16]int32
+	return readLevelsInto(r, trailingOnes, totalCoeff, buf[:totalCoeff])
+}
+
+func readLevelsInto(r *bitstream.Reader, trailingOnes, totalCoeff int, level []int32) []int32 {
 
 	// Signs of trailing ones: bit 1 → -1, 0 → +1 (most significant first).
 	for i := 0; i < trailingOnes; i++ {

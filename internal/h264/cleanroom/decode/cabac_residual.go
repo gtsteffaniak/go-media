@@ -58,9 +58,16 @@ var (
 // residualBlockCABAC decodes one residual block via CABAC and returns the
 // coefficients in scan order plus the number of nonzero coefficients. condA/condB
 // are the coded_block_flag context increments derived from the neighbor blocks.
-func residualBlockCABAC(e *cabacEngine, resProp, condA, condB int) ([]int32, int) {
+func residualBlockCABAC(sd *sliceDecoder, resProp, condA, condB int) ([]int32, int) {
+	e := sd.cb
 	maxPos := blockCatMaxPos[resProp]
-	coeff := make([]int32, maxPos+1)
+	if maxPos+1 > len(sd.resCoeff) {
+		panic("residualBlockCABAC: block too large for scratch")
+	}
+	coeff := sd.resCoeff[:maxPos+1]
+	for i := range coeff {
+		coeff[i] = 0
+	}
 	is8x8 := resProp == resLumaDC8
 
 	// The 8x8 luma block has no coded_block_flag (presence comes from CBP).
@@ -72,7 +79,10 @@ func residualBlockCABAC(e *cabacEngine, resProp, condA, condB int) ([]int32, int
 	}
 
 	// Significance map: 1 at significant scan positions.
-	sig := make([]bool, maxPos+1)
+	sig := sd.resSig[:maxPos+1]
+	for i := range sig {
+		sig[i] = false
+	}
 	coeffNum := 0
 	mapBase, lastBase := ctxSigMap+blockCat2Map[resProp], ctxLastSig+blockCat2Last[resProp]
 	if is8x8 {

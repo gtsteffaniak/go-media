@@ -4,7 +4,8 @@ import "testing"
 
 func TestCabacInit(t *testing.T) {
 	// codIRange=510; codIOffset = first 9 bits. "101010101" = 0b101010101 = 341.
-	e := newCabacEngine(bitsReader("101010101"+"0000000"), 4)
+	e := &cabacEngine{}
+	e.resetCabacEngine(bitsReader("101010101"+"0000000"), 26, 0)
 	if e.codIRange != 510 {
 		t.Errorf("codIRange=%d, want 510", e.codIRange)
 	}
@@ -24,15 +25,15 @@ func TestCabacInitContexts(t *testing.T) {
 	if e.ctx[1].state != 6 || e.ctx[1].mps != 0 {
 		t.Errorf("ctx[1] = {%d,%d}, want {6,0}", e.ctx[1].state, e.ctx[1].mps)
 	}
-	if len(e.ctx) != 460 {
-		t.Errorf("context count = %d, want 460", len(e.ctx))
+	if numCabacCtx != 460 {
+		t.Errorf("context count = %d, want 460", numCabacCtx)
 	}
 }
 
 func TestCabacDecodeDecisionMPS(t *testing.T) {
 	// state=0,mps=0, range=510, offset=100. rangeLPS=rangeTabLPS[0][3]=240 →
 	// range=270; 100<270 → MPS path: binVal=0, state→transIdxMPS[0]=1, no renorm.
-	e := &cabacEngine{r: bitsReader("00000000"), codIRange: 510, codIOffset: 100, ctx: make([]cabacCtx, 1)}
+	e := &cabacEngine{r: bitsReader("00000000"), codIRange: 510, codIOffset: 100}
 	if b := e.decodeDecision(0); b != 0 {
 		t.Fatalf("binVal=%d, want 0 (MPS)", b)
 	}
@@ -45,7 +46,7 @@ func TestCabacDecodeDecisionLPS(t *testing.T) {
 	// state=0,mps=0, range=510, offset=300. range=270; 300>=270 → LPS path:
 	// binVal=1, offset=30, range=240, state0→mps flips to 1, state→transIdxLPS[0]=0,
 	// renorm: 240<256 → range=480, offset=(30<<1)|0=60.
-	e := &cabacEngine{r: bitsReader("00000000"), codIRange: 510, codIOffset: 300, ctx: make([]cabacCtx, 1)}
+	e := &cabacEngine{r: bitsReader("00000000"), codIRange: 510, codIOffset: 300}
 	if b := e.decodeDecision(0); b != 1 {
 		t.Fatalf("binVal=%d, want 1 (LPS)", b)
 	}

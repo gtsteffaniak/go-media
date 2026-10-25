@@ -16,6 +16,7 @@ type Decoder struct {
 	sps         map[uint32]*decode.SPS
 	pps         map[uint32]*decode.PPS
 	SkipDeblock bool
+	pic         *decode.Frame // reused coded buffer when resolution unchanged
 }
 
 // New creates a decoder with empty parameter-set maps.
@@ -98,7 +99,7 @@ func (d *Decoder) decodeSliceUnit(u nal.Unit, frame *decode.Frame, lastHdr *deco
 		return frame, lastHdr, nil
 	}
 	if frame == nil {
-		frame = decode.NewFrame(sps)
+		frame = d.pictureForSPS(sps)
 	}
 	h, err := decode.DecodeSlice(u.RBSP, u.Type, u.RefIDC, sps, pps, frame, d.SkipDeblock)
 	if err != nil {
@@ -119,6 +120,27 @@ func slicePPSID(rbsp []byte) uint32 {
 
 func sliceFirstMB(rbsp []byte) uint32 {
 	return bitstream.NewReader(rbsp).UE()
+}
+
+func (d *Decoder) pictureForSPS(sps *decode.SPS) *decode.Frame {
+	if d.pic != nil && pictureDimsMatch(d.pic, sps) {
+		return d.pic
+	}
+	d.pic = decode.NewFrame(sps)
+	return d.pic
+}
+
+func pictureDimsMatch(f *decode.Frame, s *decode.SPS) bool {
+	frameMbsOnly := 1
+	if !s.FrameMbsOnly {
+		frameMbsOnly = 0
+	}
+	mbH := int(s.HeightMapUnits) * (2 - frameMbsOnly)
+	return f.MbWidth == int(s.WidthMbs) &&
+		f.MbHeight == mbH &&
+		f.CropWidth == s.Width &&
+		f.CropHeight == s.Height &&
+		f.ChromaArrayType == s.ChromaArrayType()
 }
 
 func extractAVCNalus(data []byte) ([][]byte, error) {

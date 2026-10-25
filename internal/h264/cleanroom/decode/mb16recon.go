@@ -17,7 +17,7 @@ func (sd *sliceDecoder) decodeMB16(addr int, mb MBType) error {
 
 	// ---- Luma ----
 	top, left, corner, availL, availT := sd.lumaNeighbors16(mbX, mbY)
-	pred := make([]byte, 256)
+	pred := sd.predLuma[:]
 	predictIntra16x16(pred, mb.Intra16x16PredMode, top, left, corner, availL, availT)
 
 	// DC block (16 DC coefficients → inverse Hadamard).
@@ -98,7 +98,7 @@ func (sd *sliceDecoder) reconstructChroma420(mbX, mbY, predMode, cbpChroma, qpY 
 	// AC + prediction + write per component.
 	for c := range comps {
 		top, left, corner, availL, availT := sd.chromaNeighbors(comps[c].buf, mbX, mbY)
-		pred := make([]byte, f.MbWidthC*f.MbHeightC)
+		pred := sd.predChroma[:f.MbWidthC*f.MbHeightC]
 		predictIntraChroma8x8(pred, predMode, top, left, corner, availL, availT)
 
 		for blk := 0; blk < numBlk; blk++ {
@@ -124,7 +124,7 @@ func (sd *sliceDecoder) reconstructChroma420(mbX, mbY, predMode, cbpChroma, qpY 
 // a 16x16 luma MB.
 func (sd *sliceDecoder) lumaNeighbors16(mbX, mbY int) (top, left []byte, corner byte, availL, availT bool) {
 	f := sd.frame
-	top, left = make([]byte, 16), make([]byte, 16)
+	top, left = sd.nTop16[:], sd.nLeft16[:]
 	availL = mbX > 0 && sd.mbDecoded[mbY*f.MbWidth+mbX-1]
 	availT = mbY > 0 && sd.mbDecoded[(mbY-1)*f.MbWidth+mbX]
 	x0, y0 := mbX*16, mbY*16
@@ -149,7 +149,7 @@ func (sd *sliceDecoder) lumaNeighbors16(mbX, mbY int) (top, left []byte, corner 
 func (sd *sliceDecoder) chromaNeighbors(buf []byte, mbX, mbY int) (top, left []byte, corner byte, availL, availT bool) {
 	f := sd.frame
 	w, hh := f.MbWidthC, f.MbHeightC
-	top, left = make([]byte, w), make([]byte, hh)
+	top, left = sd.nTop16[:w], sd.nLeft16[:hh]
 	availL = mbX > 0 && sd.mbDecoded[mbY*f.MbWidth+mbX-1]
 	availT = mbY > 0 && sd.mbDecoded[(mbY-1)*f.MbWidth+mbX]
 	x0, y0 := mbX*w, mbY*hh

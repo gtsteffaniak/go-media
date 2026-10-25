@@ -51,8 +51,23 @@ type sliceDecoder struct {
 	i4mode     []int8 // Intra4x4PredMode per 4x4 block (-1 = not 4x4)
 	mbQP       []int  // QP_Y of each MB (for deblocking; I_PCM → 0)
 
-	// CABAC state (cb != nil selects the CABAC entropy path).
 	cb                 *cabacEngine
+	cabacScratch       cabacEngine
+
+	// Reused MB / residual scratch (avoid per-MB heap traffic).
+	predLuma     [256]byte
+	predChroma   [128]byte
+	nTop16       [16]byte
+	nLeft16      [16]byte
+	nTop4        [8]byte
+	nLeft4       [4]byte
+	nTop8        [16]byte
+	nLeft8       [8]byte
+	levelScratch [16]int32
+	runsScratch  [16]int
+	resCoeff     [64]int32
+	resSig       [64]bool
+
 	mbI4x4             []bool // MB is I_NxN (for mb_type context)
 	mbIsPCM            []bool // MB is I_PCM
 	mbCbp              []int  // per-MB coded_block_pattern (low 4 luma, high chroma)
@@ -63,41 +78,9 @@ type sliceDecoder struct {
 	mbTransform8x8     []bool // per-MB transform_size_8x8_flag
 }
 
+// newSliceDecoder is used by unit tests; production decode uses acquireSliceDecoder.
 func newSliceDecoder(r *bitstream.Reader, h *SliceHeader, sps *SPS, pps *PPS, frame *Frame) *sliceDecoder {
-	sd := &sliceDecoder{
-		r: r, h: h, sps: sps, pps: pps, frame: frame,
-		qp:        int(h.SliceQP),
-		w4:        frame.MbWidth * 4,
-		h4:        frame.MbHeight * 4,
-		mbDecoded: make([]bool, frame.MbWidth*frame.MbHeight),
-		mbQP:      make([]int, frame.MbWidth*frame.MbHeight),
-	}
-	sd.nzLuma = make([]uint8, sd.w4*sd.h4)
-	sd.recon4 = make([]bool, sd.w4*sd.h4)
-	sd.i4mode = make([]int8, sd.w4*sd.h4)
-	for i := range sd.i4mode {
-		sd.i4mode[i] = -1
-	}
-	if frame.ChromaArrayType != 0 {
-		sd.cbpw = frame.MbWidthC / 4
-		sd.cw4 = frame.MbWidth * sd.cbpw
-		sd.ch4 = frame.MbHeight * (frame.MbHeightC / 4)
-		sd.nzCb = make([]uint8, sd.cw4*sd.ch4)
-		sd.nzCr = make([]uint8, sd.cw4*sd.ch4)
-	}
-	// transform_size_8x8_flag нужен обоим путям (High profile: CAVLC I_8x8 + деблок).
-	sd.mbTransform8x8 = make([]bool, frame.MbWidth*frame.MbHeight)
-	if pps.EntropyCodingMode {
-		n := frame.MbWidth * frame.MbHeight
-		sd.mbI4x4 = make([]bool, n)
-		sd.mbIsPCM = make([]bool, n)
-		sd.mbCbp = make([]int, n)
-		sd.mbChromaPredMode = make([]int8, n)
-		sd.cbfLumaDC = make([]bool, n)
-		sd.cbfCbDC = make([]bool, n)
-		sd.cbfCrDC = make([]bool, n)
-	}
-	return sd
+	return acquireSliceDecoder(r, h, sps, pps, frame)
 }
 
 // run iterates over the macroblocks of the slice (CAVLC I: without mb_skip_run).

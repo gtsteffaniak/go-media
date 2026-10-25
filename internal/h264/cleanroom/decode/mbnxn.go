@@ -206,8 +206,8 @@ func (sd *sliceDecoder) predIntra4x4Mode(mbX, mbY, gx, gy int) int {
 // from the recon4 grid (accounts for the reconstruction order within the MB).
 func (sd *sliceDecoder) luma4x4Neighbors(gx, gy int) (top, left []byte, corner byte, availTop, availLeft bool) {
 	f := sd.frame
-	top = make([]byte, 8)
-	left = make([]byte, 4)
+	top = sd.nTop4[:]
+	left = sd.nLeft4[:]
 	px0, py0 := gx*4, gy*4
 
 	availTop = gy > 0 && sd.recon4[(gy-1)*sd.w4+gx]
