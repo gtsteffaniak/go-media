@@ -8,8 +8,8 @@ import (
 	"github.com/gtsteffaniak/go-media"
 )
 
-const thumbTimingWarmup = 9
-const thumbTimingRuns = 11
+const thumbTimingWarmup = 11
+const thumbTimingRuns = 15
 const maxTimingRegressionPct = 0.20
 const targetTimingRegressionPct = 0.10
 
