@@ -1,3 +1,5 @@
+//go:build amd64 && !purego
+
 #include "textflag.h"
 
 // func reconstructLuma4x4Asm(y unsafe.Pointer, stride int, px int, py int, pred unsafe.Pointer, residual unsafe.Pointer)
