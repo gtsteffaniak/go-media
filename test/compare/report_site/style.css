@@ -78,3 +78,31 @@ th { background: var(--card); position: sticky; top: 0; }
   color: var(--muted);
   text-align: center;
 }
+
+/* Wide layout for docs/comparison Playwright captures (?capture=1). */
+body.capture-mode {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+body.capture-mode #thumb-grid {
+  grid-template-columns: 1fr;
+}
+body.capture-mode .thumb-card[data-asset-id="mjpeg_mp4"] .thumb-pair,
+body.capture-mode .thumb-card[data-asset-id="webm_vp8"] .thumb-pair {
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+body.capture-mode .thumb-card[data-asset-id="mjpeg_mp4"] .thumb-pair img,
+body.capture-mode .thumb-card[data-asset-id="webm_vp8"] .thumb-pair img {
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  margin: 0 auto;
+  display: block;
+}
+body.capture-mode .thumb-card[data-asset-id="mjpeg_mp4"] .thumb-pair figcaption,
+body.capture-mode .thumb-card[data-asset-id="webm_vp8"] .thumb-pair figcaption {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}

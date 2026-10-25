@@ -25,7 +25,7 @@ Implementation: `test/compare/harness/seed.go`.
 | Error | 0 |
 | Skipped (not applicable) | 57 |
 
-### Why 52 checks are skipped
+### Why 57 checks are skipped
 
 Skips are **expected N/A rows**, not failures. Each asset runs seven checks (`duration`, `probe`, `tags`, `artwork`, `lyrics`, `subtitles`, `thumbnail`). A check is skipped when it does not apply to that fixture—for example `tags` on video-only files, `thumbnail` on audio, `lyrics` without an `.lrc` sidecar, or `subtitles` when the asset is not a subtitle-focused case. The CLI summary and `report.json` `detail` field document the reason per row.
 
@@ -58,8 +58,11 @@ Requirements: Go 1.26+, **ffmpeg/ffprobe 9.0.2** on `PATH` (install with `make f
 ```bash
 make compare          # report only
 make compare-gate     # report + expectations.json gate (CI uses this)
+make compare-docs     # compare + Playwright screenshots for docs/comparison/
 # open test/compare/report_site/index.html
 ```
+
+Doc screenshots (`docs/comparison/*.png`) are **browser captures** of the rendered report (`test/compare/report_site/index.html?capture=1`), not composited images. Regenerate with `make compare-docs` (requires Node + `npm install` under `scripts/` on first run).
 
 Manifest: [`test/compare/expectations.json`](../test/compare/expectations.json) lists the allowed status for all 105 `(asset, check)` pairs. `COMPARE_GATE=1` or `-gate` fails on any drift.
 
