@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -126,8 +127,22 @@ func ffprobeVersionLine() string {
 	return strings.TrimSpace(lines[0])
 }
 
-// ffmpegThumbnail extracts one JPEG frame at seekPercent into dest.
-func ffmpegThumbnail(path, dest string, seekPercent float64) error {
+// videoFrameSize returns the first video stream dimensions from ffprobe.
+func videoFrameSize(path string) (width, height int, ok bool) {
+	p, err := probeFFprobe(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	for _, s := range p.Streams {
+		if s.CodecType == "video" && s.Width > 0 && s.Height > 0 {
+			return s.Width, s.Height, true
+		}
+	}
+	return 0, 0, false
+}
+
+// ffmpegThumbnailPreset extracts one JPEG frame aligned with a media thumbnail preset.
+func ffmpegThumbnailPreset(path, dest string, seekPercent float64, preset thumbnailPresetConfig) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
@@ -137,63 +152,136 @@ func ffmpegThumbnail(path, dest string, seekPercent float64) error {
 		dur = 5
 	}
 	ss := dur * seekPercent / 100.0
-	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
+	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+		preset.MaxWidth, preset.MaxHeight, preset.FFScale)
+	qv := ffmpegQScale(preset.Quality)
+	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-i", path}
 	if dur >= 0.5 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
 	}
-	args = append(args, "-i", path, "-frames:v", "1", "-vf", "scale='min(320,iw)':-2", "-q:v", "2", dest)
+	args = append(args, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
 	return exec.Command(ffmpeg, args...).Run()
 }
 
-// imagePSNRSSIM compares two PNG/JPEG files via ffmpeg lavfi.
-func imagePSNRSSIM(a, b string) (psnr float64, ssim float64, err error) {
+// ffmpegRasterPNG writes a lossless PNG frame using the same seek/scale as thumbnails.
+func ffmpegRasterPNG(path, dest string, seekPercent float64, preset thumbnailPresetConfig) error {
 	ffmpeg, err := lookFFmpeg()
+	if err != nil {
+		return err
+	}
+	dur, err := ffprobeDuration(path)
+	if err != nil || dur <= 0 {
+		dur = 5
+	}
+	ss := dur * seekPercent / 100.0
+	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+		preset.MaxWidth, preset.MaxHeight, preset.FFScale)
+	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-i", path}
+	if dur >= 0.5 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
+	}
+	args = append(args, "-frames:v", "1", "-vf", vf, dest)
+	return exec.Command(ffmpeg, args...).Run()
+}
+
+func ffmpegQScale(quality int) int {
+	if quality < 1 {
+		quality = 1
+	}
+	if quality > 100 {
+		quality = 100
+	}
+	q := 31 - (quality*29)/100
+	if q < 2 {
+		return 2
+	}
+	if q > 31 {
+		return 31
+	}
+	return q
+}
+
+// imagePSNRSSIM compares two image files with separate ffmpeg psnr and ssim filters.
+func imagePSNRSSIM(a, b string) (psnr float64, ssim float64, err error) {
+	psnr, err = imagePSNR(a, b)
 	if err != nil {
 		return 0, 0, err
 	}
-	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
-		"-i", a, "-i", b,
-		"-lavfi", "[0:v][1:v]scale2ref[ref][main];[main][ref]psnr=stats_file=-;[main][ref]ssim=stats_file=-",
-		"-f", "null", "-")
+	ssim, err = imageSSIM(a, b)
+	if err != nil {
+		return psnr, 0, err
+	}
+	return psnr, ssim, nil
+}
+
+func imagePSNR(a, b string) (float64, error) {
+	ffmpeg, err := lookFFmpeg()
+	if err != nil {
+		return 0, err
+	}
+	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "info", "-i", a, "-i", b, "-lavfi", "psnr", "-f", "null", "-")
 	out, err := cmd.CombinedOutput()
 	text := string(out)
-	if err != nil && !strings.Contains(text, "PSNR") {
-		return 0, 0, fmt.Errorf("%w: %s", err, text)
+	if err != nil && !strings.Contains(text, "PSNR") && !strings.Contains(text, "psnr") {
+		return 0, fmt.Errorf("%w: %s", err, text)
 	}
 	for _, line := range strings.Split(text, "\n") {
 		if strings.Contains(line, "psnr_avg:") {
 			for _, field := range strings.Fields(line) {
 				if strings.HasPrefix(field, "psnr_avg:") {
-					psnr, _ = strconv.ParseFloat(strings.TrimPrefix(field, "psnr_avg:"), 64)
-				}
-			}
-		}
-		if strings.Contains(line, "PSNR") && strings.Contains(line, "average:") {
-			fields := strings.Fields(line)
-			for i, f := range fields {
-				if f == "average:" && i+1 < len(fields) {
-					psnr, _ = strconv.ParseFloat(strings.TrimSuffix(fields[i+1], "dB"), 64)
-				}
-			}
-		}
-		if strings.Contains(line, "All:") && strings.Contains(line, "SSIM") == false {
-			for _, field := range strings.Fields(line) {
-				if strings.HasPrefix(field, "All:") {
-					val := strings.TrimPrefix(field, "All:")
-					if val != "inf" && val != "(inf)" {
-						ssim, _ = strconv.ParseFloat(val, 64)
-					} else {
-						ssim = 1
+					v, _ := strconv.ParseFloat(strings.TrimPrefix(field, "psnr_avg:"), 64)
+					if math.IsInf(v, 1) {
+						return 100, nil
+					}
+					if v > 0 && !math.IsInf(v, 0) {
+						return v, nil
 					}
 				}
 			}
 		}
-		if strings.HasPrefix(strings.TrimSpace(line), "SSIM") {
-			parts := strings.Split(line, ":")
-			if len(parts) >= 2 {
-				ssim, _ = strconv.ParseFloat(strings.TrimSpace(strings.Split(parts[1], "(")[0]), 64)
+		if strings.Contains(line, "average:") && strings.Contains(line, "PSNR") {
+			for _, field := range strings.Fields(line) {
+				if strings.HasPrefix(field, "average:") {
+					v, _ := strconv.ParseFloat(strings.TrimPrefix(field, "average:"), 64)
+					if math.IsInf(v, 1) {
+						return 100, nil
+					}
+					if v > 0 && !math.IsInf(v, 0) {
+						return v, nil
+					}
+				}
 			}
 		}
 	}
-	return psnr, ssim, nil
+	return 0, fmt.Errorf("psnr not found in ffmpeg output: %s", text)
+}
+
+func imageSSIM(a, b string) (float64, error) {
+	ffmpeg, err := lookFFmpeg()
+	if err != nil {
+		return 0, err
+	}
+	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "info", "-i", a, "-i", b, "-lavfi", "ssim", "-f", "null", "-")
+	out, err := cmd.CombinedOutput()
+	text := string(out)
+	if err != nil && !strings.Contains(text, "SSIM") {
+		return 0, fmt.Errorf("%w: %s", err, text)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, "All:") && strings.Contains(line, "SSIM") {
+			for _, field := range strings.Fields(line) {
+				if strings.HasPrefix(field, "All:") {
+					val := strings.TrimPrefix(field, "All:")
+					if val == "inf" || val == "(inf)" {
+						continue
+					}
+					v, err := strconv.ParseFloat(val, 64)
+					if err == nil {
+						return v, nil
+					}
+				}
+			}
+		}
+	}
+	return 0, fmt.Errorf("ssim not found in ffmpeg output: %s", text)
 }

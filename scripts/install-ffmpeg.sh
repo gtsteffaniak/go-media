@@ -21,6 +21,13 @@ TARBALL="ffmpeg-${VERSION}-linux-${ARCH}.tar.gz"
 URL="https://github.com/gtsteffaniak/ffmpeg/releases/download/v${VERSION}/${TARBALL}"
 
 mkdir -p "$DEST"
+if [[ -x "$DEST/ffmpeg" && -x "$DEST/ffprobe" ]]; then
+	echo "Static ffmpeg $VERSION ($ARCH) already present at $DEST"
+	"$DEST/ffmpeg" -version 2>&1 | sed -n '1p'
+	"$DEST/ffprobe" -version 2>&1 | sed -n '1p'
+	exit 0
+fi
+
 echo "Downloading $URL"
 curl -fsSL --retry 3 --retry-delay 2 "$URL" -o "$DEST/$TARBALL"
 tar -xzf "$DEST/$TARBALL" -C "$DEST"

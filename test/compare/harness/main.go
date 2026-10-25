@@ -68,10 +68,20 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 		return nil
 	}
 
+	expectationsForPolicy := expectationsPath
+	if expectationsForPolicy == "" {
+		expectationsForPolicy = filepath.Join(base, "..", "expectations.json")
+	}
+	if exp, err := loadExpectations(expectationsForPolicy); err == nil {
+		activeTimingGate = timingGatePolicyFromExpectations(exp)
+	}
+
 	nested, err := runComparisons(assets, reportDir)
 	if err != nil {
 		return err
 	}
+	thumbDir := filepath.Join(reportDir, "media", "thumbs")
+	_scalerBenchmarks = runScalerBenchmarks(assets, thumbDir)
 	if err := writeReport(reportDir, assets, nested); err != nil {
 		return err
 	}
@@ -110,6 +120,7 @@ func loadAssetManifest(assetsDir string) ([]Asset, error) {
 		{"mp4_h264", "video/mp4_h264.mp4", "video", "MP4 H.264/AAC", nil},
 		{"mov_h264", "video/mov_h264.mov", "video", "MOV H.264", nil},
 		{"mkv_h264", "video/mkv_h264.mkv", "video", "MKV H.264", nil},
+		{"mkv_vp8", "video/mkv_vp8.mkv", "video", "MKV VP8", nil},
 		{"webm_vp8", "video/webm_vp8.webm", "video", "WebM VP8", nil},
 		{"webm_vp9", "video/webm_vp9.webm", "video", "WebM VP9", nil},
 		{"mjpeg_mp4", "video/mjpeg.mp4", "video", "MJPEG in MP4", nil},
@@ -128,6 +139,7 @@ func loadAssetManifest(assetsDir string) ([]Asset, error) {
 			filepath.Join(assetsDir, "video/sample.en.vtt"),
 			filepath.Join(assetsDir, "video/sample.en.ass"),
 		}},
+		{"mp4_embedded_subs", "video/mp4_embedded_subs.mp4", "video", "MP4 embedded subs", nil},
 	}
 	var assets []Asset
 	for _, row := range ids {

@@ -23,7 +23,7 @@ func writeReport(reportDir string, assets []Asset, results [][]CheckResult) erro
 	flat := flattenResults(results)
 	enrichResults(flat, prev)
 	summary := buildSummary(assets, nestedFromFlat(flat))
-	report := FullReport{Summary: summary, Assets: assets, Results: flat}
+	report := FullReport{Summary: summary, Assets: assets, Results: flat, ScalerBenchmarks: _scalerBenchmarks}
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
@@ -53,6 +53,30 @@ func nestedFromFlat(flat []CheckResult) [][]CheckResult {
 	return [][]CheckResult{flat}
 }
 
+// timingComparable is true when go-media and ffmpeg both finished a check worth latency comparison.
+func timingComparable(r CheckResult) bool {
+	if r.FFmpegMS <= 0 {
+		return false
+	}
+	switch r.Status {
+	case StatusSupported, StatusMismatch:
+		return true
+	default:
+		return false
+	}
+}
+
+func clearNonComparableTiming(r *CheckResult) {
+	if timingComparable(*r) {
+		return
+	}
+	r.GoMediaMS = 0
+	r.GoMediaWriteMS = 0
+	r.FFmpegMS = 0
+	r.TimingDeltaPct = nil
+	r.TimingGateFail = false
+}
+
 func enrichResults(flat []CheckResult, prev *FullReport) {
 	prevByKey := map[string]CheckResult{}
 	if prev != nil {
@@ -63,10 +87,17 @@ func enrichResults(flat []CheckResult, prev *FullReport) {
 	var timingRegressions, statusRegressions, compared int
 	for i := range flat {
 		r := &flat[i]
-		if r.FFmpegMS > 0 {
-			pct := (r.GoMediaMS - r.FFmpegMS) / r.FFmpegMS
+		if timingComparable(*r) {
+			goMs := r.GoMediaMS
+			if r.GoMediaWriteMS > 0 {
+				goMs = r.GoMediaWriteMS
+			}
+			pct := (goMs - r.FFmpegMS) / r.FFmpegMS
 			r.TimingDeltaPct = &pct
+		} else {
+			r.TimingDeltaPct = nil
 		}
+		clearNonComparableTiming(r)
 		if pr, ok := prevByKey[resultKey(*r)]; ok {
 			compared++
 			prevMS := pr.GoMediaMS
@@ -75,7 +106,7 @@ func enrichResults(flat []CheckResult, prev *FullReport) {
 				v := *pr.TimingDeltaPct
 				r.PrevTimingDelta = &v
 			}
-			reg := r.GoMediaMS > prevMS*1.15 && r.GoMediaMS-prevMS > 1
+			reg := timingComparable(*r) && r.GoMediaMS > prevMS*1.15 && r.GoMediaMS-prevMS > 1
 			r.TimingRegression = &reg
 			if reg {
 				timingRegressions++
@@ -98,6 +129,7 @@ func enrichResults(flat []CheckResult, prev *FullReport) {
 }
 
 var _lastPrevSummary *PreviousRunSummary
+var _scalerBenchmarks []ScalerBenchRow
 
 func resultKey(r CheckResult) string {
 	return r.AssetID + "\x00" + string(r.Check)
@@ -133,7 +165,7 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	s.GoMediaModule = "github.com/gtsteffaniak/go-media"
 	checkNames := []CheckName{
 		CheckDuration, CheckProbe, CheckTags, CheckArtwork,
-		CheckLyrics, CheckSubtitles, CheckThumbnail,
+		CheckLyrics, CheckSubtitles, CheckThumbnailSmall, CheckThumbnailLarge,
 	}
 	byCheckStatus := map[CheckName]map[CapabilityStatus]int{}
 	for _, c := range checkNames {
@@ -142,6 +174,7 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	var deltaPcts []float64
 	var totalGo, totalFF float64
 	comparable := 0
+	var relaxedRows []TimingRelaxedRow
 	for _, group := range nested {
 		for _, r := range group {
 			s.TotalChecks++
@@ -150,7 +183,7 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 				s.ByCheck[string(r.Check)]++
 			}
 			byCheckStatus[r.Check][r.Status]++
-			if r.FFmpegMS > 0 && r.Status != StatusSkipped {
+			if timingComparable(r) {
 				comparable++
 				totalGo += r.GoMediaMS
 				totalFF += r.FFmpegMS
@@ -158,8 +191,21 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 					deltaPcts = append(deltaPcts, *r.TimingDeltaPct)
 				}
 			}
+			if r.TimingGateRelaxed && r.TimingDeltaPct != nil && r.Status == StatusSupported {
+				relaxedRows = append(relaxedRows, TimingRelaxedRow{
+					AssetID:         r.AssetID,
+					Check:           string(r.Check),
+					ThumbPreset:     r.ThumbPreset,
+					TimingDeltaPct:  *r.TimingDeltaPct,
+					TimingGateLimit: r.TimingGateLimitPct,
+					GoMediaWriteMS:  r.GoMediaWriteMS,
+					FFmpegMS:        r.FFmpegMS,
+					Reason:          r.TimingGateRelaxReason,
+				})
+			}
 		}
 	}
+	s.TimingRelaxed = relaxedRows
 	for _, c := range checkNames {
 		m := byCheckStatus[c]
 		s.CapabilityChart = append(s.CapabilityChart, CapabilityBreakdown{

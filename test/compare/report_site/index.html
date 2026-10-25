@@ -57,7 +57,8 @@
             <th data-sort="artwork">Artwork</th>
             <th data-sort="lyrics">Lyrics</th>
             <th data-sort="subtitles">Subtitles</th>
-            <th data-sort="thumbnail">Thumbnail</th>
+            <th data-sort="thumbnail_small">Thumb S</th>
+            <th data-sort="thumbnail_large">Thumb L</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -99,15 +100,38 @@
     </div>
   </section>
 
+  <section id="scaler-section">
+    <h2>Scaler benchmark (vs ffmpeg area)</h2>
+    <p class="hint">Median of 7 timed runs after 2 warmup iterations. Δ% uses go-media encode+write vs full ffmpeg exec. PSNR/SSIM vs matching preset JPEG.</p>
+    <div class="table-scroll">
+      <table id="scaler-table" class="sortable">
+        <thead>
+          <tr>
+            <th data-sort="assetId">Asset</th>
+            <th data-sort="preset">Preset</th>
+            <th data-sort="scaler">Scaler</th>
+            <th data-sort="goMediaMs">go ms</th>
+            <th data-sort="goWriteMs">go+write ms</th>
+            <th data-sort="ffmpegMs">ffmpeg ms</th>
+            <th data-sort="deltaPct">Δ%</th>
+            <th data-sort="psnr">PSNR</th>
+            <th data-sort="ssim">SSIM</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
   <section id="thumbs-section">
     <h2>Thumbnail comparisons</h2>
-    <p class="hint">Drag the divider to compare ffmpeg (left) vs go-media (right). Click an image to expand.</p>
+    <p class="hint">Drag the divider to compare ffmpeg (left) vs go-media (right). Click a preview to enlarge (still draggable in the zoom view).</p>
     <div id="thumb-grid"></div>
   </section>
 
   <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true">
     <button type="button" class="lightbox-close" aria-label="Close">×</button>
-    <img id="lightbox-img" alt="" />
+    <div id="lightbox-body"></div>
     <p id="lightbox-caption"></p>
   </div>
 

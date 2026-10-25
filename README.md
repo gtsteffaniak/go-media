@@ -97,7 +97,7 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 | Codec | Approach | Support |
 |---|---|---|
 | MJPEG | extract the frame directly | ✅ |
-| VP8 (WebM/MKV) | `golang.org/x/image/vp8` | ✅ |
+| VP8 (WebM/MKV) | `github.com/gen2brain/vpx/vp8` (inter + golden/alt-ref) | ✅ |
 | H.264 stage 1 | intra-only IDR, CAVLC, 8-bit 4:2:0 (Baseline / Main without CABAC) | 📋 (API stub returns `ErrUnsupportedProfile`) |
 | H.264 stage 2 | adds CABAC and the 8x8 transform (High profile) | 📋 |
 | H.264 interlaced (PAFF/MBAFF), 10-bit, 4:2:2/4:4:4, inter prediction | — | ❌ |
@@ -144,15 +144,33 @@ These are research ideas, not commitments:
 - Inter-frame decoding or playback.
 - Damaged or truncated file recovery (ffmpeg's job).
 
-## Intended API (draft, illustrative only)
+## Thumbnail API
 
 ```go
-info, err := media.Probe(r, size)            // r io.ReaderAt
-d, src, err := media.Duration(r, size)       // src: header | estimate | scan
-img, err := media.Thumbnail(r, size, media.ThumbnailOptions{MaxWidth: 320, Fast: true})
+// FileBrowser-style presets (small = 256px Q76 area, large = 1280×720 Q90 area)
+thumb, err := media.ThumbnailSmall(r, size, 10)  // seek 10% into timeline
+thumb, err := media.ThumbnailLarge(r, size, 10)
+
+// Full control
+thumb, err := media.Thumbnail(r, size, media.ThumbnailOptions{
+    MaxWidth: 320, MaxHeight: 240, // aspect preserved (omit Preset to keep these)
+    Quality:  85,                   // JPEG 1–100
+    Format:   "jpeg",               // jpeg | png | webp-lossless
+    SeekPercent: 10,                // percent 0–100
+    Filter:   media.ThumbnailFilterArea, // fast | area | balanced | high
+})
+png, err := media.ThumbnailRasterPNG(r, size, opt) // lossless scaled decode (metrics / debug)
+
 if errors.Is(err, media.ErrUnsupported) {
     // fall back to ffmpeg
 }
+```
+
+Other entry points:
+
+```go
+info, err := media.Probe(r, size)      // r io.ReaderAt
+d, src, err := media.Duration(r, size) // src: header | estimate | scan
 ```
 
 ## Roadmap

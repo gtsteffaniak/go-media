@@ -84,13 +84,27 @@ type SubtitleTrack struct {
 
 // ThumbnailOptions configures Thumbnail.
 type ThumbnailOptions struct {
-	MaxWidth       int
-	MaxHeight      int
-	SeekPercent    float64 // 0–100, default ~10
-	Format         string  // "jpeg" or "png"
-	JPEGQuality    int     // 1–100, default 85
-	Fast           bool    // skip expensive steps when supported
-	PreferEmbedded bool    // try embedded cover art before video keyframe
+	// MaxWidth and MaxHeight bound the output size (aspect ratio preserved).
+	MaxWidth  int
+	MaxHeight int
+	// SeekPercent is the timeline position to capture (0–100). Alias: use Seek when set.
+	SeekPercent float64
+	// Seek overrides SeekPercent when > 0.
+	Seek float64
+	// Format is jpeg, png, or webp-lossless.
+	Format string
+	// Quality is JPEG quality 1–100 (preferred over JPEGQuality).
+	Quality int
+	// JPEGQuality is the legacy JPEG quality field (1–100).
+	JPEGQuality int
+	// Filter selects the scaler: fast, area, balanced, or high (see ThumbnailFilter* constants).
+	Filter ThumbnailFilter
+	// Preset applies FileBrowser-style small/large defaults when set.
+	Preset ThumbnailPreset
+	// Fast requests the fast filter (deprecated: use Filter or Preset).
+	Fast bool
+	// PreferEmbedded tries cover art before decoding video.
+	PreferEmbedded bool
 }
 
 // ThumbnailResult holds encoded image bytes and how they were obtained.

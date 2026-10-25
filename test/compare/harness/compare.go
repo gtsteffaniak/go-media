@@ -34,7 +34,9 @@ func compareAsset(a Asset, thumbDir string) []CheckResult {
 	out = append(out, checkArtwork(a))
 	out = append(out, checkLyrics(a))
 	out = append(out, checkSubtitles(a))
-	out = append(out, checkThumbnail(a, thumbDir))
+	for _, preset := range thumbnailPresets {
+		out = append(out, checkThumbnailPreset(a, thumbDir, preset))
+	}
 	return out
 }
 
@@ -295,6 +297,35 @@ func checkSubtitles(a Asset) CheckResult {
 		return res
 	}
 
+	if a.ID == "mp4_embedded_subs" {
+		if listErr != nil {
+			res.Status = classifyGoErr(listErr)
+			res.Detail = listErr.Error()
+			return res
+		}
+		if len(tracks) < 2 {
+			res.Status = StatusMismatch
+			res.Detail = fmt.Sprintf("expected >=2 embedded tracks, got %d", len(tracks))
+			return res
+		}
+		f2, err := openAsset(a)
+		if err != nil {
+			res.Status = StatusError
+			return res
+		}
+		for _, tr := range tracks[:2] {
+			vtt, exErr := media.ExtractEmbeddedSubtitle(f2, f2.Size(), tr.Index)
+			if exErr != nil || !strings.Contains(vtt, "WEBVTT") || !strings.Contains(vtt, "Hello from SRT") {
+				res.Status = StatusMismatch
+				res.Detail = fmt.Sprintf("track %d (%s): %v", tr.Index, tr.Codec, exErr)
+				return res
+			}
+		}
+		res.Status = StatusSupported
+		res.Detail = fmt.Sprintf("%d embedded tracks", len(tracks))
+		return res
+	}
+
 	if a.ID == "mkv_subtitles" {
 		if listErr != nil {
 			res.Status = classifyGoErr(listErr)
@@ -331,9 +362,21 @@ func checkSubtitles(a Asset) CheckResult {
 	return res
 }
 
-// checkThumbnail compares go-media Thumbnail with an ffmpeg frame when video is present.
-func checkThumbnail(a Asset, thumbDir string) CheckResult {
-	res := CheckResult{AssetID: a.ID, Check: CheckThumbnail}
+func thumbnailCheckName(preset thumbnailPresetConfig) CheckName {
+	if preset.Name == "large" {
+		return CheckThumbnailLarge
+	}
+	return CheckThumbnailSmall
+}
+
+func mediaPreset(preset thumbnailPresetConfig) media.ThumbnailOptions {
+	opt := media.OptionsForPreset(media.ThumbnailPreset(preset.Name), 10)
+	return opt
+}
+
+// checkThumbnailPreset compares go-media vs ffmpeg for one thumbnail preset.
+func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig) CheckResult {
+	res := CheckResult{AssetID: a.ID, Check: thumbnailCheckName(preset), ThumbPreset: preset.Name}
 	if a.Category != "video" {
 		res.Status = StatusSkipped
 		res.Detail = "audio fixture"
@@ -345,47 +388,111 @@ func checkThumbnail(a Asset, thumbDir string) CheckResult {
 		res.Detail = err.Error()
 		return res
 	}
-	start := time.Now()
-	tr, gErr := media.Thumbnail(f, f.Size(), media.ThumbnailOptions{
-		MaxWidth: 320, MaxHeight: 240, SeekPercent: 10, Format: "jpeg",
-	})
-	res.GoMediaMS = msSince(start)
+	opt := mediaPreset(preset)
 
-	goPath := filepath.Join(thumbDir, a.ID+"_go.jpg")
-	ffPath := filepath.Join(thumbDir, a.ID+"_ff.jpg")
-	res.ThumbGoPath = relReportPath(goPath)
-	res.ThumbFFPath = relReportPath(ffPath)
+	tr, gErr := media.Thumbnail(f, f.Size(), opt)
 
-	ffStart := time.Now()
-	ffErr := ffmpegThumbnail(a.Path, ffPath, 10)
-	res.FFmpegMS = msSince(ffStart)
+	base := a.ID + "_" + preset.Name
+	goPath := filepath.Join(thumbDir, base+"_go.jpg")
+	ffPath := filepath.Join(thumbDir, base+"_ff.jpg")
+	goPNG := filepath.Join(thumbDir, base+"_go.png")
+	ffPNG := filepath.Join(thumbDir, base+"_ff.png")
+
+	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, 10, preset)
 
 	if gErr != nil {
 		res.Status = classifyGoErr(gErr)
 		res.Detail = gErr.Error()
+		if ffErr == nil {
+			res.ThumbFFPath = relReportPath(ffPath)
+		}
 		return res
 	}
 	if err := os.WriteFile(goPath, tr.Data, 0o644); err != nil {
 		res.Status = StatusError
 		res.Detail = err.Error()
+		if ffErr == nil {
+			res.ThumbFFPath = relReportPath(ffPath)
+		}
 		return res
 	}
 	if ffErr != nil {
 		res.Status = StatusError
 		res.Detail = ffErr.Error()
+		res.ThumbGoPath = relReportPath(goPath)
 		return res
 	}
+	res.ThumbGoPath = relReportPath(goPath)
+	res.ThumbFFPath = relReportPath(ffPath)
+
+	_ = os.Remove(goPNG)
+	decOpt := opt
+	decOpt.Preset = ""
+	decOpt.Fast = false
+	rasterPreset := preset
+	if w, h, ok := videoFrameSize(a.Path); ok {
+		decOpt.MaxWidth = w
+		decOpt.MaxHeight = h
+		rasterPreset.MaxWidth = w
+		rasterPreset.MaxHeight = h
+	}
+	f2, err := openAsset(a)
+	if err == nil {
+		if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), decOpt); err == nil {
+			if err := os.WriteFile(goPNG, goRaw, 0o644); err == nil {
+				if err := ffmpegRasterPNG(a.Path, ffPNG, 10, rasterPreset); err == nil {
+					if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
+						res.PSNRDecode = dPSNR
+						res.SSIMDecode = dSSIM
+					}
+				}
+			}
+		}
+	}
+
 	psnr, ssim, mErr := imagePSNRSSIM(ffPath, goPath)
 	res.PSNR = psnr
 	res.SSIM = ssim
+	res.Detail = fmt.Sprintf("jpeg PSNR=%.1f SSIM=%.3f decode PSNR=%.1f SSIM=%.3f",
+		res.PSNR, res.SSIM, res.PSNRDecode, res.SSIMDecode)
 	if mErr != nil {
-		res.Detail = mErr.Error()
+		res.Detail += "; metrics: " + mErr.Error()
 	}
-	if ssim >= 0.85 || psnr >= 25 {
+
+	timing := benchmarkThumbnail(a, opt, preset)
+	res.GoMediaMS = timing.GoMS
+	res.GoMediaWriteMS = timing.WriteMS
+	res.FFmpegMS = timing.FFmpegMS
+	if res.FFmpegMS > 0 {
+		goCmp := res.GoMediaWriteMS
+		if goCmp <= 0 {
+			goCmp = res.GoMediaMS
+		}
+		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
+		res.TimingDeltaPct = &delta
+		limit, relaxed, relaxReason := activeTimingGate.maxRegression(a.ID, res.Check)
+		res.TimingGateLimitPct = limit
+		res.TimingGateRelaxed = relaxed
+		res.TimingGateRelaxReason = relaxReason
+		if delta > limit+1e-6 {
+			res.TimingGateFail = true
+		}
+	}
+
+	if res.TimingGateFail {
+		res.Status = StatusMismatch
+		limitPct := res.TimingGateLimitPct * 100
+		if limitPct <= 0 {
+			limitPct = maxTimingRegressionPct * 100
+		}
+		res.Detail += fmt.Sprintf("; timing gate: write %.0fms vs ffmpeg %.0fms (%.0f%% > %.0f%%)",
+			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100, limitPct)
+		return res
+	}
+	if res.SSIM >= 0.85 || res.PSNR >= 25 {
 		res.Status = StatusSupported
 	} else if tr.Width > 0 {
 		res.Status = StatusMismatch
-		res.Detail = fmt.Sprintf("visual delta PSNR=%.1f SSIM=%.3f", psnr, ssim)
 	} else {
 		res.Status = StatusSupported
 	}
