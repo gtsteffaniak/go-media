@@ -67,8 +67,10 @@ jobs:
         run: CGO_ENABLED=0 go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
 
   test-simd-experiment:
-    runs-on: ubuntu-latest
-    continue-on-error: true
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,11 +82,15 @@ jobs:
           cache: true
       - name: Test GOEXPERIMENT=simd kernels
         run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/...
-      - name: Install static ffmpeg (simd report smoke)
+      - name: Test GOEXPERIMENT=simd h264 decode
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/h264/...
+      - name: Install static ffmpeg (amd64 report smoke)
+        if: matrix.os == 'ubuntu-latest'
         run: bash scripts/install-ffmpeg.sh
       - name: Build thumbmode simd binary smoke
+        if: matrix.os == 'ubuntu-latest'
         working-directory: test/compare/harness
-        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -o /tmp/thumbmode-simd ./thumbmode
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -tags purego -pgo=default.pgo -o /tmp/thumbmode-simd ./thumbmode
 
   compare-gate:
     name: ffmpeg comparison gate

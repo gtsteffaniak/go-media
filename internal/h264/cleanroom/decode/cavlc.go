@@ -5,14 +5,10 @@ import "github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
 // readLevelPrefix counts the leading zeros and consumes the trailing one
 // (level_prefix).
 func readLevelPrefix(r *bitstream.Reader) int {
-	n := 0
-	for r.Bit() == 0 {
-		if r.Err() != nil {
-			return n
-		}
-		n++
+	if r.Err() != nil {
+		return 0
 	}
-	return n
+	return r.ReadUnaryPrefix()
 }
 
 // readLevels reads coefficient levels into dst (len ≥ totalCoeff).

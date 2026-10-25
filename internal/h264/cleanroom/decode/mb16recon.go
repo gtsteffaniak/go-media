@@ -1,5 +1,7 @@
 package decode
 
+import h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"
+
 // decodeMB16 decodes and reconstructs a single I_16x16 macroblock:
 // mb_pred → mb_qp_delta → residual (DC Hadamard + AC) → predict+residual into the plane.
 func (sd *sliceDecoder) decodeMB16(addr int, mb MBType) error {
@@ -65,12 +67,7 @@ func buildAC(acScan []int32) [16]int32 {
 // saturation. predStride is the width of the prediction buffer, (px0,py0) is the
 // top-left of the block in the plane, (lx,ly) is the block offset inside the prediction buffer.
 func writeBlock(plane []byte, stride, px0, py0 int, pred []byte, predStride, lx, ly int, res [16]int32) {
-	for yy := 0; yy < 4; yy++ {
-		for xx := 0; xx < 4; xx++ {
-			v := int(pred[(ly+yy)*predStride+lx+xx]) + int(res[yy*4+xx])
-			plane[(py0+yy)*stride+px0+xx] = clip1(v)
-		}
-	}
+	h264k.WriteBlock4x4(plane, stride, px0, py0, pred, predStride, lx, ly, res)
 }
 
 // reconstructChroma420 reconstructs both 4:2:0 chroma components (4 blocks of 4x4 each).

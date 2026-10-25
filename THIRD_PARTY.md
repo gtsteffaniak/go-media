@@ -8,4 +8,4 @@
 
 ## H.264 intra decode (`internal/h264/cleanroom`)
 
-Decode-only intra path for thumbnails. **No Eyevinn/hi264.** Slice/MB implementation is derived from **[mgvs/go-openh264](https://github.com/mgvs/go-openh264)** (BSD-2-Clause; ITU-T / openh264 design references) vendored under `internal/h264/cleanroom/` — see `NOTICE-mgvs` and `LICENSE-mgvs-BSD-2`. SPS policy and MP4 wiring remain in `internal/h264`. Regenerate `default.pgo` after decode changes (`make pgo`).
+Decode-only intra path for thumbnails. **No Eyevinn/hi264.** Slice/MB implementation is derived from **[mgvs/go-openh264](https://github.com/mgvs/go-openh264)** (BSD-2-Clause; ITU-T / openh264 design references) vendored under `internal/h264/cleanroom/` — see **`THIRD_PARTY_NOTICES.md`**, `NOTICE-mgvs`, and `LICENSE-mgvs-BSD-2`. Hot IDCT/recon paths call `internal/kernels/h264` (portable, amd64 asm where enabled, optional `GOEXPERIMENT=simd`). SPS policy and MP4 wiring remain in `internal/h264`. Regenerate `default.pgo` after decode changes (`make pgo`).

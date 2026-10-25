@@ -1,4 +1,7 @@
+// Package decode implements H.264 slice/MB decode (mgvs/go-openh264 BSD-2; see THIRD_PARTY_NOTICES.md).
 package decode
+
+import h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"
 
 // Inverse dequantization and integer transforms for H.264.
 // All functions operate on integer coefficients and do not depend on the
@@ -54,37 +57,9 @@ func dequant4x4(coef [16]int32, qp int) [16]int32 {
 	return d
 }
 
-// inverseTransform4x4 — inverse integer transform over the scaled
-// coefficients d; returns the residual r = (e + 32) >> 6.
+// inverseTransform4x4 applies the kernel IDCT + rounding (bit-identical portable/simd/asm dispatch).
 func inverseTransform4x4(d [16]int32) [16]int32 {
-	var f [16]int32
-	for i := 0; i < 4; i++ { // by rows
-		o := i * 4
-		e0 := d[o+0] + d[o+2]
-		e1 := d[o+0] - d[o+2]
-		e2 := (d[o+1] >> 1) - d[o+3]
-		e3 := d[o+1] + (d[o+3] >> 1)
-		f[o+0] = e0 + e3
-		f[o+1] = e1 + e2
-		f[o+2] = e1 - e2
-		f[o+3] = e0 - e3
-	}
-	var h [16]int32
-	for j := 0; j < 4; j++ { // by columns
-		g0 := f[0*4+j] + f[2*4+j]
-		g1 := f[0*4+j] - f[2*4+j]
-		g2 := (f[1*4+j] >> 1) - f[3*4+j]
-		g3 := f[1*4+j] + (f[3*4+j] >> 1)
-		h[0*4+j] = g0 + g3
-		h[1*4+j] = g1 + g2
-		h[2*4+j] = g1 - g2
-		h[3*4+j] = g0 - g3
-	}
-	var r [16]int32
-	for k := 0; k < 16; k++ {
-		r[k] = (h[k] + 32) >> 6
-	}
-	return r
+	return h264k.InverseTransform4x4Residual(d)
 }
 
 // inverseLumaDC — inverse 4x4 Hadamard over the I_16x16 DC coefficients and

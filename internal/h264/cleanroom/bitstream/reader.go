@@ -86,6 +86,22 @@ func (r *Reader) readBit() uint32 {
 // Bit reads one bit as 0/1.
 func (r *Reader) Bit() uint32 { return r.readBit() }
 
+// ReadUnaryPrefix counts leading zero bits then consumes the terminating one-bit
+// (H.264 level_prefix and Exp-Golomb zero run).
+func (r *Reader) ReadUnaryPrefix() int {
+	n := 0
+	for {
+		if r.readBit() == 0 {
+			n++
+			if n > 31 {
+				return n
+			}
+			continue
+		}
+		return n
+	}
+}
+
 // U reads n bits (0..32) as an unsigned integer, MSB-first — this is u(n).
 func (r *Reader) U(n int) uint32 {
 	if r.err != nil {

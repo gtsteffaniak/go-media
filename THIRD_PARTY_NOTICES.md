@@ -1,5 +1,15 @@
 # Third-party notices
 
-## H.264 intra decode (`internal/h264`)
+See also [THIRD_PARTY.md](THIRD_PARTY.md) for dependency policy.
 
-In-tree intra-only AVC decoder for MP4/MOV thumbnails. SPS/PPS/slice header parsing uses **`github.com/Eyevinn/mp4ff/avc`** (MIT). Decode logic is intended to live in **`internal/h264/cleanroom`** (ITU-T H.264, validated against ffmpeg). Until clean-room lands, do not treat relocated hi264 packages as third-party-original work — see **`docs/FOLLOWUP_H264_CLEANROOM.md`**.
+## mgvs/go-openh264 (BSD-2-Clause)
+
+H.264 slice/macroblock decode in `internal/h264/cleanroom/decode/` is derived from
+[mgvs/go-openh264](https://github.com/mgvs/go-openh264).
+
+- **Copyright:** Copyright (c) 2026 Oleksandr Zhabotynskyi
+- **License:** BSD-2-Clause — full text in `internal/h264/cleanroom/LICENSE-mgvs-BSD-2`
+- **Notice:** `internal/h264/cleanroom/NOTICE-mgvs`
+
+Source files under `internal/h264/cleanroom/decode/` that retain mgvs lineage include a
+header reference to this notice.
