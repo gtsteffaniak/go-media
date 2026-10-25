@@ -7,8 +7,8 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/errs"
 )
 
-// H.264 Baseline (profile_idc 66) uses CAVLC; pure-Go decode does not meet the ≤20% ffmpeg
-// thumbnail budget — callers should fall back to ffmpeg/go-ffmpeg.
+// H.264 Baseline (profile_idc 66) uses CAVLC. Supported only when the clean-room
+// SIMD-first path passes the ≤20% ffmpeg thumbnail gate (see docs/BASELINE_PROFILE.md).
 const h264ProfileBaseline = 66
 
 // validateSPSNAL rejects profiles go-media does not decode for thumbnails.

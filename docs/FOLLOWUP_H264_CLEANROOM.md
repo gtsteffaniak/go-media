@@ -1,38 +1,33 @@
 # Follow-up: clean-room H.264 intra decoder
 
-## Status (PR #9, branch `cursor/h264-cleanroom-decode-5c2e`)
+## Status (PR #9)
 
-**PR #9 is not acceptable as shipped.** Commit `7995631` relocated the former `third_party/hi264` tree into `internal/h264` with the same package layout (`intradec`, `cabac` including `encoder.go`, `cavlc`, `frame`, `h264context`, `pred`, `reconstruct`, `slice`, `transform`, `yuv`). That is **Eyevinn/hi264 in another directory**, not a clean-room decoder.
+Relocated **Eyevinn/hi264** under `internal/h264/{intradec,cabac,…}` is **unacceptable** and must be deleted once `internal/h264/cleanroom` passes parity and timing gates. See commit `7995631` lineage in PR #9 description.
 
-### Honest lineage (current tree before replacement)
+## Rewrite goals (Graham)
 
-| Area | Approx. lines | Origin |
-|------|---------------|--------|
-| `intradec`, `cabac`, `cavlc`, `slice`, `transform`, `pred`, `reconstruct`, `h264context`, `yuv` | ~8,262 | **100%** relocated from vendored **Eyevinn/hi264** (`7995631`) |
-| `frame` | ~125 | Same relocation (hi264 `pkg/frame`) |
-| `testdata/golden/*.264` | 40 bitstreams | hi264 encoder regression corpus |
-| `reconstruct/reconstruct_amd64.s` | asm | hi264 relocation |
-| Façade (`h264.go`, `decoder_pool.go`, `sps.go`, `avcc.go`, `rgb.go`, `yuv420.go`, `thumb_ycc.go`) | ~450 | Written for go-media; **calls** the hi264-derived `intradec` stack |
+- **Full rewrite** from **ITU-T H.264** (ffmpeg/openh264 behavioral references only; **no hi264** in any form).
+- **SIMD-first:** `GOEXPERIMENT=simd` / archsimd where applicable, **amd64 asm**, **`-tags purego`** fallbacks; bit-identical on shared kernel tests.
+- **Baseline (CAVLC):** design to pass **≤20%** ffmpeg thumbnail gate; **profile per stage** (demux/NAL, slice syntax, CAVLC entropy, coeff batching, dequant/IDCT, intra pred, plane writes). If gate passes → **supported**; if not → remain **unsupported** with **profile-backed root cause** in docs/PR.
+- **Main/High (CABAC):** decode-only intra; bit-exact YUV vs ffmpeg on harness fixtures.
+- **Thumbnails:** **skip in-loop deblock** on fast path; full deblock optional for parity tests.
+- **Hot path:** **zero allocations** per frame (pooled bitstream state, coeff batches, frame buffers); **PGO** via checked-in `default.pgo`.
 
-**Bottom line:** essentially **all entropy, syntax, prediction, transform, and reconstruct code** in PR #9 is hi264-derived. Only SPS policy, MP4 wiring, RGB/YUV helpers, and tests are go-media-specific.
+## Architecture (`internal/h264/cleanroom`)
 
-### Goal (unchanged)
+| Package | Role |
+|---------|------|
+| `bitstream` | **64-bit bit cache** RBSP reader (UE/SE/fixed, `more_rbsp_data`) |
+| `cavlc` | **Table-driven CAVLC**; multi-symbol coeff_token / total_zeros / run_before LUTs |
+| `cabac` | CABAC decode-only (no encoder) |
+| `coeff` | Batched residual levels (luma/chroma, 4×4 / 8×8) |
+| `intrapred` | 16×16 / 4×4 / 8×8 / chroma modes |
+| `pix` | Pooled Y/Cb/Cr planes + crop metadata |
+| `decode` | NAL AU orchestration; `SkipDeblock` for thumbs |
 
-Remove hi264 in **any** form (module, vendor, or relocated copy). Implement **decode-only** intra **Main/High** 8-bit 4:2:0 CABAC in **`internal/h264/cleanroom`** (or `decode/`) from **ITU-T H.264**, with **ffmpeg** / **openh264** as behavioral references only (no GPL/LGPL copies; no hi264 source).
+SIMD lives in **`internal/kernels/h264`**: dequant+IDCT+reconstruct, intra pred helpers, 4×4/8×8 plane writes.
 
-### Must keep
+## Gates (unchanged)
 
-- Baseline **unsupported** at SPS (`ErrUnsupportedProfile`) unless a future CAVLC path passes ≤20% vs ffmpeg.
-- Bit-exact **YUV vs ffmpeg** on harness golden fixtures; **≤20%** thumbnail gate on **default** in-process timings.
-- Comparison report **buildModeTimings**: default / `purego` / `GOEXPERIMENT=simd`.
-- **`mp4ff/avc`** for SPS/PPS/slice header parsing where it remains the smallest correct choice.
-
-### SIMD
-
-- IDCT / residual add, intra pred hot paths, optional deblock — **amd64 asm** + **`-tags purego`** + optional **simd** experiment; bit-identical on shared tests.
-
-### Acceptance
-
-- No `Eyevinn/hi264` in `go.mod`, `go.sum`, or tree.
-- No `cabac/encoder.go` or other encoder paths.
-- `make compare-gate` green; CI green; CodeRabbit threads resolved.
+- `make compare-gate` green; **buildModeTimings** default / purego / simd (gate uses **default** only).
+- Baseline support toggled in `sps.go` only after Baseline passes gate + profiling sign-off.
