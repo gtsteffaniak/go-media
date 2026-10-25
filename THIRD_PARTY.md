@@ -8,4 +8,6 @@
 
 ## H.264 intra decode (`internal/h264`)
 
-Implemented **in-tree** (ITU-T H.264 intra slice decode for thumbnails): `intradec`, `cabac`, `cavlc`, `transform`, `pred`, `slice`, `reconstruct` (amd64 asm + `purego`), `frame`, `yuv`. Behavioral validation uses ffmpeg/ffprobe on the comparison corpus. **No `Eyevinn/hi264` module dependency.**
+**Target:** clean-room decode-only intra Main/High under `internal/h264/cleanroom`, written from ITU-T H.264 (ffmpeg/openh264 as behavioral references only). See `docs/FOLLOWUP_H264_CLEANROOM.md`.
+
+**Current PR #9 state (not acceptable):** packages `intradec`, `cabac`, `cavlc`, `transform`, `pred`, `slice`, `reconstruct`, `h264context`, `frame`, `yuv` are **relocated Eyevinn/hi264** (~8.3k LOC), not a new implementation. There is **no** `github.com/Eyevinn/hi264` module entry, but relocated copies are still hi264 and must be deleted.

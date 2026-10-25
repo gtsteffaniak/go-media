@@ -1,6 +1,7 @@
 // Package h264 implements intra-only H.264/AVC keyframe decode for thumbnails.
 //
-// Intra-only AVC decode for thumbnails (ITU-T H.264); see internal/h264/intradec and THIRD_PARTY_NOTICES.md.
+// Intra-only AVC decode for thumbnails. Decode stack is being replaced under
+// internal/h264/cleanroom; see docs/FOLLOWUP_H264_CLEANROOM.md (hi264 relocation is not acceptable).
 package h264
 
 import (

@@ -16,7 +16,7 @@ Instructions for autonomous coding agents working in this repository.
 | `internal/sniff`, `internal/format`, `internal/detect` | Format detection and IDs. |
 | `internal/isobmff` | MP4/MOV: boxes, sync samples, MJPEG/H.264 thumbnail demux (`abema/go-mp4`). |
 | `internal/matroska` | MKV/WebM: cues, VP8/MJPEG thumbnails. |
-| `internal/h264` | In-tree intra-only H.264 decode (`intradec`, `cabac`, `reconstruct`, …). Main/High supported; Baseline rejected. **Do not add `Eyevinn/hi264`.** |
+| `internal/h264` | Clean-room intra-only H.264 under `cleanroom/` (in progress). Main/High supported; Baseline rejected. **No `Eyevinn/hi264`** (module, vendor, or relocated copy). |
 | `internal/vp8decode` | VP8 picture → RGBA/YCbCr scale helpers. |
 | `internal/jpegfast` | Fast MJPEG decode for thumbnails. |
 | `internal/thumb` | Thumbnail pipeline: seek, decode, YCbCr/RGBA scale, JPEG/PNG/WebP encode. |
