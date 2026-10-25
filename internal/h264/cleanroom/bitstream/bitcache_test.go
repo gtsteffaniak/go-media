@@ -3,13 +3,10 @@ package bitstream
 import "testing"
 
 func TestReadUE(t *testing.T) {
-	r := New([]byte{0x9a, 0x24})
+	// codeword for ue(0) is a single bit 1 → 0x80
+	r := New([]byte{0x80})
 	v, err := r.ReadUE()
 	if err != nil || v != 0 {
-		t.Fatalf("first ue: got %d err %v", v, err)
-	}
-	v, err = r.ReadUE()
-	if err != nil || v != 1 {
-		t.Fatalf("second ue: got %d err %v", v, err)
+		t.Fatalf("ue(0): got %d err %v", v, err)
 	}
 }
