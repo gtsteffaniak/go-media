@@ -17,15 +17,15 @@ Implementation: `test/compare/harness/seed.go`.
 
 | Metric | Count |
 |--------|------:|
-| Assets | 15 |
-| API checks | 105 |
-| **Supported** (matches ffmpeg within tolerance) | 40 |
+| Assets | 17 |
+| API checks | 119 |
+| **Supported** (matches ffmpeg within tolerance) | 47 |
 | Typed unsupported (`ErrUnsupported` / profile) | 8 |
 | Mismatch | 0 |
 | Error | 0 |
-| Skipped (not applicable) | 57 |
+| Skipped (not applicable) | 64 |
 
-### Why 57 checks are skipped
+### Why 64 checks are skipped
 
 Skips are **expected N/A rows**, not failures. Each asset runs seven checks (`duration`, `probe`, `tags`, `artwork`, `lyrics`, `subtitles`, `thumbnail`). A check is skipped when it does not apply to that fixture—for example `tags` on video-only files, `thumbnail` on audio, `lyrics` without an `.lrc` sidecar, or `subtitles` when the asset is not a subtitle-focused case. The CLI summary and `report.json` `detail` field document the reason per row.
 
@@ -33,8 +33,8 @@ Skips are **expected N/A rows**, not failures. Each asset runs seven checks (`du
 
 - **Duration + probe** are strong on MP4/MOV/MKV/WebM, WAV/FLAC/OGG/MP3/M4A fixtures derived from the seed or synthetic audio.
 - **Tags + artwork** align for ID3, Vorbis, and MP4 `ilst` on the generated audio matrix; FLAC embedded pictures are detected.
-- **Subtitles**: sidecar SRT/VTT/ASS convert to WebVTT; MKV embedded SRT extracts; MP4/MOV lists embedded tracks (wvtt/stpp/tx3g) and extracts when present. Assets without subtitle tracks skip the subtitles check.
-- **Thumbnails**: MJPEG-in-MP4 uses the sample table (`stsz`/`stco`/`stsc`) and matches ffmpeg closely. H.264 in MP4/MOV/MKV and VP8 WebM often return `ErrUnsupportedProfile` (H.264 intra decoder stub; VP8 golden/alt-ref frames) — ffmpeg is still required for those previews.
+- **Subtitles**: sidecar SRT/VTT/ASS convert to WebVTT; MKV embedded SRT extracts; MP4 embedded `tx3g` + `stpp` (ffmpeg-generated) list and extract; `wvtt` parsing is unit-tested (pinned ffmpeg cannot mux WebVTT into ISOBMFF).
+- **Thumbnails**: MJPEG-in-MP4 uses the sample table; VP8 in WebM/MKV seeks via cluster blocks and decodes inter frames (golden/alt-ref) with PSNR ~27.6 / SSIM 1.0 vs ffmpeg at 10% seek. H.264 in MP4/MOV/MKV remains typed-unsupported until the intra decoder lands.
 - **Artwork**: cover detection uses `attached_pic` disposition (not full-motion MJPEG video).
 
 ## Report dashboard
@@ -51,9 +51,13 @@ Interactive charts (timing histograms, capability breakdown, per-asset latency) 
 
 ![MJPEG thumbnail: ffmpeg vs go-media](comparison/mjpeg-thumbnail-side-by-side.png)
 
-### VP8 WebM (ffmpeg reference; go-media typed-unsupported on golden frames)
+### VP8 WebM (supported)
 
-![VP8 frame from ffmpeg](comparison/vp8-ffmpeg-frame.png)
+![VP8 WebM thumbnail: ffmpeg vs go-media](comparison/vp8-thumbnail-side-by-side.png)
+
+### VP8 MKV (supported)
+
+![VP8 MKV thumbnail: ffmpeg vs go-media](comparison/mkv-vp8-thumbnail-side-by-side.png)
 
 ## Running the suite
 
@@ -70,7 +74,7 @@ Doc screenshots (`docs/comparison/*.png`) are **browser captures** of the render
 
 `report.json` includes per-row `timingDeltaPct` ((go-media − ffmpeg) / ffmpeg), aggregate timing stats, capability breakdown, and optional regression flags when a previous `data/report.json` is present on disk before the run.
 
-Manifest: [`test/compare/expectations.json`](../test/compare/expectations.json) lists the allowed status for all 105 `(asset, check)` pairs. `COMPARE_GATE=1` or `-gate` fails on any drift.
+Manifest: [`test/compare/expectations.json`](../test/compare/expectations.json) lists the allowed status for all 119 `(asset, check)` pairs. `COMPARE_GATE=1` or `-gate` fails on any drift.
 
 Regenerate only comparisons (reuse fixtures):
 

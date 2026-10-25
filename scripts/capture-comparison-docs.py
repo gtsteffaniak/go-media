@@ -66,7 +66,8 @@ def main() -> int:
         "report-dashboard.png",
         "report-charts.png",
         "mjpeg-thumbnail-side-by-side.png",
-        "vp8-ffmpeg-frame.png",
+        "vp8-thumbnail-side-by-side.png",
+        "mkv-vp8-thumbnail-side-by-side.png",
     ):
         path = DOCS / name
         if not path.is_file():

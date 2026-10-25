@@ -50,6 +50,8 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 			[]string{"-i", clip, "-c", "copy", "-f", "mov"}, nil},
 		{"mkv_h264", "video", "MKV H.264", "video/mkv_h264.mkv",
 			[]string{"-i", clip, "-c", "copy", "-f", "matroska"}, nil},
+		{"mkv_vp8", "video", "MKV VP8", "video/mkv_vp8.mkv",
+			[]string{"-i", clip, "-c:v", "libvpx", "-g", "30", "-keyint_min", "30", "-crf", "10", "-b:v", "1M", "-an", "-f", "matroska"}, nil},
 		{"webm_vp8", "video", "WebM VP8", "video/webm_vp8.webm",
 			[]string{"-i", clip, "-c:v", "libvpx", "-g", "30", "-keyint_min", "30", "-crf", "10", "-b:v", "1M", "-an"}, nil},
 		{"webm_vp9", "video", "WebM VP9 (thumbnail unsupported)", "video/webm_vp9.webm",
@@ -134,6 +136,33 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 			filepath.Join(outDir, "video/sample.en.ass"),
 		},
 	})
+
+	// MP4 with embedded mov_text (tx3g) + TTML (stpp). Pinned ffmpeg 9.0.2 cannot mux WebVTT into
+	// ISOBMFF; wvtt extract is covered by isobmff unit tests.
+	mp4Mov := filepath.Join(outDir, "video/_mp4_mov_text.mp4")
+	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+		"-i", clip, "-i", subSRT,
+		"-map", "0:v", "-map", "1", "-c:v", "copy", "-c:s", "mov_text", mp4Mov); err != nil {
+		return nil, fmt.Errorf("mp4 mov_text: %w", err)
+	}
+	mp4TTML := filepath.Join(outDir, "video/_mp4_stpp.mp4")
+	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+		"-i", clip, "-i", subSRT,
+		"-map", "0:v", "-map", "1", "-c:v", "copy", "-c:s", "ttml", mp4TTML); err != nil {
+		return nil, fmt.Errorf("mp4 ttml: %w", err)
+	}
+	mp4Embed := filepath.Join(outDir, "video/mp4_embedded_subs.mp4")
+	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+		"-i", mp4Mov, "-i", mp4TTML,
+		"-map", "0:v", "-map", "0:s", "-map", "1:s", "-c", "copy", mp4Embed); err != nil {
+		return nil, fmt.Errorf("mp4_embedded_subs: %w", err)
+	}
+	assets = append(assets, Asset{
+		ID: "mp4_embedded_subs", Path: mp4Embed, Category: "video",
+		Description: "MP4 with embedded tx3g + stpp subtitles",
+	})
+	os.Remove(mp4Mov)
+	os.Remove(mp4TTML)
 
 	// Lyrics sidecar for FLAC
 	flacPath := filepath.Join(outDir, "audio/flac_tags.flac")

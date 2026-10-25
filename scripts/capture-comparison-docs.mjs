@@ -50,18 +50,16 @@ await page.locator('#charts-summary').scrollIntoViewIfNeeded();
 await page.waitForTimeout(500);
 await page.locator('#charts-metrics').screenshot({ path: join(docsDir, 'report-charts.png') });
 
-const mjpegSlider = page.locator('.thumb-card[data-asset-id="mjpeg_mp4"] .compare-slider');
-await mjpegSlider.scrollIntoViewIfNeeded();
-await mjpegSlider.screenshot({ path: join(docsDir, 'mjpeg-thumbnail-side-by-side.png') });
+async function captureCompareSlider(assetId, outName) {
+  const card = page.locator(`.thumb-card[data-asset-id="${assetId}"]`);
+  await card.scrollIntoViewIfNeeded();
+  await card.waitFor({ state: 'visible' });
+  const slider = card.locator('.compare-slider');
+  await slider.screenshot({ path: join(docsDir, outName) });
+}
 
-const vp8Slider = page.locator('.thumb-card[data-asset-id="webm_vp8"] .compare-slider');
-await vp8Slider.scrollIntoViewIfNeeded();
-await vp8Slider.evaluate((el) => {
-  const clip = el.querySelector('.compare-clip');
-  const handle = el.querySelector('.compare-handle');
-  if (clip) clip.style.clipPath = 'inset(0 100% 0 0)';
-  if (handle) handle.style.left = '0%';
-});
-await vp8Slider.screenshot({ path: join(docsDir, 'vp8-ffmpeg-frame.png') });
+await captureCompareSlider('mjpeg_mp4', 'mjpeg-thumbnail-side-by-side.png');
+await captureCompareSlider('webm_vp8', 'vp8-thumbnail-side-by-side.png');
+await captureCompareSlider('mkv_vp8', 'mkv-vp8-thumbnail-side-by-side.png');
 
 await browser.close();

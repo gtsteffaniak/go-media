@@ -6,8 +6,6 @@ import (
 	"bytes"
 	"errors"
 	"image"
-	"strings"
-	"image/color"
 	"image/jpeg"
 	"image/png"
 
@@ -17,7 +15,6 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
-	"golang.org/x/image/vp8"
 )
 
 // Options is a data type used by this package.
@@ -74,8 +71,11 @@ func Generate(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt
 			return encodeImage(b, "image/jpeg", opt)
 		}
 	case format.MKV, format.WebM:
-		if b, ok := matroska.VP8Keyframe(r, size, opt.SeekPercent); ok {
-			return decodeVP8(b, opt)
+		if img, ok := matroska.ThumbnailRGBA(r, size, opt.SeekPercent); ok {
+			return rasterize(img, opt, "decode")
+		}
+		if matroska.HasH264Video(r, size) {
+			return Result{}, errs.UnsupProfile("thumbnail", "h264 in matroska")
 		}
 	case format.MP3, format.FLAC, format.OGG:
 		if data, mime, err := tagread.Artwork(r, size); err == nil {
@@ -83,31 +83,6 @@ func Generate(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt
 		}
 	}
 	return Result{}, errs.Unsup("thumbnail", string(fmtID))
-}
-
-// decodeVP8 implements thumbnail encoding helpers.
-func decodeVP8(frame []byte, opt Options) (Result, error) {
-	dec := vp8.NewDecoder()
-	dec.Init(bytes.NewReader(frame), len(frame))
-	ycbcr, err := dec.DecodeFrame()
-	if err != nil {
-		if isVP8UnsupportedProfile(err) {
-			return Result{}, errs.UnsupProfile("vp8 thumbnail", err.Error())
-		}
-		return Result{}, err
-	}
-	bounds := ycbcr.Bounds()
-	img := image.NewRGBA(bounds)
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			yy := ycbcr.Y[y*ycbcr.YStride+x]
-			cb := ycbcr.Cb[(y/2)*ycbcr.CStride+x/2]
-			cr := ycbcr.Cr[(y/2)*ycbcr.CStride+x/2]
-			r8, g8, b8 := color.YCbCrToRGB(yy, cb, cr)
-			img.Set(x, y, color.RGBA{R: r8, G: g8, B: b8, A: 255})
-		}
-	}
-	return rasterize(img, opt, "decode")
 }
 
 // encodeImage implements thumbnail encoding helpers.
@@ -171,11 +146,6 @@ func scaleDown(img image.Image, maxW, maxH int) image.Image {
 		nh = 1
 	}
 	return resizeNearest(img, nw, nh)
-}
-
-func isVP8UnsupportedProfile(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, "Golden") || strings.Contains(msg, "AltRef")
 }
 
 // resizeNearest implements thumbnail encoding helpers.

@@ -295,6 +295,35 @@ func checkSubtitles(a Asset) CheckResult {
 		return res
 	}
 
+	if a.ID == "mp4_embedded_subs" {
+		if listErr != nil {
+			res.Status = classifyGoErr(listErr)
+			res.Detail = listErr.Error()
+			return res
+		}
+		if len(tracks) < 2 {
+			res.Status = StatusMismatch
+			res.Detail = fmt.Sprintf("expected >=2 embedded tracks, got %d", len(tracks))
+			return res
+		}
+		f2, err := openAsset(a)
+		if err != nil {
+			res.Status = StatusError
+			return res
+		}
+		for _, tr := range tracks[:2] {
+			vtt, exErr := media.ExtractEmbeddedSubtitle(f2, f2.Size(), tr.Index)
+			if exErr != nil || !strings.Contains(vtt, "WEBVTT") {
+				res.Status = StatusMismatch
+				res.Detail = fmt.Sprintf("track %d (%s): %v", tr.Index, tr.Codec, exErr)
+				return res
+			}
+		}
+		res.Status = StatusSupported
+		res.Detail = fmt.Sprintf("%d embedded tracks", len(tracks))
+		return res
+	}
+
 	if a.ID == "mkv_subtitles" {
 		if listErr != nil {
 			res.Status = classifyGoErr(listErr)

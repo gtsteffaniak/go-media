@@ -97,7 +97,7 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 | Codec | Approach | Support |
 |---|---|---|
 | MJPEG | extract the frame directly | ✅ |
-| VP8 (WebM/MKV) | `golang.org/x/image/vp8` | ✅ |
+| VP8 (WebM/MKV) | `github.com/gen2brain/vpx/vp8` (inter + golden/alt-ref) | ✅ |
 | H.264 stage 1 | intra-only IDR, CAVLC, 8-bit 4:2:0 (Baseline / Main without CABAC) | 📋 (API stub returns `ErrUnsupportedProfile`) |
 | H.264 stage 2 | adds CABAC and the 8x8 transform (High profile) | 📋 |
 | H.264 interlaced (PAFF/MBAFF), 10-bit, 4:2:2/4:4:4, inter prediction | — | ❌ |

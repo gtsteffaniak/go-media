@@ -107,6 +107,20 @@ func readHead(r io.ReaderAt, size int64) (*segmentHead, error) {
 	return &head, nil
 }
 
+// HasH264Video reports whether the file has an H.264 video track (thumbnail unsupported).
+func HasH264Video(r io.ReaderAt, size int64) bool {
+	head, err := readHead(r, size)
+	if err != nil {
+		return false
+	}
+	for _, t := range head.Segment.Tracks.TrackEntry {
+		if t.TrackType == 1 && t.CodecID == "V_MPEG4/ISO/AVC" {
+			return true
+		}
+	}
+	return false
+}
+
 // normalizeCodec maps Matroska CodecID values to short names.
 func normalizeCodec(id string) string {
 	switch id {
