@@ -1,3 +1,5 @@
+// Package mp3 supports go-media parsers.
+
 package mp3
 
 import (
@@ -9,6 +11,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
+// Duration reads container length from headers in internal.
 func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	if size < 128 {
 		return detect.DurationResult{}, errs.Corrupt
@@ -34,6 +37,7 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	return detect.DurationResult{Duration: d, Source: src}, nil
 }
 
+// syncSafe decodes an ID3v2 synchsafe integer.
 func syncSafe(b []byte) int {
 	return int(b[0]&0x7f)<<21 | int(b[1]&0x7f)<<14 | int(b[2]&0x7f)<<7 | int(b[3]&0x7f)
 }
@@ -44,6 +48,7 @@ var bitrates = [16]int{
 
 var sampleRates = [4]int{44100, 48000, 32000, 0}
 
+// durationFromFrames estimates MP3 length from frame headers.
 func durationFromFrames(buf []byte, start int, fileSize int64) (time.Duration, string, bool) {
 	pos := start
 	for pos+4 < len(buf) {
@@ -113,6 +118,7 @@ func durationFromFrames(buf []byte, start int, fileSize int64) (time.Duration, s
 	return 0, "", false
 }
 
+// min64 returns the smaller of two int64 values.
 func min64(a, b int64) int64 {
 	if a < b {
 		return a

@@ -63,6 +63,7 @@ func Probe(r io.ReaderAt, size int64) (*ProbeInfo, error) {
 	return info, nil
 }
 
+// streamsForFormat reads stream metadata for a detected container.
 func streamsForFormat(r io.ReaderAt, size int64, id format.ID) ([]Stream, error) {
 	switch id {
 	case format.MP4:
@@ -85,6 +86,7 @@ func streamsForFormat(r io.ReaderAt, size int64, id format.ID) ([]Stream, error)
 	}
 }
 
+// mapTags converts internal tag metadata to media.Tags.
 func mapTags(t tagread.Tags) Tags {
 	return Tags{
 		Title:  t.Title,

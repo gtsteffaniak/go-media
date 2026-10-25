@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestParseSRT is a test.
 func TestParseSRT(t *testing.T) {
 	in := `1
 00:00:01,000 --> 00:00:02,000
@@ -29,6 +30,7 @@ World
 	}
 }
 
+// FuzzParseSRT supports media inspection.
 func FuzzParseSRT(f *testing.F) {
 	f.Add("1\n00:00:00,000 --> 00:00:01,000\nx\n")
 	f.Fuzz(func(t *testing.T, s string) {

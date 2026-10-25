@@ -1,3 +1,5 @@
+// Package h264 supports go-media parsers.
+
 package h264
 
 import (

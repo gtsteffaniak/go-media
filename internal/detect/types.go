@@ -1,12 +1,16 @@
+// Package detect supports go-media parsers.
+
 package detect
 
 import "time"
 
+// DurationResult is a data type used by this package.
 type DurationResult struct {
 	Duration time.Duration
 	Source   string
 }
 
+// StreamType is a data type used by this package.
 type StreamType string
 
 const (
@@ -15,6 +19,7 @@ const (
 	StreamSubtitle StreamType = "subtitle"
 )
 
+// Stream is a data type used by this package.
 type Stream struct {
 	Index      int
 	Type       StreamType

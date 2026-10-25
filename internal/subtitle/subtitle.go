@@ -1,3 +1,5 @@
+// Package subtitle supports go-media parsers.
+
 package subtitle
 
 import (
@@ -91,10 +93,12 @@ func ParseASS(r io.Reader) (string, error) {
 	return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
 }
 
+// cueBlock is an internal subtitle helper.
 func cueBlock(start, end, text string) string {
 	return start + " --> " + end + "\n" + text
 }
 
+// toVTTTime is an internal subtitle helper.
 func toVTTTime(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.ReplaceAll(s, ",", ".")
@@ -108,6 +112,7 @@ func toVTTTime(s string) string {
 	return s
 }
 
+// stripASSTags is an internal subtitle helper.
 func stripASSTags(s string) string {
 	s = strings.ReplaceAll(s, "\\N", "\n")
 	for {

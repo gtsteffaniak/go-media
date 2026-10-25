@@ -1,3 +1,5 @@
+// Package ioat supports go-media parsers.
+
 package ioat
 
 import "io"
@@ -9,6 +11,7 @@ type Reader struct {
 	off  int64
 }
 
+// Read implements io.Reader.
 func (r *Reader) Read(p []byte) (int, error) {
 	if r.off >= r.Size {
 		return 0, io.EOF
@@ -21,6 +24,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// Seek implements io.Seeker.
 func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	var abs int64
 	switch whence {
@@ -43,6 +47,7 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	return r.off, nil
 }
 
+// ReadAt implements io.ReaderAt.
 func (r *Reader) ReadAt(p []byte, off int64) (int, error) {
 	if off < 0 || off >= r.Size {
 		return 0, io.EOF
@@ -56,6 +61,7 @@ func (r *Reader) ReadAt(p []byte, off int64) (int, error) {
 	return n, err
 }
 
+// New supports media inspection.
 func New(r io.ReaderAt, size int64) *Reader {
 	return &Reader{R: r, Size: size}
 }
@@ -96,10 +102,12 @@ type SectionReaderAt struct {
 	size int64
 }
 
+// NewSection supports media inspection.
 func NewSection(r io.ReaderAt, base, size int64) *SectionReaderAt {
 	return &SectionReaderAt{r: r, base: base, size: size}
 }
 
+// ReadAt implements io.ReaderAt.
 func (s *SectionReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	if off < 0 || off >= s.size {
 		return 0, io.EOF

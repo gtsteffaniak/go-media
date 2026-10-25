@@ -25,6 +25,7 @@ type UnsupportedError struct {
 	Reason string
 }
 
+// Error implements error.
 func (e *UnsupportedError) Error() string {
 	if e.Reason == "" {
 		return fmt.Sprintf("media: unsupported %s", e.Op)
@@ -32,6 +33,7 @@ func (e *UnsupportedError) Error() string {
 	return fmt.Sprintf("media: unsupported %s: %s", e.Op, e.Reason)
 }
 
+// Is supports errors.Is for UnsupportedError.
 func (e *UnsupportedError) Is(target error) bool {
 	return target == ErrUnsupported
 }
@@ -41,15 +43,18 @@ func Unsupported(op, reason string) error {
 	return &UnsupportedError{Op: op, Reason: reason}
 }
 
+// unsupportedProfileError holds unsupportedProfileError state for this package.
 type unsupportedProfileError struct {
 	op     string
 	reason string
 }
 
+// Error implements error.
 func (e *unsupportedProfileError) Error() string {
 	return fmt.Sprintf("media: unsupported profile %s: %s", e.op, e.reason)
 }
 
+// Is supports errors.Is for unsupportedProfileError.
 func (e *unsupportedProfileError) Is(target error) bool {
 	return target == ErrUnsupportedProfile
 }

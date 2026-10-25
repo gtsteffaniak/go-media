@@ -9,10 +9,12 @@ import (
 	"github.com/gtsteffaniak/go-media"
 )
 
+// bytesAt is a minimal io.ReaderAt over a byte slice.
 type bytesAt struct {
 	b []byte
 }
 
+// ReadAt implements io.ReaderAt.
 func (b bytesAt) ReadAt(p []byte, off int64) (int, error) {
 	if off >= int64(len(b.b)) {
 		return 0, os.ErrInvalid
@@ -21,6 +23,7 @@ func (b bytesAt) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
+// TestUnsupportedErrorKeepsDetail is a test.
 func TestUnsupportedErrorKeepsDetail(t *testing.T) {
 	wav := []byte("RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00")
 	_, err := media.Duration(bytesAt{b: wav}, int64(len(wav)))
@@ -30,6 +33,7 @@ func TestUnsupportedErrorKeepsDetail(t *testing.T) {
 	}
 }
 
+// openFixture opens a testdata file or skips the test.
 func openFixture(t *testing.T, name string) (*os.File, int64) {
 	f, err := os.Open("testdata/" + name)
 	if err != nil {
@@ -39,6 +43,7 @@ func openFixture(t *testing.T, name string) (*os.File, int64) {
 	return f, st.Size()
 }
 
+// TestDurationWAV is a test.
 func TestDurationWAV(t *testing.T) {
 	f, size := openFixture(t, "silence.wav")
 	defer f.Close()
@@ -54,6 +59,7 @@ func TestDurationWAV(t *testing.T) {
 	}
 }
 
+// TestProbeFLAC is a test.
 func TestProbeFLAC(t *testing.T) {
 	f, size := openFixture(t, "tone.flac")
 	defer f.Close()

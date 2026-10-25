@@ -1,3 +1,5 @@
+// Package isobmff supports go-media parsers.
+
 package isobmff
 
 import (
@@ -10,6 +12,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
+// Duration reads container length from headers in internal.
 func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	info, err := mp4.Probe(ioat.New(r, size))
 	if err != nil {
@@ -26,6 +29,7 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	return detect.DurationResult{Duration: d, Source: "header"}, nil
 }
 
+// Streams returns elementary stream descriptors from container headers.
 func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	info, err := mp4.Probe(ioat.New(r, size))
 	if err != nil {
@@ -56,6 +60,7 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	return streams, nil
 }
 
+// FormatName supports media inspection.
 func FormatName(r io.ReaderAt, size int64) string {
 	info, err := mp4.Probe(ioat.New(r, size))
 	if err != nil {

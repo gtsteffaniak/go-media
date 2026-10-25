@@ -1,3 +1,5 @@
+// Package ogg supports go-media parsers.
+
 package ogg
 
 import (
@@ -10,6 +12,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
+// Duration reads container length from headers in internal.
 func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	head, _ := ioat.ReadAll(r, size, 0, min64(size, 128*1024))
 	sr := sampleRateFromHead(head)
@@ -29,6 +32,7 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	return detect.DurationResult{Duration: time.Duration(sec * float64(time.Second)), Source: "header"}, nil
 }
 
+// sampleRateFromHead parses Vorbis or Opus sample rate from file prefix.
 func sampleRateFromHead(buf []byte) int {
 	if sr := vorbisSampleRate(buf); sr > 0 {
 		return sr
@@ -39,6 +43,7 @@ func sampleRateFromHead(buf []byte) int {
 	return 0
 }
 
+// vorbisSampleRate reads sample rate from a Vorbis ID header.
 func vorbisSampleRate(buf []byte) int {
 	for i := 0; i+18 <= len(buf); i++ {
 		if buf[i] == 0x01 && buf[i+1] == 'v' && buf[i+2] == 'o' && buf[i+3] == 'r' && buf[i+4] == 'b' && buf[i+5] == 'i' && buf[i+6] == 's' {
@@ -48,6 +53,7 @@ func vorbisSampleRate(buf []byte) int {
 	return 0
 }
 
+// opusSampleRate reads sample rate from an OpusHead packet.
 func opusSampleRate(buf []byte) int {
 	i := 0
 	for i+8 < len(buf) {
@@ -62,6 +68,7 @@ func opusSampleRate(buf []byte) int {
 	return 0
 }
 
+// lastGranule finds the highest Ogg page granule position in buf.
 func lastGranule(buf []byte) (uint64, bool) {
 	var lastGranule uint64
 	for i := 0; i+27 <= len(buf); i++ {
@@ -77,6 +84,7 @@ func lastGranule(buf []byte) (uint64, bool) {
 	return lastGranule, lastGranule != 0
 }
 
+// Streams returns elementary stream descriptors from container headers.
 func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	head, _ := ioat.ReadAll(r, size, 0, min64(size, 128*1024))
 	sr := sampleRateFromHead(head)
@@ -96,6 +104,7 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	}}, nil
 }
 
+// contains reports whether sub appears in b.
 func contains(b, sub []byte) bool {
 	for i := 0; i+len(sub) <= len(b); i++ {
 		ok := true
@@ -112,6 +121,7 @@ func contains(b, sub []byte) bool {
 	return false
 }
 
+// min64 returns the smaller of two int64 values.
 func min64(a, b int64) int64 {
 	if a < b {
 		return a

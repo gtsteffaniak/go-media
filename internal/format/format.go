@@ -1,5 +1,8 @@
+// Package format supports go-media parsers.
+
 package format
 
+// ID is a data type used by this package.
 type ID string
 
 const (

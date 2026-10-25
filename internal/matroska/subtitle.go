@@ -11,6 +11,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/subtitle"
 )
 
+// ExtractSubtitleWebVTT supports media inspection.
 func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, error) {
 	head, err := readHead(r, size)
 	if err != nil {
@@ -32,6 +33,7 @@ func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, 
 	if target == 0 {
 		target = uint64(streamIndex + 1)
 	}
+// block is a data type used by this package.
 	type block struct {
 		ts   int64
 		text string
@@ -87,6 +89,7 @@ func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, 
 	return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
 }
 
+// msToVTT formats milliseconds as a WebVTT timestamp.
 func msToVTT(ms int64) string {
 	if ms < 0 {
 		ms = 0

@@ -1,3 +1,5 @@
+// Package matroska supports go-media parsers.
+
 package matroska
 
 import (
@@ -10,6 +12,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
+// segmentHead is a data type used by this package.
 type segmentHead struct {
 	Segment struct {
 		Info struct {
@@ -22,6 +25,7 @@ type segmentHead struct {
 	}
 }
 
+// trackEntry is a data type used by this package.
 type trackEntry struct {
 	TrackNumber uint64 `ebml:"TrackNumber"`
 	TrackType   uint64 `ebml:"TrackType"`
@@ -38,6 +42,7 @@ type trackEntry struct {
 	} `ebml:"Audio"`
 }
 
+// Duration reads container length from headers in internal.
 func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	head, err := readHead(r, size)
 	if err != nil {
@@ -55,6 +60,7 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	return detect.DurationResult{Duration: d, Source: "header"}, nil
 }
 
+// Streams returns elementary stream descriptors from container headers.
 func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	head, err := readHead(r, size)
 	if err != nil {
@@ -91,6 +97,7 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	return out, nil
 }
 
+// readHead unmarshals the Segment info and track headers.
 func readHead(r io.ReaderAt, size int64) (*segmentHead, error) {
 	reader := io.NewSectionReader(ioat.New(r, size), 0, size)
 	var head segmentHead
@@ -100,6 +107,7 @@ func readHead(r io.ReaderAt, size int64) (*segmentHead, error) {
 	return &head, nil
 }
 
+// normalizeCodec maps Matroska CodecID values to short names.
 func normalizeCodec(id string) string {
 	switch id {
 	case "V_VP8":

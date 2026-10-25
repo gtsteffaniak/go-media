@@ -1,3 +1,5 @@
+// Package flac supports go-media parsers.
+
 package flac
 
 import (
@@ -9,6 +11,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
+// Duration reads container length from headers in internal.
 func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	head, err := ioat.ReadAll(r, size, 0, min64(size, 64*1024))
 	if err != nil {
@@ -44,6 +47,7 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	return detect.DurationResult{}, errs.Unsup("duration", "flac missing STREAMINFO")
 }
 
+// Streams returns elementary stream descriptors from container headers.
 func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	head, _ := ioat.ReadAll(r, size, 0, min64(size, 64*1024))
 	if len(head) < 8 {
@@ -77,6 +81,7 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	}}, nil
 }
 
+// min64 returns the smaller of two int64 values.
 func min64(a, b int64) int64 {
 	if a < b {
 		return a

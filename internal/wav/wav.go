@@ -1,3 +1,5 @@
+// Package wav supports go-media parsers.
+
 package wav
 
 import (
@@ -9,6 +11,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/errs"
 )
 
+// Duration reads container length from headers in internal.
 func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	if size < 12 {
 		return detect.DurationResult{}, errs.Corrupt
@@ -55,6 +58,7 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	return detect.DurationResult{Duration: time.Duration(sec * float64(time.Second)), Source: "header"}, nil
 }
 
+// Streams returns elementary stream descriptors from container headers.
 func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	if size < 12 {
 		return nil, errs.Corrupt

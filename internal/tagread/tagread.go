@@ -1,3 +1,5 @@
+// Package tagread supports go-media parsers.
+
 package tagread
 
 import (
@@ -11,6 +13,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 )
 
+// Tags is a data type used by this package.
 type Tags struct {
 	Title  string
 	Artist string
@@ -21,6 +24,7 @@ type Tags struct {
 	Raw    map[string]string
 }
 
+// ReadTags supports media inspection.
 func ReadTags(r io.ReaderAt, size int64, fmt format.ID) (Tags, error) {
 	m, err := readMetadata(r, size, fmt)
 	if err != nil {
@@ -42,6 +46,7 @@ func ReadTags(r io.ReaderAt, size int64, fmt format.ID) (Tags, error) {
 	return t, nil
 }
 
+// HasEmbeddedLyrics supports media inspection.
 func HasEmbeddedLyrics(r io.ReaderAt, size int64, fmt format.ID) bool {
 	m, err := readMetadata(r, size, fmt)
 	if err != nil {
@@ -50,6 +55,7 @@ func HasEmbeddedLyrics(r io.ReaderAt, size int64, fmt format.ID) bool {
 	return strings.TrimSpace(m.Lyrics()) != ""
 }
 
+// Lyrics supports media inspection.
 func Lyrics(r io.ReaderAt, size int64) (string, string, error) {
 	fmt, err := sniff.Detect(r, size)
 	if err != nil {
@@ -66,6 +72,7 @@ func Lyrics(r io.ReaderAt, size int64) (string, string, error) {
 	return text, "embedded", nil
 }
 
+// HasArtwork supports media inspection.
 func HasArtwork(r io.ReaderAt, size int64, fmt format.ID) bool {
 	m, err := readMetadata(r, size, fmt)
 	if err != nil {
@@ -75,6 +82,7 @@ func HasArtwork(r io.ReaderAt, size int64, fmt format.ID) bool {
 	return p != nil && len(p.Data) > 0
 }
 
+// Artwork supports media inspection.
 func Artwork(r io.ReaderAt, size int64) ([]byte, string, error) {
 	fmt, err := sniff.Detect(r, size)
 	if err != nil {
@@ -95,6 +103,7 @@ func Artwork(r io.ReaderAt, size int64) ([]byte, string, error) {
 	return p.Data, mime, nil
 }
 
+// readMetadata reads tags via dhowden/tag when supported.
 func readMetadata(r io.ReaderAt, size int64, fmt format.ID) (tag.Metadata, error) {
 	switch fmt {
 	case format.MP3, format.FLAC, format.OGG, format.MP4:

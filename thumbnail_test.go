@@ -7,6 +7,7 @@ import (
 	"github.com/gtsteffaniak/go-media"
 )
 
+// TestThumbnailMJPEGInMP4 is a test.
 func TestThumbnailMJPEGInMP4(t *testing.T) {
 	f, size := openFixture(t, "frame.mjpeg.mp4")
 	defer f.Close()
@@ -19,6 +20,7 @@ func TestThumbnailMJPEGInMP4(t *testing.T) {
 	}
 }
 
+// TestThumbnailFLACArt is a test.
 func TestThumbnailFLACArt(t *testing.T) {
 	f, size := openFixture(t, "tone.flac")
 	defer f.Close()

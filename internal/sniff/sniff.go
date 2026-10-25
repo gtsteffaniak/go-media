@@ -1,3 +1,5 @@
+// Package sniff supports go-media parsers.
+
 package sniff
 
 import (
@@ -48,6 +50,7 @@ func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 	return "", errs.NotMedia
 }
 
+// sniffEBML distinguishes WebM from Matroska.
 func sniffEBML(r io.ReaderAt, size int64) (format.ID, error) {
 	chunk, err := ioat.ReadAll(r, size, 0, min64(size, 256*1024))
 	if err != nil && err != io.EOF {
@@ -59,6 +62,7 @@ func sniffEBML(r io.ReaderAt, size int64) (format.ID, error) {
 	return format.MKV, nil
 }
 
+// min64 returns the smaller of two int64 values.
 func min64(a, b int64) int64 {
 	if a < b {
 		return a

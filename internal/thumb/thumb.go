@@ -1,3 +1,5 @@
+// Package thumb supports go-media parsers.
+
 package thumb
 
 import (
@@ -17,6 +19,7 @@ import (
 	"golang.org/x/image/vp8"
 )
 
+// Options is a data type used by this package.
 type Options struct {
 	MaxWidth       int
 	MaxHeight      int
@@ -27,6 +30,7 @@ type Options struct {
 	PreferEmbedded bool
 }
 
+// Result is a data type used by this package.
 type Result struct {
 	MIME   string
 	Data   []byte
@@ -35,6 +39,7 @@ type Result struct {
 	Height int
 }
 
+// Generate supports media inspection.
 func Generate(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt Options) (Result, error) {
 	if opt.MaxWidth <= 0 {
 		opt.MaxWidth = 320
@@ -79,6 +84,7 @@ func Generate(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt
 	return Result{}, errs.Unsup("thumbnail", string(fmtID))
 }
 
+// decodeVP8 implements thumbnail encoding helpers.
 func decodeVP8(frame []byte, opt Options) (Result, error) {
 	dec := vp8.NewDecoder()
 	dec.Init(bytes.NewReader(frame), len(frame))
@@ -100,6 +106,7 @@ func decodeVP8(frame []byte, opt Options) (Result, error) {
 	return rasterize(img, opt, "decode")
 }
 
+// encodeImage implements thumbnail encoding helpers.
 func encodeImage(data []byte, mime string, opt Options) (Result, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
@@ -111,6 +118,7 @@ func encodeImage(data []byte, mime string, opt Options) (Result, error) {
 	return rasterize(img, opt, "embedded")
 }
 
+// rasterize implements thumbnail encoding helpers.
 func rasterize(img image.Image, opt Options, src string) (Result, error) {
 	img = scaleDown(img, opt.MaxWidth, opt.MaxHeight)
 	var buf bytes.Buffer
@@ -128,6 +136,7 @@ func rasterize(img image.Image, opt Options, src string) (Result, error) {
 	}
 }
 
+// scaleDown implements thumbnail encoding helpers.
 func scaleDown(img image.Image, maxW, maxH int) image.Image {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -160,6 +169,7 @@ func scaleDown(img image.Image, maxW, maxH int) image.Image {
 	return resizeNearest(img, nw, nh)
 }
 
+// resizeNearest implements thumbnail encoding helpers.
 func resizeNearest(src image.Image, w, h int) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	sw, sh := src.Bounds().Dx(), src.Bounds().Dy()

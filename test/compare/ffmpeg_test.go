@@ -13,6 +13,7 @@ import (
 	"github.com/gtsteffaniak/go-media"
 )
 
+// ffprobeDuration reads duration seconds from ffprobe JSON.
 func ffprobeDuration(path string) (float64, error) {
 	out, err := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", path).Output()
 	if err != nil {
@@ -29,6 +30,7 @@ func ffprobeDuration(path string) (float64, error) {
 	return strconv.ParseFloat(payload.Format.Duration, 64)
 }
 
+// TestDurationMatchesFFprobe is a test.
 func TestDurationMatchesFFprobe(t *testing.T) {
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		t.Skip("ffprobe not installed")
@@ -60,6 +62,7 @@ func TestDurationMatchesFFprobe(t *testing.T) {
 	}
 }
 
+// TestH264KeyframeUnsupported is a test.
 func TestH264KeyframeUnsupported(t *testing.T) {
 	_, _, _, err := media.DecodeH264Keyframe(nil, 64, 64)
 	if !errors.Is(err, media.ErrUnsupportedProfile) {
