@@ -1,12 +1,11 @@
 package main
 
-import "strings"
-
 // TimingGatePolicy configures thumbnail latency gates (see expectations.json timingGate).
 type TimingGatePolicy struct {
-	DefaultMaxRegressionFraction float64  `json:"defaultMaxRegressionFraction"`
-	TargetMaxRegressionFraction  float64  `json:"targetMaxRegressionFraction"`
-	EnforcedAssetIDs             []string `json:"enforcedAssetIds"`
+	DefaultMaxRegressionFraction float64 `json:"defaultMaxRegressionFraction"`
+	TargetMaxRegressionFraction  float64 `json:"targetMaxRegressionFraction"`
+	// EnforcedAssetIDs is deprecated: when empty, every thumbnail_large/small check applies the gate.
+	EnforcedAssetIDs []string `json:"enforcedAssetIds,omitempty"`
 }
 
 func defaultTimingGatePolicy() TimingGatePolicy {
@@ -30,16 +29,8 @@ func timingGatePolicyFromExpectations(exp ExpectationsFile) TimingGatePolicy {
 	return p
 }
 
-func (p TimingGatePolicy) enforced(assetID string) bool {
-	if len(p.EnforcedAssetIDs) == 0 {
-		return true
-	}
-	for _, id := range p.EnforcedAssetIDs {
-		if id == assetID {
-			return true
-		}
-	}
-	return false
+func (p TimingGatePolicy) enforced(check CheckName) bool {
+	return check == CheckThumbnailLarge || check == CheckThumbnailSmall
 }
 
 func (p TimingGatePolicy) maxRegression() float64 {
@@ -47,12 +38,4 @@ func (p TimingGatePolicy) maxRegression() float64 {
 		return maxTimingRegressionPct
 	}
 	return p.DefaultMaxRegressionFraction
-}
-
-// mp4ThumbnailAsset is true for MP4 fixtures that use the shared thumbnail/PGO/SIMD stack.
-func mp4ThumbnailAsset(id string) bool {
-	if id == "mjpeg_mp4" {
-		return true
-	}
-	return strings.HasPrefix(id, "mp4_h264")
 }

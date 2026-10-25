@@ -484,7 +484,7 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 		}
 		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
 		res.TimingDeltaPct = &delta
-		if delta > activeTimingGate.maxRegression() && activeTimingGate.enforced(a.ID) {
+		if delta > activeTimingGate.maxRegression() && activeTimingGate.enforced(res.Check) {
 			res.TimingGateFail = true
 		}
 	}

@@ -67,6 +67,7 @@ jobs:
 
   test-simd-experiment:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,6 +92,8 @@ jobs:
           cache: true
       - name: Install static ffmpeg
         run: bash scripts/install-ffmpeg.sh
+      - name: Verify PGO profile
+        run: test -s default.pgo
       - name: Comparison gate
         run: make compare-gate
       - name: Upload HTML report

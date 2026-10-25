@@ -42,27 +42,35 @@ func loadH264Thumb(r io.ReaderAt, size int64, seekPercent float64) (h264ThumbCtx
 }
 
 // H264ThumbnailYCbCr decodes an IDR frame to YCbCr for area/box downscale before JPEG encode.
-func H264ThumbnailYCbCr(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*h264.ThumbYCbCr, bool) {
+// Returns (nil, nil) when the file is not a decodable H.264 MP4 thumbnail path.
+func H264ThumbnailYCbCr(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*h264.ThumbYCbCr, error) {
 	ctx, ok := loadH264Thumb(r, size, seekPercent)
 	if !ok {
-		return nil, false
+		return nil, nil
 	}
 	fr, err := h264.DecodeAVCCFrame(ctx.avcc, ctx.sample, fast)
-	if err != nil || fr == nil {
-		return nil, false
+	if err != nil {
+		return nil, err
 	}
-	return h264.NewThumbYCbCr(fr), true
+	if fr == nil {
+		return nil, nil
+	}
+	return h264.NewThumbYCbCr(fr), nil
 }
 
 // H264ThumbnailRGBA seeks to seekPercent and decodes an H.264 IDR frame to RGBA.
-func H264ThumbnailRGBA(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*image.RGBA, bool) {
+// Returns (nil, nil) when the file is not a decodable H.264 MP4 thumbnail path.
+func H264ThumbnailRGBA(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*image.RGBA, error) {
 	ctx, ok := loadH264Thumb(r, size, seekPercent)
 	if !ok {
-		return nil, false
+		return nil, nil
 	}
 	img, err := h264.DecodeAVCC(ctx.avcc, ctx.sample, fast)
-	if err != nil || img == nil {
-		return nil, false
+	if err != nil {
+		return nil, err
 	}
-	return img, true
+	if img == nil {
+		return nil, nil
+	}
+	return img, nil
 }

@@ -7,6 +7,10 @@ test/compare/report_site/data/
 test/compare/report_site/media/
 test/compare/.seed_tmp/
 
+# Local test binaries
+*.test
+h264.test
+
 # Doc capture (scripts/package.json)
 scripts/node_modules/
 scripts/node_modules/

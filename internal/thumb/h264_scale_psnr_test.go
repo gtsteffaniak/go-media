@@ -18,15 +18,15 @@ func TestH264AreaScaleMatchesFFmpeg(t *testing.T) {
 	if err != nil {
 		t.Skip("ffmpeg not installed")
 	}
-	path := filepath.Join("..", "..", "test", "compare", "harness", ".assets", "video", "mp4_h264_baseline_1080.mp4")
+	path := filepath.Join("..", "..", "test", "compare", "harness", ".assets", "video", "mp4_h264.mp4")
 	f, err := os.Open(path)
 	if err != nil {
 		t.Skip(err)
 	}
 	st, _ := f.Stat()
-	src, ok := isobmff.H264ThumbnailRGBA(f, st.Size(), 10, false)
-	if !ok {
-		t.Fatal("decode")
+	src, err := isobmff.H264ThumbnailRGBA(f, st.Size(), 10, false)
+	if err != nil || src == nil {
+		t.Fatalf("decode: %v", err)
 	}
 	tw, th := fitThumbSize(src.Bounds().Dx(), src.Bounds().Dy(), 1280, 720)
 	goScaled := scaleAreaRGBA(src, tw, th)

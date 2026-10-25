@@ -5,7 +5,7 @@ COMPARE_REPORT_SITE ?= test/compare/report_site
 COMPARE_SERVER_PORT ?= 8765
 export PATH := $(FFMPEG_DIR):$(PATH)
 
-.PHONY: test fixtures ffmpeg compare compare-gate compare-docs ci vet server
+.PHONY: test fixtures ffmpeg compare compare-gate compare-docs ci vet server pgo profile bench-thumb
 
 vet:
 	CGO_ENABLED=0 go vet ./...
@@ -30,5 +30,15 @@ server:
 
 compare-docs: compare
 	python3 scripts/capture-comparison-docs.py
+
+pgo:
+	./scripts/regenerate-pgo.sh
+
+profile:
+	GOMAXPROCS=1 CGO_ENABLED=0 go test -run='^$' -bench='BenchmarkMJPEG|BenchmarkMP4H264' -benchtime=20x -cpuprofile=/tmp/gomedia-thumb.prof ./internal/thumb/
+	go tool pprof -top -cum /tmp/gomedia-thumb.prof
+
+bench-thumb:
+	GOMAXPROCS=1 CGO_ENABLED=0 go test -run='^$' -bench='BenchmarkMJPEG|BenchmarkMP4H264' -benchtime=10x ./internal/thumb/
 
 ci: test compare-gate

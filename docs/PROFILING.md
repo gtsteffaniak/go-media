@@ -31,18 +31,14 @@ go tool pprof -top -cum cpu.prof
 
 Stages to map in pprof: demux (`isobmff`/`matroska`), entropy decode (`jpegfast`/hi264), IDCT, YCbCr scale (`internal/kernels`, `thumb`), JPEG encode (`image/jpeg`).
 
-### Baseline 1080p CAVLC (IDR)
+### MP4 H.264 Main/High (supported path)
 
 ```bash
-GOMAXPROCS=1 CGO_ENABLED=0 go test -run='^$' -bench='BenchmarkBaseline1080' -benchtime=10x ./internal/h264/
+make bench-thumb   # BenchmarkMJPEG* + BenchmarkMP4H264Large in internal/thumb
+make profile       # same benches with -cpuprofile
 ```
 
-| Stage | Bench | Typical share (amd64) |
-|-------|--------|------------------------|
-| Demux + CAVLC + reconstruct | `BenchmarkBaseline1080IDRDecode` | ~65–70 ms |
-| + scale + JPEG (`thumbnail_large`) | `BenchmarkBaseline1080ThumbnailLarge` | ~95–110 ms |
-
-ffmpeg on the same fixture is ~44–64 ms end-to-end; the gap is almost entirely hi264 CAVLC entropy + 4×4 reconstruct vs libavcodec SIMD (not demux or JPEG encode).
+H.264 **Baseline (CAVLC)** is not profiled in go-media: decode latency is roughly 2× ffmpeg on 1080p IDR fixtures, so the API returns `ErrUnsupportedProfile` and callers use ffmpeg.
 
 ## PGO
 

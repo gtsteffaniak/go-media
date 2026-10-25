@@ -14,7 +14,7 @@ make compare-gate
 ```
 
 - **Gate manifest:** `expectations.json` — must match `report_site/data/report.json` when `COMPARE_GATE=1`.
-- **Thumbnail timing gate:** `expectations.json` → `timingGate` enforces ≤20% vs ffmpeg (10% target note) on MP4 MJPEG/H.264 assets listed in `enforcedAssetIds`. See `docs/PROFILING.md` for benchmarks and PGO.
+- **Thumbnail timing gate:** every `thumbnail_large` / `thumbnail_small` case with `expect: supported` must stay ≤20% slower than ffmpeg 9.0.2 (10% target note in reports). Cases marked `typed_unsupported` (e.g. H.264 Baseline) must return `ErrUnsupported` / `ErrUnsupportedProfile` and are not timed. See `docs/PROFILING.md` and `make pgo` / `make profile`.
 - **Skip reasons:** N/A checks set `detail` in the report (tags on video, thumbnail on audio, etc.).
 
 The harness module lives in `harness/` so `ffmpeg_test.go` in this directory can remain a lightweight `go test` smoke check against committed `testdata/`. Set `COMPARE_GATE_TEST=1` to run the full gate via `go test` in this package.
