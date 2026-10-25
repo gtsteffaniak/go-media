@@ -7,6 +7,7 @@
     "enforcedAssetIds": [
       "mjpeg_mp4",
       "mp4_h264",
+      "mp4_h264_baseline_1080",
       "mp4_h264_main_1080",
       "mp4_h264_high_1080"
     ]

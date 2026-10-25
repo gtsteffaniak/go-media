@@ -2,8 +2,6 @@ module github.com/gtsteffaniak/go-media
 
 go 1.27.3
 
-toolchain go1.27.3
-
 require (
 	github.com/Eyevinn/hi264 v0.10.0
 	github.com/Eyevinn/mp4ff v0.50.0
@@ -15,3 +13,5 @@ require (
 )
 
 require github.com/google/uuid v1.1.2 // indirect
+
+replace github.com/Eyevinn/hi264 => ./third_party/hi264
