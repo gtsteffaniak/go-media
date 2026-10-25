@@ -55,14 +55,17 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 	}
 	dec := borrowDecoder(fast)
 	frames, err := dec.DecodeIDRAVC(data)
-	releaseDecoder(dec)
 	if err != nil {
+		releaseDecoder(dec)
 		return nil, mapDecodeErr(err)
 	}
 	if len(frames) == 0 {
+		releaseDecoder(dec)
 		return nil, errs.UnsupProfile("h264 keyframe", "no IDR slice in sample")
 	}
-	return cleanroom.ToFrame(frames[0]), nil
+	out := cleanroom.ToFrame(dec, frames[0])
+	releaseDecoder(dec)
+	return out, nil
 }
 
 func mapDecodeErr(err error) error {

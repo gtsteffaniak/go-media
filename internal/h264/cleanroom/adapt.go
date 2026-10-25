@@ -6,10 +6,33 @@ import (
 )
 
 // ToFrame converts a clean-room picture to the shared frame buffer type.
-func ToFrame(src *decode.Frame) *frame.Frame {
+// When dec is non-nil and src is dec's pooled picture with no crop offset,
+// plane memory is transferred to the returned frame (zero-copy) and dec.pic is cleared.
+func ToFrame(dec *Decoder, src *decode.Frame) *frame.Frame {
 	if src == nil {
 		return nil
 	}
+	if src.CropX == 0 && src.CropY == 0 {
+		out := &frame.Frame{
+			Width:    src.CropWidth,
+			Height:   src.CropHeight,
+			MBWidth:  src.MbWidth,
+			MBHeight: src.MbHeight,
+			Y:        src.Y,
+			Cb:       src.Cb,
+			Cr:       src.Cr,
+			StrideY:  src.StrideY,
+			StrideC:  src.StrideC,
+		}
+		if dec != nil && dec.pic == src {
+			dec.pic = nil
+		}
+		return out
+	}
+	return copyToFrame(src)
+}
+
+func copyToFrame(src *decode.Frame) *frame.Frame {
 	w, h := src.CropWidth, src.CropHeight
 	dst := frame.NewFrame(w, h)
 	for y := 0; y < h; y++ {

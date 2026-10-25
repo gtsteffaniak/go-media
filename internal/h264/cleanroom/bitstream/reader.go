@@ -23,6 +23,8 @@ type Reader struct {
 	data []byte
 	pos  int // position in bits from the start of data
 	err  error
+	reg  uint32 // MSB-first bit window for readBit
+	nreg int    // valid bits in reg (0..32)
 }
 
 // NewReader creates a reader over RBSP.
@@ -37,20 +39,48 @@ func (r *Reader) BitPos() int { return r.pos }
 // BitsLeft — how many bits remain until the end of data.
 func (r *Reader) BitsLeft() int { return len(r.data)*8 - r.pos }
 
+func (r *Reader) flushReg() { r.nreg = 0 }
+
+func (r *Reader) refillReg() {
+	total := len(r.data) * 8
+	if r.pos >= total {
+		r.err = ErrEOF
+		return
+	}
+	var v uint32
+	bits := 0
+	p := r.pos
+	for bits < 32 && p < total {
+		b := r.data[p>>3]
+		v = (v << 1) | uint32((b>>(7-(p&7)))&1)
+		bits++
+		p++
+	}
+	if bits == 0 {
+		r.err = ErrEOF
+		return
+	}
+	r.reg = v << (32 - bits)
+	r.nreg = bits
+}
+
 // readBit reads one bit; on reading past the end of data it sets ErrEOF and
 // returns 0 (the position does not advance).
 func (r *Reader) readBit() uint32 {
 	if r.err != nil {
 		return 0
 	}
-	if r.pos >= len(r.data)*8 {
-		r.err = ErrEOF
-		return 0
+	if r.nreg == 0 {
+		r.refillReg()
+		if r.err != nil {
+			return 0
+		}
 	}
-	b := r.data[r.pos>>3]
-	shift := uint(7 - (r.pos & 7))
+	bit := (r.reg >> 31) & 1
+	r.reg <<= 1
+	r.nreg--
 	r.pos++
-	return uint32((b >> shift) & 1)
+	return bit
 }
 
 // Bit reads one bit as 0/1.
@@ -128,6 +158,7 @@ func (r *Reader) PeekBits(n int) uint32 {
 
 // Skip advances the position by n bits (flush after PeekBits).
 func (r *Reader) Skip(n int) {
+	r.flushReg()
 	r.pos += n
 	if total := len(r.data) * 8; r.pos > total {
 		r.pos = total
@@ -141,6 +172,7 @@ func (r *Reader) ByteAligned() bool { return r.pos%8 == 0 }
 // AlignToByte advances to the nearest byte boundary (for pcm_alignment_zero_bit
 // and cabac_alignment_one_bit the skipped bits' values do not matter to us).
 func (r *Reader) AlignToByte() {
+	r.flushReg()
 	r.pos = (r.pos + 7) &^ 7
 }
 

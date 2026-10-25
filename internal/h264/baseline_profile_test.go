@@ -23,7 +23,7 @@ func BenchmarkBaselineThumbnailDecode(b *testing.B) {
 		if err != nil || len(frames) == 0 {
 			b.Fatal(err)
 		}
-		_ = cleanroom.ToFrame(frames[0])
+		_ = cleanroom.ToFrame(dec, frames[0])
 	}
 }
 
