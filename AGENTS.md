@@ -35,7 +35,7 @@ Instructions for autonomous coding agents working in this repository.
 
 1. **Pure Go only:** `CGO_ENABLED=0` for all builds, tests, and CI. **No WASM.** No spawning ffmpeg inside library code (harness/scripts only).
 2. **License:** MIT. Dependencies must be compatible; vendored or materially patched code **must** be documented in **`THIRD_PARTY.md`** (and notices as needed).
-3. **Go toolchain:** **1.27.x** (match `go.mod` and `.github/workflows/ci.yml`).
+3. **Go version:** **`go.mod` minimum `go 1.27`** (no `toolchain` pin). **CI** uses `actions/setup-go` with **`go-version: stable`** and **`check-latest: true`**.
 4. **SIMD:** Production paths use **`internal/kernels`** Plan9 assembly on amd64 with **CPU dispatch** and a **`-tags purego`** portable implementation. Implementations **must be bit-identical** on shared tests. **`GOEXPERIMENT=simd`** is an **optional, non-blocking** experiment only—not a shipping requirement.
 5. **Performance policy:** Supported features must be at most **20% slower** than an **ffmpeg 9.0.2 exec** round trip for the same operation (thumbnail: median **go+write** vs ffmpeg; **10% target**). Anything that cannot meet the gate is **unsupported**: return **`ErrUnsupported`** or **`ErrUnsupportedProfile`**. **No timing exemptions** or relaxed asset lists in `expectations.json`.
 6. **Quality:** Validate against real ffmpeg/ffprobe output. Thumbnail JPEG rows use **PSNR/SSIM** vs ffmpeg; H.264 intra paths also check **decode YUV PSNR/SSIM** where the harness applies.
@@ -75,7 +75,7 @@ Regenerate **`default.pgo`** when thumbnail/hot-path code changes materially; CI
 ## CI and PR workflow
 
 - **Triggers:** `push` to **`main`** and **`pull_request`** only (see `.github/workflows/ci.yml`). Do not add cursor-branded workflow names or references.
-- **Matrix:** amd64 + arm64, default and **`-tags purego`**, compare-gate on ubuntu with PGO check, optional **`GOEXPERIMENT=simd`** job (`continue-on-error: true`).
+- **Matrix:** amd64 + arm64, default and **`-tags purego`**, **Go stable** on all jobs, compare-gate on ubuntu with PGO check, optional **`GOEXPERIMENT=simd`** job (`continue-on-error: true`).
 - **CodeRabbit:** keep **docstring coverage ≥ 80%** on touched public API where the bot measures it.
 - **Before finishing a PR:** **`make compare-gate` and CI green**; **resolve every CodeRabbit comment**, including threads opened **after your last push**; update `expectations.json` when behavior or support matrix changes.
 

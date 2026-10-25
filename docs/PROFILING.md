@@ -54,7 +54,7 @@ Build with PGO for local A/B:
 CGO_ENABLED=0 go build -pgo=default.pgo -o /dev/null .
 ```
 
-## SIMD experiment (Go 1.27)
+## SIMD experiment (Go 1.27+, CI on stable)
 
 `simd` / `simd/archsimd` require `GOEXPERIMENT=simd` at build time and are **not** stable APIs. Production paths use `internal/kernels` assembly (amd64) or portable Go (`-tags purego`). Optional experiment tests:
 
