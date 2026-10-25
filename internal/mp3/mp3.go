@@ -244,6 +244,9 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 			audioStart = 10 + int64(syncSafe(id3h[6:10]))
 		}
 	}
+	if audioStart >= size {
+		return nil, errs.Unsup("streams", "mp3 audio start past eof")
+	}
 	frame, _ := ioat.ReadAll(r, size, audioStart, min64(size-audioStart, 4096))
 	sr, ch := firstFrameAudioParams(frame)
 	if sr == 0 {
