@@ -16,8 +16,10 @@ func BenchmarkIDCT4x4Portable(b *testing.B) {
 }
 
 func BenchmarkIDCT4x4SIMD(b *testing.B) {
-	if !KernelsUseSIMD {
-		b.Skip("no AVX2/ASIMD")
+	SetSIMDEnabledForTest(true)
+	SetKernelSIMDForTest("idct4x4", true)
+	if !KernelSIMD("idct4x4") {
+		b.Skip("no AVX2/ASIMD or SIMD opt-in off")
 	}
 	var d [16]int32
 	d[0] = 96

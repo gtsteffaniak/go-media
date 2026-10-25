@@ -24,7 +24,7 @@ const (
 )
 
 // ShippedTimingGateBuild documents which binary the ≤20% support gate uses (in-process harness).
-const ShippedTimingGateBuild = "amd64_asm_kernels_pgo_in_process"
+const ShippedTimingGateBuild = "purego_pgo_in_process"
 
 // BuildModeTimingRow is one asset/preset timed in a specific build mode vs ffmpeg.
 type BuildModeTimingRow struct {
@@ -161,7 +161,7 @@ func runThumbModeBench(bin, assetPath, preset string, mode BuildMode) (float64, 
 	cmd := exec.Command(bin, "-asset", assetPath, "-preset", preset, "-seek", "10")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if mode == BuildModePuregoPGOSIMD {
-		cmd.Env = append(cmd.Env, "GOEXPERIMENT=simd")
+		cmd.Env = append(cmd.Env, "GOEXPERIMENT=simd", "GOMEDIA_ENABLE_SIMD=1")
 	}
 	out, err := cmd.Output()
 	if err != nil {

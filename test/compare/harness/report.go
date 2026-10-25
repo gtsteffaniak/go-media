@@ -165,9 +165,9 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	s.GoMediaModule = "github.com/gtsteffaniak/go-media"
 	s.TimingGateBuild = ShippedTimingGateBuild
 	s.BuildModeTiers = []string{
-		"1: purego (no PGO, no asm/SIMD)",
-		"2: purego + PGO (-pgo=default.pgo)",
-		"3: purego + PGO + GOEXPERIMENT=simd",
+		"1: purego (no PGO)",
+		"2: purego + PGO (-pgo=default.pgo) — production gate",
+		"3: tier 2 + GOEXPERIMENT=simd + GOMEDIA_ENABLE_SIMD=1 (experiment)",
 	}
 	checkNames := []CheckName{
 		CheckDuration, CheckProbe, CheckTags, CheckArtwork,

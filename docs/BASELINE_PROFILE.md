@@ -1,6 +1,6 @@
 # H.264 Baseline (CAVLC) stage profiling
 
-**Decoder base:** mgvs/go-openh264 BSD-2 port under `internal/h264/cleanroom` (see `THIRD_PARTY_NOTICES.md`). Hot IDCT/recon/dequant/intra V/H use `internal/kernels/h264` with runtime dispatch (`golang.org/x/sys/cpu` + `GOEXPERIMENT=simd`).
+**Decoder base:** mgvs/go-openh264 BSD-2 port under `internal/h264/cleanroom` (see `THIRD_PARTY_NOTICES.md`). Production thumbnails use **purego + PGO**; SIMD is experimental (`GOMEDIA_ENABLE_SIMD=1` + `GOEXPERIMENT=simd`).
 
 ## How to reproduce
 
@@ -8,14 +8,14 @@
 CGO_ENABLED=0 go test -run=^$ -bench=BaselineThumbnail -benchmem ./internal/h264/
 CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/h264/ -run TestSIMD
 bash scripts/baseline-tier-report.sh   # amd64 tier timings (requires compare assets)
-make compare-gate   # PGO-built harness; three-tier rows in report_site/data/report.json
+make compare-gate   # purego+PGO harness; three-tier table in report + scripts/print-three-tier-table.sh
 ```
 
 Compare against ffmpeg thumbnail timing from `make compare-gate` (`mp4_h264_baseline_1080` remains **typed_unsupported** until gate passes).
 
 ## Gate policy
 
-- If Baseline **large/small** presets are **≤20%** vs ffmpeg 9.0.2 on the **shipped in-process build** (amd64 kernels + `-pgo=default.pgo`) → enable Baseline in `validateSPSNAL` and add `mp4_h264_baseline_1080` to `timingGate.enforcedAssetIds`.
+- If Baseline **large/small** presets are **≤20%** vs ffmpeg 9.0.2 on the **production build** (`-tags purego` + `-pgo=default.pgo`, in-process harness) → enable Baseline in `validateSPSNAL` and add `mp4_h264_baseline_1080` to `timingGate.enforcedAssetIds`.
 - Otherwise keep `ErrUnsupportedProfile` (current policy).
 
 ## Measured results (amd64 cloud VM, Oct 2026)

@@ -20,10 +20,12 @@ fi
 PGO="$ROOT/default.pgo"
 COMPARE_BIN="${COMPARE_BIN:-$HARNESS/.cache/gomedia-compare}"
 mkdir -p "$(dirname "$COMPARE_BIN")"
-# PGO must be applied at link time (go run often skips profile-guided opts on dependencies).
-CGO_ENABLED=0 go build -pgo="$PGO" -o "$COMPARE_BIN" .
-# In-process gate uses amd64 asm kernels + PGO (see ShippedTimingGateBuild). Tier 3 simd
-# binaries are built separately in buildThumbModeBinaries; do not set GOEXPERIMENT here.
+# Production compare gate: purego + PGO (see ShippedTimingGateBuild). Tier 3 simd binaries
+# are built separately in buildThumbModeBinaries with GOMEDIA_ENABLE_SIMD=1 at runtime.
+CGO_ENABLED=0 go build -tags purego -pgo="$PGO" -o "$COMPARE_BIN" .
 CGO_ENABLED=0 "$COMPARE_BIN" -seed-dir "$HARNESS/.seed" -assets "$HARNESS/.assets" -report "$REPORT" "${GATE_ARGS[@]}"
+if [[ -f "$REPORT/data/report.json" ]]; then
+  bash "$ROOT/scripts/print-three-tier-table.sh" || true
+fi
 PORT="${COMPARE_SERVER_PORT:-8765}"
 echo "View the report: make server  →  http://localhost:${PORT}/"

@@ -74,8 +74,52 @@ func validateGate(exp ExpectationsFile, report FullReport) error {
 		}
 		diffs = append(diffs, fmt.Sprintf("%s: unexpected result (not in expectations)", key))
 	}
+	if err := validateBuildModeTimings(exp, report); err != nil {
+		diffs = append(diffs, err.Error())
+	}
 	if len(diffs) == 0 {
 		return nil
 	}
 	return fmt.Errorf("comparison gate failed (%d diffs):\n  %s", len(diffs), strings.Join(diffs, "\n  "))
+}
+
+// validateBuildModeTimings requires tier-2 purego+PGO subprocess timings to pass the gate
+// for every video thumbnail row collected on amd64.
+func validateBuildModeTimings(exp ExpectationsFile, report FullReport) error {
+	if len(report.BuildModeTimings) == 0 {
+		return nil
+	}
+	limit := defaultTimingGatePolicy().maxRegression()
+	if exp.TimingGate != nil {
+		limit = exp.TimingGate.maxRegression()
+	}
+	var fails []string
+	for _, row := range report.BuildModeTimings {
+		if row.BuildMode != BuildModePuregoPGO {
+			continue
+		}
+		if row.Check != string(CheckThumbnailSmall) && row.Check != string(CheckThumbnailLarge) {
+			continue
+		}
+		key := row.AssetID + "/" + row.Check
+		expectSupported := false
+		for _, c := range exp.Cases {
+			if c.AssetID+"/"+string(c.Check) == key && c.Expect == StatusSupported {
+				expectSupported = true
+				break
+			}
+		}
+		if !expectSupported {
+			continue
+		}
+		// Subprocess tier-2 timings vary run-to-run; allow 2pp slack vs the 20% gate.
+		if row.DeltaPct > limit+0.02 {
+			fails = append(fails, fmt.Sprintf("tier2 %s %s: %.0fms vs ffmpeg %.0fms (%.0f%% > %.0f%%)",
+				row.AssetID, row.ThumbPreset, row.GoMediaWrite, row.FFmpegMS, row.DeltaPct*100, limit*100))
+		}
+	}
+	if len(fails) == 0 {
+		return nil
+	}
+	return fmt.Errorf("purego+PGO tier gate:\n  %s", strings.Join(fails, "\n  "))
 }

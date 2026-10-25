@@ -32,7 +32,7 @@ func Dequant4x4(coef [16]int32, qp int) [16]int32 {
 }
 
 func dequant4x4(coef [16]int32, qp int) [16]int32 {
-	if KernelsUseSIMD {
+	if KernelSIMD("dequant4x4") {
 		return dequant4x4SIMD(coef, qp)
 	}
 	return dequant4x4Portable(coef, qp)

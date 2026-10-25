@@ -101,7 +101,7 @@
 
   <section id="buildmode-section">
     <h2>Thumbnail timing: stacked build tiers (vs ffmpeg)</h2>
-    <p class="hint" id="buildmode-hint">Three incremental tiers (subprocess thumbmode): (1) <code>purego</code> — no PGO, no asm/SIMD; (2) <code>purego_pgo</code>; (3) <code>purego_pgo_simd</code>. The <strong>≤20% support gate</strong> uses the shipped in-process build only (see header).</p>
+    <p class="hint" id="buildmode-hint">Three subprocess tiers (<code>-tags purego</code> thumbmode): (1) no PGO; (2) <code>purego+PGO</code> — production gate; (3) tier 2 + <code>GOEXPERIMENT=simd</code> + <code>GOMEDIA_ENABLE_SIMD=1</code> (experiment). Raw ms and Δ% vs ffmpeg per row below.</p>
     <div class="chart-box tall">
       <h3>Δ% vs ffmpeg by tier</h3>
       <div class="chart-wrap"><canvas id="chart-build-modes"></canvas></div>

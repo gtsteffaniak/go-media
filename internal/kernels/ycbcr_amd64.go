@@ -13,7 +13,7 @@ func AreaDownRowY(dstY []byte, _ int, dx int, srcY []byte, srcStride int, sy0, s
 	if dx < 0 || dx >= len(dstY) {
 		return
 	}
-	if h264k.SIMDExperimentEnabled() && h264k.KernelsUseSIMD {
+	if h264k.KernelSIMD("ycbcr_row") {
 		AreaDownRowYSIMD(dstY, 0, dx, srcY, srcStride, sy0, sy1, x0, x1)
 		return
 	}

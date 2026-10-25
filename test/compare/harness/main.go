@@ -82,7 +82,12 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 	if err := writeReport(reportDir, assets, nested); err != nil {
 		return err
 	}
-	full := FullReport{Summary: buildSummary(assets, nested), Assets: assets, Results: flat}
+	full := FullReport{
+		Summary:          buildSummary(assets, nested),
+		Assets:           assets,
+		Results:          flat,
+		BuildModeTimings: _buildModeTimings,
+	}
 	printSummary(full)
 	if gate {
 		if expectationsPath == "" {
