@@ -29,10 +29,14 @@ func (sd *sliceDecoder) residualBlockCAVLC(r *bitstream.Reader, nC, maxNumCoeff 
 
 	runs := sd.runsScratch[:totalCoeff]
 	for i := 0; i < totalCoeff-1; i++ {
+		// runsScratch is reused across blocks, so every entry must be assigned: with no
+		// zeros left the run is 0, not whatever the previous block left behind.
+		run := 0
 		if zerosLeft > 0 {
-			runs[i] = decodeRunBefore(r, zerosLeft)
+			run = decodeRunBefore(r, zerosLeft)
 		}
-		zerosLeft -= runs[i]
+		runs[i] = run
+		zerosLeft -= run
 	}
 	if zerosLeft < 0 {
 		zerosLeft = 0

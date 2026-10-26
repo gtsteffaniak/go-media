@@ -2,11 +2,12 @@
 
 **Decoder base:** mgvs/go-openh264 BSD-2 port under `internal/h264/cleanroom` (see `THIRD_PARTY_NOTICES.md`). Production thumbnails use **purego + PGO**; SIMD is experimental (`GOMEDIA_ENABLE_SIMD=1` + `GOEXPERIMENT=simd`).
 
+> **Correction (Oct 2026):** the timings and the "roughly 2× ffmpeg" conclusion below were measured while the CAVLC decoder produced wrong output: `residualBlockCAVLC` reused a scratch `runs` buffer without clearing it, so run_before values leaked between blocks (decode PSNR about 13 dB against ffmpeg, wrong from macroblock 0). That is fixed, and Baseline is now bit-exact with ffmpeg (`TestBaselineCAVLCMatchesFFmpeg`). The harness now decodes Baseline with the profile restriction lifted on every run and classifies it from the measurement instead of a hardcoded expectation (see `checkThumbnailPreset` in `test/compare/harness/compare.go`). Re-measure on the gate machine before relying on the tables below.
+
 ## How to reproduce
 
 ```bash
 CGO_ENABLED=0 go test -run=^$ -bench=BaselineThumbnail -benchmem ./internal/h264/
-CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/h264/ -run TestSIMD
 bash scripts/baseline-tier-report.sh   # amd64 tier timings (requires compare assets)
 make compare-gate   # purego+PGO harness; three-tier table in report + scripts/print-three-tier-table.sh
 ```
@@ -15,8 +16,8 @@ Compare against ffmpeg thumbnail timing from `make compare-gate` (`mp4_h264_base
 
 ## Gate policy
 
-- If Baseline **large/small** presets are **≤20%** vs ffmpeg 9.0.2 on the **production build** (`-tags purego` + `-pgo=default.pgo`, in-process harness) → enable Baseline in `validateSPSNAL` and add `mp4_h264_baseline_1080` to `timingGate.enforcedAssetIds`.
-- Otherwise keep `ErrUnsupportedProfile` (current policy).
+- **Baseline is enabled** (Oct 2026): bit-exact with ffmpeg and within the ≤20% timing gate on the measured machine (arm64, Homebrew ffmpeg 7.1.5: about 33% and 49% faster for large and small). Its `mp4_h264_baseline_1080` thumbnail rows are `supported` in `expectations.json`, so `make compare-gate` enforces the gate on them. Confirm on the amd64 gate machine with ffmpeg 9.0.2.
+- If it ever misses the gate, add `66: "<reason>"` to `gatedProfiles` in `internal/h264/sps.go` and set the rows back to `typed_unsupported`; the harness then reports the measured gap (`performance:`) and fails with "enable it" when it passes again.
 
 ## Measured results (amd64 cloud VM, Oct 2026)
 
@@ -33,7 +34,7 @@ Root cause of the old ~187k allocs/frame was per-NAL `EBSPtoRBSP` append growth;
 
 | Tier | Build | go+write ms | Δ% vs ffmpeg (~52 ms) |
 |------|-------|-------------|-------------------------|
-| Shipped (in-process PGO) | asm + PGO | **~100** | **~92%** |
+| Shipped (in-process PGO), historical | asm + PGO (the scalar asm has since been removed) | **~100** | **~92%** |
 | 1 · purego | `-tags purego` | **~104** | **~100%** |
 | 2 · purego+PGO | tier 1 + `default.pgo` | **~103** | **~98%** |
 | 3 · purego+PGO+simd | tier 2 + `GOEXPERIMENT=simd` | **~102** | **~96%** |
@@ -42,20 +43,9 @@ ffmpeg median for the same asset/preset (harness seek, large preset): **~52 ms**
 
 **Gate outcome:** Baseline remains **unsupported** — decode+scale+JPEG is still roughly **2×** ffmpeg after allocation fixes; entropy + full-frame decode dominate, not 4×4 IDCT.
 
-### SIMD proof (kernels package)
+### SIMD
 
-| Kernel | Probe | Parity tests | Notes |
-|--------|-------|--------------|-------|
-| 4×4 IDCT + rounding | `ProbeIDCT4x4` | `TestSIMDIDCTParity` | archsimd `Int32s` rounding rows |
-| 8×8 IDCT + rounding | `ProbeIDCT8x8` | `TestIDCT8x8Parity` | 8-wide row rounding |
-| 4×4 recon add/clamp | `ProbeRecon4x4` | via decode tests | |
-| Dequant 4×4 | `ProbeDequant4x4` | `TestDequant4x4Parity` | 4-lane mul/shift when `shift<4` |
-| Intra 4×4/16×16 V/H | `ProbeIntra4x4` | predict tests | |
-| YCbCr area down row | `ProbeYCbCrRow` | thumb path | |
-
-`TestSIMDKernelsExecuteWhenEnabled` asserts probe hits ≥2; `TestSIMDBinaryContainsVectorOps` greps `objdump` for `vmov` (amd64) / `ldr` (arm64).
-
-Micro-benchmark: 4×4 IDCT SIMD is **slower** than portable on tiny blocks (~248 ns vs ~26 ns) due to vector setup; tier-3 thumbnail timings for **Main/High 1080** remain within gate (decode-bound).
+The first SIMD kernels (4×4/8×8 IDCT, dequant, recon, intra V/H, YCbCr row) were slower than scalar (4×4 IDCT about 248 ns against about 26 ns portable) and have been removed. See `docs/SIMD.md` for why and for the rules new kernels follow. Tier-3 timings above were measured with those kernels and are historical.
 
 ### Next levers
 

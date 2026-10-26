@@ -101,6 +101,43 @@ make check-pgo
 
 `scripts/check-pgo-stale.sh` emits a **GitHub Actions warning** when files under provenance hot paths changed since the profile's `gitHead` without regenerating `default.pgo`.
 
+## Stage breakdown (reference profile)
+
+Collected on **darwin/arm64** (Apple laptop), `GOMAXPROCS=1`, `-tags purego -pgo=off`, 30 iterations of `internal/thumb` benchmarks on the harness assets (Big Buck Bunny seed, 1080p libx264 crf 18 `-g 30`, seek 10%, `large` preset). The gate machine is amd64, so use this for the **shape** of the time split, not for absolute numbers or gate decisions. Percentages are cumulative pprof shares of the whole `Generate` call (they overlap where one stage calls another).
+
+| Stage | Main 1080 (103 ms/op) | High 1080 (107 ms/op) |
+|-------|----------------------|-----------------------|
+| CABAC residual parse (`residualBlockCABAC`) | 39% | 39% |
+| of which `cabacEngine.decodeDecision` | 33% | 34% |
+| `decodeBypass` | 3.5% | 4% |
+| Chroma reconstruct (dequant + IDCT + add) | 10% | 15% |
+| 4×4 dequant + IDCT + add + intra4x4 (luma) | ~12% | ~3% |
+| 8×8 dequant + IDCT + intra8x8 (luma) | n/a | ~10% |
+| YCbCr area downscale | 4% | 3% |
+| JPEG encode (`image/jpeg.Encode`) | 12% | 12% |
+| File I/O (`ioat.ReadAt` → `os.File.ReadAt` syscalls) | 10% | 10% |
+
+MJPEG (`mjpeg.mp4`, 960 px wide, same flags): large 15.3 ms/op, small 9.5 ms/op, but each run is under 0.7 s of samples, so treat it as low confidence. The stdlib JPEG **encoder** (`writeBlock`, `div`, `yCbCrToYCbCr`) is about half of the compute on the large preset, and file `ReadAt` syscalls are 20% (large) to 54% (small). `jpegfast` `reconstructBlock` (dequant + IDCT) is only 10–19%.
+
+Takeaways that drive the SIMD plan:
+
+- Entropy decoding is about **55% of the H.264 decode** (39% of the whole thumbnail), and `decodeDecision` alone is a third. SIMD cannot help it; scalar bit-cache, table-driven and multi-bit-renorm work comes first.
+- Everything SIMD can touch in the decoder (dequant, IDCT, intra prediction, add/clip) is about 15–25% of the whole thumbnail, so a 3× kernel speedup is worth roughly 10–15%.
+- `image/jpeg.Encode` (12% of H.264, about half of MJPEG compute) is larger than the YCbCr scale (3–4%). File I/O (10%) turned out to be 28,611 `ReadAt` calls per thumbnail, 28,610 of them 64 bytes or less, from unbuffered box parsing. `ioat.Reader.Read` now has a 32 KiB read-ahead window, which cut that to 24 calls and the syscall share from 10.2% to 2.4%.
+
+### Measured changes (same machine and method; laptop noise is about ±4%)
+
+| Change | Main 1080 | High 1080 | Notes |
+|--------|-----------|-----------|-------|
+| Baseline above | ~103 ms | ~107 ms | |
+| `ioat.Reader.Read` 32 KiB read-ahead | ~100 ms | ~104 ms | 28,611 → 24 `ReadAt` calls; syscall share 10.2% → 2.4% |
+| CABAC engine: scaled offset, CLZ renorm, 32-bit refill | ~82 ms | ~87 ms | `decodeDecision` ~31 → ~24 ms/op; decoded YUV sha256 identical on all fixtures; differential test and fuzz vs the original engine (`cabac_ref_test.go`) |
+| Branch-free `decodeDecision` (rejected) | ~89 ms | ~94 ms | Bit-exact but ~8% slower on arm64. Not measured on amd64, so re-test there before revisiting |
+
+`decodeDecision` now costs about 3.8 ns per bin (~11 cycles), close to the dependency-chain floor of a serial arithmetic decoder, so further scalar tuning of it has little left. The remaining levers are structural (overlapping parse with reconstruction, the JPEG encoder).
+
+To reproduce: `bash scripts/generate-fixtures.sh` plus the harness asset commands in `test/compare/harness/generate.go`, then `GOMAXPROCS=1 CGO_ENABLED=0 go test -tags purego -pgo=off -run='^$' -bench='BenchmarkMP4H264Main1080Large$' -benchtime=30x -cpuprofile=/tmp/p.prof -o /tmp/thumb.test ./internal/thumb/` and `go tool pprof -top -cum /tmp/thumb.test /tmp/p.prof`. MJPEG needs `GOMEDIA_BENCH_MJPEG=<path to mjpeg.mp4>`.
+
 ## SIMD experiment (Go 1.27+, CI on stable)
 
 `simd` / `simd/archsimd` require `GOEXPERIMENT=simd` at build time and are **not** stable APIs. Production paths use portable Go in `internal/kernels` (the scalar amd64 asm was removed; SIMD kernels are added per kernel once they beat it). Report **tier 3** builds thumbmode with `GOEXPERIMENT=simd`. Optional experiment tests:

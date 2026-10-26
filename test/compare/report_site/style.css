@@ -80,6 +80,21 @@ h2 { margin-top: 2rem; font-size: 1.15rem; }
   position: relative;
   flex: 1;
   min-height: 280px;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+.chart-empty {
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+.chart-empty.hidden { display: none; }
+.chart-box.hidden { display: none; }
+#buildmode-section .chart-box.tall {
+  margin-bottom: 1rem;
 }
 .chart-box.tall .chart-wrap canvas {
   width: 100% !important;
@@ -289,7 +304,13 @@ td.metric-col { min-width: 120px; }
   color: #fff;
   cursor: pointer;
 }
-#lightbox-caption { color: var(--muted); margin-top: 0.75rem; }
+.lightbox-caption {
+  color: var(--muted);
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+  text-align: center;
+  max-width: min(96vw, 1400px);
+}
 
 /* Wide layout for docs/comparison Playwright captures (?capture=1). */
 body.capture-mode {

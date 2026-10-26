@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/internal/h264"
 )
 
 var activeTimingGate = defaultTimingGatePolicy()
@@ -377,7 +378,48 @@ func mediaPreset(preset thumbnailPresetConfig) media.ThumbnailOptions {
 }
 
 // checkThumbnailPreset compares go-media vs ffmpeg for one thumbnail preset.
+//
+// A typed_unsupported result is never asserted. When media rejects a profile (so the
+// library returned ErrUnsupportedProfile), the check is repeated with the profile
+// restriction lifted, so the row carries real numbers and a reason:
+//   - "functionality:" the decoder still cannot handle it, or the output fails the quality gate;
+//   - "performance:" it decodes correctly but misses the ≤20% ffmpeg timing gate;
+//   - if it meets the gate, the row becomes a mismatch telling the developer to enable it.
 func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig) CheckResult {
+	res := checkThumbnailPresetOnce(a, thumbDir, preset)
+	if res.Status != StatusTypedUnsupported {
+		return res
+	}
+	if !errors.Is(res.goErr, media.ErrUnsupportedProfile) {
+		// Not a profile restriction (e.g. a codec or container go-media does not implement).
+		res.Detail = "functionality: " + res.Detail
+		return res
+	}
+	first := res
+	h264.AllowGatedProfiles(true)
+	defer h264.AllowGatedProfiles(false)
+	res = checkThumbnailPresetOnce(a, thumbDir, preset)
+	switch {
+	case res.goErr != nil && errors.Is(res.goErr, media.ErrUnsupportedProfile):
+		first.Detail = "functionality: " + first.Detail
+		return first
+	case res.goErr != nil:
+		first.Detail = fmt.Sprintf("functionality: decode fails with the restriction lifted: %v", res.goErr)
+		return first
+	case res.TimingGateFail:
+		res.Status = StatusTypedUnsupported
+		res.Detail = "performance: decodes correctly but misses the ffmpeg gate (measured with the profile restriction lifted); " + res.Detail
+	case res.Status == StatusSupported:
+		res.Status = StatusMismatch
+		res.Detail = "meets the ffmpeg timing gate with the profile restriction lifted: enable it (see internal/h264/sps.go) and update expectations.json; " + res.Detail
+	case res.Status == StatusMismatch:
+		res.Status = StatusTypedUnsupported
+		res.Detail = "functionality: output fails the quality gate with the restriction lifted; " + res.Detail
+	}
+	return res
+}
+
+func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetConfig) CheckResult {
 	res := CheckResult{AssetID: a.ID, Check: thumbnailCheckName(preset), ThumbPreset: preset.Name}
 	if a.Category != "video" {
 		res.Status = StatusSkipped
@@ -408,6 +450,7 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, seekSec, preset, kfOnly)
 
 	if gErr != nil {
+		res.goErr = gErr
 		res.Status = classifyGoErr(gErr)
 		res.Detail = gErr.Error()
 		if ffErr == nil {

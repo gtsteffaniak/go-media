@@ -1,9 +1,18 @@
 package decode
 
-import "github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
+import (
+	"encoding/binary"
+	"math/bits"
 
-// CABAC arithmetic decoding engine (ISO/IEC 14496-10). Standard-spec variant:
-// 9-bit codIOffset, codIRange in [256,510], bit-by-bit renormalization. The
+	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
+)
+
+// CABAC arithmetic decoding engine (ISO/IEC 14496-10). The spec's 9-bit codIOffset and
+// codIRange in [256,510] are kept, but the offset is held scaled: value carries
+// codIOffset in its high bits followed by `bits` prefetched stream bits, so
+// codIOffset == value>>bits. Renormalization is then a single shift of `bits` (the
+// spec's bit-by-bit loop) with the shift count taken from a leading-zero count, and
+// stream bytes are loaded 32 bits at a time instead of one bit at a time. The
 // state-transition and LPS-range tables are ported verbatim from OpenH264
 // (common_tables.cpp: g_kuiCabacRangeLps, g_kuiStateTransTable).
 
@@ -47,19 +56,29 @@ type cabacCtx struct {
 const numCabacCtx = 460
 
 // cabacEngine — the binary arithmetic decoder and the context model array.
+//
+// Invariant between calls: value < codIRange<<bits and bits >= 0. The stream is
+// zero-padded past the end of data; err reports whether decoding consumed more bits
+// than the data held (the same condition that set the bit reader's sticky ErrEOF).
 type cabacEngine struct {
-	r          *bitstream.Reader
-	codIRange  uint32
-	codIOffset uint32
-	ctx        [numCabacCtx]cabacCtx
+	data      []byte
+	p         int // next byte of data to load; may run past len(data) (zero padding)
+	value     uint64
+	bits      int
+	codIRange uint32
+	ctx       [numCabacCtx]cabacCtx
 }
 
 // resetCabacEngine initializes registers and context models for a new slice.
-// The RBSP must already be byte aligned (cabac_alignment_one_bit consumed).
+// The RBSP must already be byte aligned (cabac_alignment_one_bit consumed). The engine
+// takes over the reader's remaining bytes; r's position is not advanced.
 func (e *cabacEngine) resetCabacEngine(r *bitstream.Reader, sliceQP, model int) {
-	e.r = r
+	e.data = r.AlignedBytes()
+	e.p = 0
+	e.value = 0
+	e.bits = -9 // the initial 9-bit codIOffset is read below
 	e.codIRange = 510
-	e.codIOffset = r.U(9)
+	e.refill()
 	e.initContexts(sliceQP, model)
 }
 
@@ -71,6 +90,38 @@ func newCabacDecoder(r *bitstream.Reader, sliceQP, model int) *cabacEngine {
 	e.resetCabacEngine(r, sliceQP, model)
 	return e
 }
+
+// refill tops up the prefetch window. Callers invoke it when bits < 8, the most any
+// single operation consumes, so value never holds more than 9+bits+32 <= 64 bits.
+func (e *cabacEngine) refill() {
+	if e.bits >= 0 && e.p+4 <= len(e.data) {
+		e.value = e.value<<32 | uint64(binary.BigEndian.Uint32(e.data[e.p:]))
+		e.p += 4
+		e.bits += 32
+		return
+	}
+	for e.bits < 24 {
+		var b byte
+		if e.p < len(e.data) {
+			b = e.data[e.p]
+		}
+		e.p++
+		e.value = e.value<<8 | uint64(b)
+		e.bits += 8
+	}
+}
+
+// err returns bitstream.ErrEOF if decoding has consumed bits beyond the end of data.
+func (e *cabacEngine) err() error {
+	// Spec-consumed bits = loaded bits minus the prefetched ones still in the window.
+	if e.p*8-e.bits > len(e.data)*8 {
+		return bitstream.ErrEOF
+	}
+	return nil
+}
+
+// offset returns the spec's 9-bit codIOffset.
+func (e *cabacEngine) offset() uint32 { return uint32(e.value >> uint(e.bits)) }
 
 // initContexts derives each context's (pStateIdx, valMPS) from the (m,n)
 // constants and the slice QP.
@@ -89,48 +140,54 @@ func (e *cabacEngine) initContexts(sliceQP, model int) {
 }
 
 // decodeDecision decodes one regular (context-coded) bin for context ctxIdx.
+//
+// The LPS/MPS split is a plain branch on purpose: a branch-free mask-arithmetic variant
+// (as ffmpeg's x86 cmov path does) was bit-exact but ~8% slower end to end on arm64,
+// where the branch predictor copes and the longer dependency chain costs more. It has
+// not been measured on amd64; re-test there before changing this.
 func (e *cabacEngine) decodeDecision(ctxIdx int) uint32 {
+	if e.bits < 8 {
+		e.refill()
+	}
 	c := &e.ctx[ctxIdx]
-	rangeLPS := uint32(rangeTabLPS[c.state][(e.codIRange>>6)&3])
-	e.codIRange -= rangeLPS
+	st := c.state
+	rng := e.codIRange
+	rangeLPS := uint32(rangeTabLPS[st][(rng>>6)&3])
+	rng -= rangeLPS
+	scaled := uint64(rng) << uint(e.bits)
 
 	var binVal uint32
-	if e.codIOffset >= e.codIRange {
+	if e.value >= scaled {
 		binVal = uint32(1 - c.mps)
-		e.codIOffset -= e.codIRange
-		e.codIRange = rangeLPS
-		if c.state == 0 {
+		e.value -= scaled
+		rng = rangeLPS
+		if st == 0 {
 			c.mps = 1 - c.mps
 		}
-		c.state = stateTrans[c.state][0]
+		c.state = stateTrans[st][0]
 	} else {
 		binVal = uint32(c.mps)
-		c.state = stateTrans[c.state][1]
+		c.state = stateTrans[st][1]
 	}
-	// Inlined renorm (hot path — millions of calls per frame).
-	r := e.r
-	for e.codIRange < 256 {
-		e.codIRange <<= 1
-		e.codIOffset = (e.codIOffset << 1) | r.Bit()
-	}
+	// Renormalize: the spec shifts range left until it is >= 256, one stream bit per
+	// shift. With the scaled offset that is the same shift applied to range and a
+	// matching decrease of bits (rng is in [2,510], so n is 0..7).
+	n := bits.LeadingZeros32(rng) - 23
+	e.codIRange = rng << uint(n)
+	e.bits -= n
 	return binVal
-}
-
-// renorm rescales codIRange back into [256,510], pulling in fresh offset bits.
-func (e *cabacEngine) renorm() {
-	r := e.r
-	for e.codIRange < 256 {
-		e.codIRange <<= 1
-		e.codIOffset = (e.codIOffset << 1) | r.Bit()
-	}
 }
 
 // decodeBypass decodes one bypass (equiprobable) bin — no context, no renorm
 // of codIRange.
 func (e *cabacEngine) decodeBypass() uint32 {
-	e.codIOffset = (e.codIOffset << 1) | e.r.Bit()
-	if e.codIOffset >= e.codIRange {
-		e.codIOffset -= e.codIRange
+	if e.bits < 8 {
+		e.refill()
+	}
+	e.bits--
+	scaled := uint64(e.codIRange) << uint(e.bits)
+	if e.value >= scaled {
+		e.value -= scaled
 		return 1
 	}
 	return 0
@@ -139,10 +196,15 @@ func (e *cabacEngine) decodeBypass() uint32 {
 // decodeTerminate decodes the end_of_slice_flag / I_PCM terminator. Returns 1
 // when decoding terminates.
 func (e *cabacEngine) decodeTerminate() uint32 {
+	if e.bits < 8 {
+		e.refill()
+	}
 	e.codIRange -= 2
-	if e.codIOffset >= e.codIRange {
+	if e.value >= uint64(e.codIRange)<<uint(e.bits) {
 		return 1
 	}
-	e.renorm()
+	n := bits.LeadingZeros32(e.codIRange) - 23
+	e.codIRange <<= uint(n)
+	e.bits -= n
 	return 0
 }

@@ -102,12 +102,13 @@
   <section id="buildmode-section">
     <h2>Thumbnail timing: stacked build tiers (vs ffmpeg)</h2>
     <p class="hint" id="buildmode-hint">Three subprocess tiers (<code>-tags purego</code> thumbmode): (1) no PGO; (2) <code>purego+PGO</code> — production gate; (3) tier 2 + <code>GOEXPERIMENT=simd</code> + <code>GOMEDIA_ENABLE_SIMD=1</code> (experiment). Raw ms and Δ% vs ffmpeg per row below.</p>
+    <p id="buildmode-charts-empty" class="chart-empty hidden">No build-mode timing data in this report. Re-run <code>make compare</code> (needs <code>default.pgo</code> and subprocess thumbmode builds).</p>
     <div class="chart-box tall">
       <h3>Δ% vs ffmpeg by tier</h3>
       <div class="chart-wrap"><canvas id="chart-build-modes"></canvas></div>
     </div>
     <div class="chart-box tall">
-      <h3>go+write ms by tier (stacked)</h3>
+      <h3>go+write ms by tier</h3>
       <div class="chart-wrap"><canvas id="chart-build-modes-ms"></canvas></div>
     </div>
     <div class="table-scroll">
@@ -158,9 +159,10 @@
     <div id="thumb-grid" class="thumb-grid"></div>
   </section>
 
-  <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true">
+  <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true" aria-labelledby="lightbox-caption">
     <button type="button" class="lightbox-close" aria-label="Close">×</button>
     <div id="lightbox-body"></div>
+    <p id="lightbox-caption" class="lightbox-caption"></p>
   </div>
 
   <script src="app.js"></script>

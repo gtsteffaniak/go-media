@@ -720,12 +720,12 @@
     {
       "assetId": "mp4_h264_baseline_1080",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_h264_baseline_1080",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_h264_main_1080",

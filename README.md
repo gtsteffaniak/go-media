@@ -99,7 +99,7 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 | MJPEG | extract the frame directly | ✅ |
 | VP8 (WebM/MKV) | `github.com/gen2brain/vpx/vp8` (inter + golden/alt-ref) | ✅ |
 | H.264 (MP4/MOV) Main/High | `stss` sync samples, avcC, intra IDR via `internal/h264` (CABAC, 8-bit 4:2:0) | ✅ |
-| H.264 Baseline (CAVLC) | — | ❌ unsupported (pure-Go decode >20% slower than ffmpeg; returns `ErrUnsupportedProfile`) |
+| H.264 Baseline (CAVLC) | `stss` sync samples, avcC, intra IDR via `internal/h264` (8-bit 4:2:0) | ✅ (bit-exact with ffmpeg; within the ≤20% timing gate) |
 | H.264 interlaced (PAFF/MBAFF), 10-bit, 4:2:2/4:4:4, inter prediction | — | ❌ |
 | HEVC, VP9, AV1 | — | ❌ |
 
@@ -119,7 +119,7 @@ The audio side may build on [dhowden/tag](https://github.com/dhowden/tag).
 
 A deliberately minimal, **intra-only** decoder whose only job is turning an IDR frame into an image for thumbnails. Leaving out inter prediction (motion compensation, reference frame management) removes most of a full decoder's complexity, which keeps the code small and auditable.
 
-- **Scope:** NAL/SPS/PPS parsing, CABAC (Main/High), intra 4x4/8x8/16x16 prediction, dequantization, 4x4/8x8 inverse transforms, deblocking (optional in preview mode). **Baseline (CAVLC) is rejected at SPS parse** so callers fall back to ffmpeg.
+- **Scope:** NAL/SPS/PPS parsing, CABAC (Main/High), intra 4x4/8x8/16x16 prediction, dequantization, 4x4/8x8 inverse transforms, deblocking (optional in preview mode). CAVLC (Baseline) and CABAC (Main/High) are both supported. A profile that decodes correctly but misses the ≤20% ffmpeg timing gate is listed in `gatedProfiles` (`internal/h264/sps.go`) and rejected with `ErrUnsupportedProfile` so callers fall back to ffmpeg; none is gated today.
 - **Inspirations:** [h264bsd](https://github.com/oneam/h264bsd) (BSD-licensed Baseline decoder) as the structural reference. FFmpeg's `h264` decoder as a behavioral reference for High profile details. **No LGPL code is copied.**
 - **Fallback:** unsupported streams return `ErrUnsupportedProfile`.
 

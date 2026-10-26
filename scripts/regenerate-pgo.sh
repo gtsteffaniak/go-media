@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Regenerate default.pgo from merged CPU profiles over representative thumbnail + decode workloads.
-# Profiles match production paths: asm kernels (default build), full thumb pipeline, H.264 decode.
+# Profiles match the shipped build (-tags purego, see ShippedTimingGateBuild): full thumb pipeline, H.264 decode.
+# Run this on the machine class the gate runs on (amd64); profiles taken on another arch are not representative.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -26,7 +27,7 @@ bench() {
 	shift
 	local out="$TMPDIR/${name}.prof"
 	echo "== PGO sample: $name =="
-	GOMAXPROCS=1 CGO_ENABLED=0 GOFLAGS=-pgo=off go test -run='^$' -benchtime=25x -cpuprofile="$out" "$@" || return 1
+	GOMAXPROCS=1 CGO_ENABLED=0 GOFLAGS=-pgo=off go test -tags purego -run='^$' -benchtime=25x -cpuprofile="$out" "$@" || return 1
 	PROFS+=("$out")
 }
 
@@ -38,11 +39,8 @@ bench thumb-h264-main -bench=BenchmarkMP4H264Main1080Large ./internal/thumb/
 bench thumb-h264-high -bench=BenchmarkMP4H264High1080Large ./internal/thumb/
 bench h264-baseline-decode -bench=BenchmarkBaselineThumbnailDecode ./internal/h264/
 
-MERGE_ARGS=()
-for p in "${PROFS[@]}"; do
-	MERGE_ARGS+=(-proto "$p")
-done
-go tool pprof "${MERGE_ARGS[@]}" >"$ROOT/default.pgo"
+# -proto selects the output format once; the profiles are plain positional arguments.
+go tool pprof -proto "${PROFS[@]}" >"$ROOT/default.pgo"
 
 SHA=$(sha256sum "$ROOT/default.pgo" | awk '{print $1}')
 HEAD=$(git rev-parse HEAD 2>/dev/null || echo unknown)

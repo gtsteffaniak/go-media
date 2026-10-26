@@ -16,7 +16,7 @@ Instructions for autonomous coding agents working in this repository.
 | `internal/sniff`, `internal/format`, `internal/detect` | Format detection and IDs. |
 | `internal/isobmff` | MP4/MOV: boxes, sync samples, MJPEG/H.264 thumbnail demux (`abema/go-mp4`). |
 | `internal/matroska` | MKV/WebM: cues, VP8/MJPEG thumbnails. |
-| `internal/h264` | Clean-room intra-only H.264 under `cleanroom/` (in progress). Main/High supported; Baseline rejected. **No `Eyevinn/hi264`** (module, vendor, or relocated copy). |
+| `internal/h264` | Clean-room intra-only H.264 under `cleanroom/` (in progress). Baseline/Main/High supported (CAVLC and CABAC); a profile that misses the timing gate goes in `gatedProfiles` in `sps.go` (empty today) and is re-measured by the harness every run. **No `Eyevinn/hi264`** (module, vendor, or relocated copy). |
 | `internal/vp8decode` | VP8 picture → RGBA/YCbCr scale helpers. |
 | `internal/jpegfast` | Fast MJPEG decode for thumbnails. |
 | `internal/thumb` | Thumbnail pipeline: seek, decode, YCbCr/RGBA scale, JPEG/PNG/WebP encode. |
@@ -25,7 +25,7 @@ Instructions for autonomous coding agents working in this repository.
 | `internal/subtitle` | Sidecar and MKV subtitle parse/convert. |
 | `internal/errs` | Typed unsupported/profile/corrupt errors. |
 | `test/compare/harness` | ffmpeg 9.0.2 comparison harness, timing gate, build-mode timings, HTML report. |
-| `docs/` | `COMPARISON.md`, `PROFILING.md`, `FOLLOWUP_H264_CLEANROOM.md`. |
+| `docs/` | `COMPARISON.md`, `PROFILING.md` (stage breakdown), `SIMD.md` (kernel rules, why the first kernels were removed), `BASELINE_PROFILE.md`, `FOLLOWUP_H264_CLEANROOM.md`. |
 | `default.pgo` | Checked-in PGO profile for release-style builds. |
 
 ## Hard rules

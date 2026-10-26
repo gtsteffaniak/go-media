@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 )
@@ -57,9 +56,6 @@ func findRepoRoot(start string) string {
 }
 
 func collectBuildModeTimings(assets []Asset, flat []CheckResult, repoRoot string) []BuildModeTimingRow {
-	if runtime.GOARCH != "amd64" {
-		return nil
-	}
 	bins, err := buildThumbModeBinaries(repoRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build mode binaries: %v (skipping mode timings)\n", err)
@@ -158,7 +154,8 @@ func buildThumbModeBinaries(repoRoot string) (map[BuildMode]string, error) {
 }
 
 func runThumbModeBench(bin, assetPath, preset string, mode BuildMode) (float64, error) {
-	cmd := exec.Command(bin, "-asset", assetPath, "-preset", preset, "-seek", "10")
+	// -measure-gated lets gated profiles (H.264 Baseline) decode so every tier times them too.
+	cmd := exec.Command(bin, "-asset", assetPath, "-preset", preset, "-seek", "10", "-measure-gated")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if mode == BuildModePuregoPGOSIMD {
 		cmd.Env = append(cmd.Env, "GOEXPERIMENT=simd", "GOMEDIA_ENABLE_SIMD=1")

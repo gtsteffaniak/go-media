@@ -8,7 +8,7 @@ Relocated **Eyevinn/hi264** under `internal/h264/{intradec,cabac,…}` is **unac
 
 - **Full rewrite** from **ITU-T H.264** (ffmpeg/openh264 behavioral references only; **no hi264** in any form).
 - **SIMD-first:** `GOEXPERIMENT=simd` / archsimd kernels with a portable Go fallback (`-tags purego` forces it); bit-identical on shared kernel tests.
-- **Baseline (CAVLC):** design to pass **≤20%** ffmpeg thumbnail gate; **profile per stage** (demux/NAL, slice syntax, CAVLC entropy, coeff batching, dequant/IDCT, intra pred, plane writes). If gate passes → **supported**; if not → remain **unsupported** with **profile-backed root cause** in docs/PR.
+- **Baseline (CAVLC):** design to pass **≤20%** ffmpeg thumbnail gate; **profile per stage** (demux/NAL, slice syntax, CAVLC entropy, coeff batching, dequant/IDCT, intra pred, plane writes). Gate passed (Oct 2026) → **supported**..
 - **Main/High (CABAC):** decode-only intra; bit-exact YUV vs ffmpeg on harness fixtures.
 - **Thumbnails:** **skip in-loop deblock** on fast path; full deblock optional for parity tests.
 - **Hot path:** **zero allocations** per frame (pooled bitstream state, coeff batches, frame buffers); **PGO** via checked-in `default.pgo`.
@@ -30,4 +30,4 @@ SIMD lives in **`internal/kernels/h264`**: dequant+IDCT+reconstruct, intra pred 
 ## Gates (unchanged)
 
 - `make compare-gate` green; report **buildModeTimings** tiers purego → purego+PGO → purego+PGO+simd (gate uses **in-process asm+PGO** only). Regenerate **`default.pgo`** after rewrite (`make pgo`).
-- Baseline support toggled in `sps.go` only after Baseline passes gate + profiling sign-off.
+- Baseline is enabled. Profiles that miss the gate are listed in `gatedProfiles` in `sps.go`.

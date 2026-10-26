@@ -53,8 +53,10 @@ function openThumbCompareLightbox(card, pct) {
   body.querySelectorAll('img').forEach(attachThumbImgFallback);
   const enlarged = initCompareSlider(body.querySelector('.compare-slider'));
   if (enlarged) enlarged.setPct(pct);
-  document.getElementById('lightbox-caption').textContent = card.querySelector('h3')?.textContent?.trim() || '';
+  const cap = document.getElementById('lightbox-caption');
+  if (cap) cap.textContent = card.querySelector('h3')?.textContent?.trim() || '';
   box.classList.remove('hidden');
+  box.querySelector('.lightbox-close')?.focus();
 }
 
 let chartInstances = [];
@@ -210,17 +212,73 @@ const BUILD_MODE_LABELS = {
   purego_pgo_simd: '3 · purego+PGO+simd',
 };
 
+function buildModeRowKey(r) {
+  return `${r.assetId}|${r.thumbPreset}`;
+}
+
+function parseBuildModeRowKey(k) {
+  const sep = k.indexOf('|');
+  return { assetId: k.slice(0, sep), thumbPreset: k.slice(sep + 1) };
+}
+
+function buildModeChartLayoutOptions(extra = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    layout: { padding: { top: 12, right: 20, bottom: 8, left: 12 } },
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: { color: '#e7ecf3', padding: 14, boxWidth: 14 },
+      },
+      ...extra.plugins,
+    },
+    ...extra,
+  };
+}
+
+function setBuildModeChartWrapHeights(labelCount) {
+  const h = `${Math.max(320, labelCount * 22 + 120)}px`;
+  for (const id of ['chart-build-modes', 'chart-build-modes-ms']) {
+    const wrap = document.getElementById(id)?.closest('.chart-wrap');
+    if (wrap) wrap.style.height = h;
+  }
+}
+
 function renderBuildModeCharts(modeRows) {
   const canvas = document.getElementById('chart-build-modes');
   const canvasMs = document.getElementById('chart-build-modes-ms');
-  if (!canvas || !modeRows.length) return;
-  const keys = [...new Set(modeRows.map((r) => `${r.assetId}:${r.thumbPreset}`))].sort();
+  const emptyEl = document.getElementById('buildmode-charts-empty');
+  if (!canvas || !canvasMs) return;
+
+  if (!modeRows.length) {
+    if (emptyEl) emptyEl.classList.remove('hidden');
+    canvas.closest('.chart-box')?.classList.add('hidden');
+    canvasMs.closest('.chart-box')?.classList.add('hidden');
+    return;
+  }
+
+  if (emptyEl) emptyEl.classList.add('hidden');
+  canvas.closest('.chart-box')?.classList.remove('hidden');
+  canvasMs.closest('.chart-box')?.classList.remove('hidden');
+
+  const keys = [...new Set(modeRows.map(buildModeRowKey))].sort();
+  const labels = keys.map((k) => {
+    const { assetId, thumbPreset } = parseBuildModeRowKey(k);
+    return `${assetId} (${thumbPreset})`;
+  });
+  setBuildModeChartWrapHeights(keys.length);
+
   const colors = ['#6b7a90', '#5b9bd5', '#3dd68c'];
+  const findRow = (k, mode) => {
+    const { assetId, thumbPreset } = parseBuildModeRowKey(k);
+    return modeRows.find((r) => r.assetId === assetId && r.thumbPreset === thumbPreset && r.buildMode === mode);
+  };
+
   const deltaDatasets = BUILD_MODE_ORDER.map((mode, i) => ({
     label: BUILD_MODE_LABELS[mode] || mode,
     data: keys.map((k) => {
-      const [assetId, preset] = k.split(':');
-      const row = modeRows.find((r) => r.assetId === assetId && r.thumbPreset === preset && r.buildMode === mode);
+      const row = findRow(k, mode);
       return row ? row.timingDeltaPct * 100 : null;
     }),
     backgroundColor: colors[i],
@@ -228,31 +286,26 @@ function renderBuildModeCharts(modeRows) {
   }));
   chartInstances.push(new Chart(canvas, {
     type: 'bar',
-    data: { labels: keys, datasets: deltaDatasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: '#e7ecf3' } },
-        title: { display: false },
-      },
+    data: { labels, datasets: deltaDatasets },
+    options: buildModeChartLayoutOptions({
       scales: {
-        x: { ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45 }, grid: { color: '#2a3544' } },
+        x: {
+          ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45, autoSkip: keys.length > 24 },
+          grid: { color: '#2a3544' },
+        },
         y: {
           ticks: { color: '#9aa8bc', callback: (v) => v + '%' },
           grid: { color: '#2a3544' },
-          title: { display: true, text: 'Δ% vs ffmpeg (20% gate)', color: '#c55' },
+          title: { display: true, text: 'Δ% vs ffmpeg (20% gate)', color: '#9aa8bc' },
         },
       },
-    },
+    }),
   }));
 
-  if (!canvasMs) return;
   const msDatasets = BUILD_MODE_ORDER.map((mode, i) => ({
     label: BUILD_MODE_LABELS[mode] || mode,
     data: keys.map((k) => {
-      const [assetId, preset] = k.split(':');
-      const row = modeRows.find((r) => r.assetId === assetId && r.thumbPreset === preset && r.buildMode === mode);
+      const row = findRow(k, mode);
       return row ? row.goMediaWriteMs : null;
     }),
     backgroundColor: colors[i],
@@ -260,16 +313,21 @@ function renderBuildModeCharts(modeRows) {
   }));
   chartInstances.push(new Chart(canvasMs, {
     type: 'bar',
-    data: { labels: keys, datasets: msDatasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#e7ecf3' } } },
+    data: { labels, datasets: msDatasets },
+    options: buildModeChartLayoutOptions({
       scales: {
-        x: { stacked: true, ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45 }, grid: { color: '#2a3544' } },
-        y: { stacked: true, beginAtZero: true, ticks: { color: '#9aa8bc' }, grid: { color: '#2a3544' }, title: { display: true, text: 'ms', color: '#9aa8bc' } },
+        x: {
+          ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45, autoSkip: keys.length > 24 },
+          grid: { color: '#2a3544' },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#9aa8bc' },
+          grid: { color: '#2a3544' },
+          title: { display: true, text: 'go+write ms', color: '#9aa8bc' },
+        },
       },
-    },
+    }),
   }));
 }
 
@@ -631,8 +689,6 @@ function renderReport(report) {
       modeTbody.appendChild(tr);
     }
   }
-  renderBuildModeCharts(modeRows);
-
   const scalerRows = report.scalerBenchmarks || [];
   const renderScalerBody = (sortKey, sortDir) => {
     const tbody = document.querySelector('#scaler-table tbody');
@@ -663,6 +719,7 @@ function renderReport(report) {
     makeSortable(scalerTable, () => scalerRows, renderScalerBody)();
   }
   renderCharts(report);
+  renderBuildModeCharts(modeRows);
 }
 
 async function loadReport() {

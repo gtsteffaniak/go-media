@@ -185,6 +185,17 @@ func (r *Reader) Skip(n int) {
 // ByteAligned reports that the position sits on a byte boundary.
 func (r *Reader) ByteAligned() bool { return r.pos%8 == 0 }
 
+// AlignedBytes returns the unread bytes from the current position, which must be
+// byte-aligned (call AlignToByte first). It does not advance the reader; callers
+// that decode the tail with their own engine (CABAC) take ownership of the position.
+func (r *Reader) AlignedBytes() []byte {
+	i := r.pos >> 3
+	if i > len(r.data) {
+		i = len(r.data)
+	}
+	return r.data[i:]
+}
+
 // AlignToByte advances to the nearest byte boundary (for pcm_alignment_zero_bit
 // and cabac_alignment_one_bit the skipped bits' values do not matter to us).
 func (r *Reader) AlignToByte() {

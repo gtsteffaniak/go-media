@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-10-25T17:26:44Z",
-  "gitHead": "e6b5b131de3891ee6b6b57f24ce7b673758ba226",
-  "profileSha256": "790bb11277296cb3b20b43879ee5367d1f6e65d9ac153239f90953e181b7c2f9",
+  "generatedAt": "2026-10-26T16:19:05Z",
+  "gitHead": "15fbb6c228fe7bd1704b70d2b62706fc41b3baf5",
+  "profileSha256": "c907f3519f5ee073422d2439ca725573f483cdefbd116d5cacbe899a7e17c757",
   "workloads": [
     "internal/thumb BenchmarkMJPEGSmall/Large",
     "internal/thumb BenchmarkMP4H264Large",

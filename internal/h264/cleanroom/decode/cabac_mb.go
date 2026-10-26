@@ -42,8 +42,8 @@ func (sd *sliceDecoder) runCabac() error {
 			}
 			sd.mbQP[addr] = sd.qp
 		}
-		if sd.cb.r.Err() != nil {
-			return sd.cb.r.Err()
+		if err := sd.cb.err(); err != nil {
+			return err
 		}
 		sd.mbDecoded[addr] = true
 		if sd.cb.decodeTerminate() == 1 { // end_of_slice_flag

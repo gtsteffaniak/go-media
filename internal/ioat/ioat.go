@@ -9,19 +9,50 @@ type Reader struct {
 	R    io.ReaderAt
 	Size int64
 	off  int64
+
+	// win caches readAheadSize bytes starting at winOff so parsers that issue many tiny
+	// Read calls (box headers, single bytes) don't turn each one into a syscall.
+	win    []byte
+	winOff int64
 }
+
+// readAheadSize is the Read read-ahead window. Reads of at least this size bypass it.
+const readAheadSize = 32 << 10
 
 // Read implements io.Reader.
 func (r *Reader) Read(p []byte) (int, error) {
 	if r.off >= r.Size {
 		return 0, io.EOF
 	}
-	n, err := r.R.ReadAt(p, r.off)
-	r.off += int64(n)
-	if r.off >= r.Size && err == nil {
-		err = io.EOF
+	if len(p) >= readAheadSize {
+		n, err := r.R.ReadAt(p, r.off)
+		r.off += int64(n)
+		if r.off >= r.Size && err == nil {
+			err = io.EOF
+		}
+		return n, err
 	}
-	return n, err
+	if r.off < r.winOff || r.off >= r.winOff+int64(len(r.win)) {
+		if r.win == nil {
+			r.win = make([]byte, readAheadSize)
+		}
+		want := int64(readAheadSize)
+		if r.off+want > r.Size {
+			want = r.Size - r.off
+		}
+		n, err := r.R.ReadAt(r.win[:want], r.off)
+		r.win = r.win[:n]
+		r.winOff = r.off
+		if n == 0 {
+			if err == nil {
+				err = io.ErrNoProgress
+			}
+			return 0, err
+		}
+	}
+	n := copy(p, r.win[r.off-r.winOff:])
+	r.off += int64(n)
+	return n, nil
 }
 
 // Seek implements io.Seeker.

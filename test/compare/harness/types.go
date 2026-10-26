@@ -67,6 +67,9 @@ type CheckResult struct {
 	PrevTimingDelta *float64 `json:"prevTimingDeltaPct,omitempty"`
 	TimingRegression *bool   `json:"timingRegression,omitempty"`
 	StatusRegression *bool   `json:"statusRegression,omitempty"`
+
+	// goErr is the error media returned for this check, used to classify unsupported rows.
+	goErr error
 }
 
 // TimingRelaxedRow documents a thumbnail row that passed under a relaxed timing gate.

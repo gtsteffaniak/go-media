@@ -17,7 +17,7 @@ make compare-gate
 ```
 
 - **Gate manifest:** `expectations.json` — must match `report_site/data/report.json` when `COMPARE_GATE=1`.
-- **Thumbnail timing gate:** every `thumbnail_large` / `thumbnail_small` case with `expect: supported` must stay ≤20% slower than ffmpeg 9.0.2 on the **shipped in-process build** (`-tags purego` + `-pgo=default.pgo`). The report also lists **stacked subprocess tiers** (`purego` → `purego+PGO` → `purego+PGO+simd`) for A/B visibility. Cases marked `typed_unsupported` (e.g. H.264 Baseline until clean-room passes gate) must return `ErrUnsupported` / `ErrUnsupportedProfile`. See `docs/PROFILING.md`, `make pgo`, `make check-pgo`.
+- **Thumbnail timing gate:** every `thumbnail_large` / `thumbnail_small` case with `expect: supported` must stay ≤20% slower than ffmpeg 9.0.2 on the **shipped in-process build** (`-tags purego` + `-pgo=default.pgo`). The report also lists **stacked subprocess tiers** (`purego` → `purego+PGO` → `purego+PGO+simd`) for A/B visibility. Cases marked `typed_unsupported` must return `ErrUnsupported` / `ErrUnsupportedProfile` and are never just asserted: the harness re-runs a rejected profile with the restriction lifted and labels the row `functionality:` (cannot decode or fails quality) or `performance:` (decodes but misses the gate), and fails with "enable it" if a gated profile starts to pass. See `docs/PROFILING.md`, `make pgo`, `make check-pgo`.
 - **Skip reasons:** N/A checks set `detail` in the report (tags on video, thumbnail on audio, etc.).
 
 The harness module lives in `harness/` so `ffmpeg_test.go` in this directory can remain a lightweight `go test` smoke check against committed `testdata/`. Set `COMPARE_GATE_TEST=1` to run the full gate via `go test` in this package.
