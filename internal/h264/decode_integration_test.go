@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/abema/go-mp4"
-	"github.com/Eyevinn/hi264/pkg/frame"
+	"github.com/gtsteffaniak/go-media/internal/h264/frame"
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 

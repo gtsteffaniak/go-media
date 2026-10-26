@@ -4,8 +4,8 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/Eyevinn/hi264/pkg/frame"
-	"github.com/Eyevinn/hi264/pkg/yuv"
+	"github.com/gtsteffaniak/go-media/internal/h264/frame"
+	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
 // ThumbYCbCr is a decoded IDR frame kept in YCbCr for fast downscale before JPEG encode.

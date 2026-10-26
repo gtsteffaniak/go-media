@@ -5,7 +5,7 @@ COMPARE_REPORT_SITE ?= test/compare/report_site
 COMPARE_SERVER_PORT ?= 8765
 export PATH := $(FFMPEG_DIR):$(PATH)
 
-.PHONY: test fixtures ffmpeg compare compare-gate compare-docs ci vet server pgo profile bench-thumb
+.PHONY: test fixtures ffmpeg compare compare-gate compare-docs ci vet server pgo check-pgo profile bench-thumb
 
 vet:
 	CGO_ENABLED=0 go vet ./...
@@ -33,6 +33,9 @@ compare-docs: compare
 
 pgo:
 	./scripts/regenerate-pgo.sh
+
+check-pgo:
+	bash scripts/check-pgo-stale.sh
 
 profile:
 	GOMAXPROCS=1 CGO_ENABLED=0 go test -run='^$' -bench='BenchmarkMJPEG|BenchmarkMP4H264' -benchtime=20x -cpuprofile=/tmp/gomedia-thumb.prof ./internal/thumb/

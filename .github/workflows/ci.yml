@@ -22,16 +22,16 @@ jobs:
         include:
           - os: ubuntu-latest
             arch: amd64
-            purego: false
+            profile: production
           - os: ubuntu-latest
             arch: amd64
-            purego: true
+            profile: purego
           - os: ubuntu-24.04-arm
             arch: arm64
-            purego: false
+            profile: production
           - os: ubuntu-24.04-arm
             arch: arm64
-            purego: true
+            profile: purego
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -46,29 +46,28 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: bash scripts/install-ffmpeg.sh
       - name: Generate fixtures
-        if: matrix.os == 'ubuntu-latest' && matrix.purego == false
+        if: matrix.os == 'ubuntu-latest' && matrix.profile == 'production'
         run: ./scripts/generate-fixtures.sh
       - name: Vet
         run: |
-          if [ "${{ matrix.purego }}" = "true" ]; then
+          if [ "${{ matrix.profile }}" = "production" ]; then
             CGO_ENABLED=0 go vet -tags purego ./...
           else
-            CGO_ENABLED=0 go vet ./...
+            CGO_ENABLED=0 go vet -tags purego ./...
           fi
       - name: Test
         run: |
-          if [ "${{ matrix.purego }}" = "true" ]; then
-            CGO_ENABLED=0 go test -tags purego ./...
+          if [ "${{ matrix.profile }}" = "production" ]; then
+            CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -tags purego ./...
           else
-            CGO_ENABLED=0 go test ./...
+            CGO_ENABLED=0 go test -tags purego ./...
           fi
-      - name: Fuzz smoke (subtitle, amd64 default only)
-        if: matrix.os == 'ubuntu-latest' && matrix.purego == false
-        run: CGO_ENABLED=0 go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
+      - name: Fuzz smoke (subtitle, amd64 production only)
+        if: matrix.os == 'ubuntu-latest' && matrix.profile == 'production'
+        run: CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -tags purego -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
 
-  test-simd-experiment:
+  test-amd64-asm-optin:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,13 +77,34 @@ jobs:
           go-version: stable
           check-latest: true
           cache: true
-      - name: Test GOEXPERIMENT=simd kernels
-        run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/...
-      - name: Install static ffmpeg (simd report smoke)
+      - name: Test amd64 asm kernels (opt-in, informational)
+        run: CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test ./internal/kernels/...
+
+  test-simd-experiment:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+          cache: true
+      - name: Test GOEXPERIMENT=simd kernels (explicit SIMD opt-in)
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd GOMEDIA_ENABLE_SIMD=1 go test ./internal/kernels/...
+      - name: Test GOEXPERIMENT=simd h264 decode
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd GOMEDIA_ENABLE_SIMD=1 go test ./internal/h264/...
+      - name: Install static ffmpeg (amd64 report smoke)
+        if: matrix.os == 'ubuntu-latest'
         run: bash scripts/install-ffmpeg.sh
-      - name: Build thumbmode simd binary smoke
+      - name: Build thumbmode simd experiment binary smoke
+        if: matrix.os == 'ubuntu-latest'
         working-directory: test/compare/harness
-        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -o /tmp/thumbmode-simd ./thumbmode
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -tags purego -pgo=../../../default.pgo -o /tmp/thumbmode-simd ./thumbmode
 
   compare-gate:
     name: ffmpeg comparison gate
@@ -101,7 +121,11 @@ jobs:
       - name: Install static ffmpeg
         run: bash scripts/install-ffmpeg.sh
       - name: Verify PGO profile
-        run: test -s default.pgo
+        run: test -s default.pgo && test -s default.pgo.provenance.json
+      - name: Check PGO freshness
+        run: make check-pgo
+      - name: Generate compare assets
+        run: ./scripts/generate-fixtures.sh
       - name: Comparison gate
         run: make compare-gate
       - name: Upload HTML report

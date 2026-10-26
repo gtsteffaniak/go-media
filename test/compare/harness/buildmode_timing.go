@@ -11,14 +11,20 @@ import (
 	"strings"
 )
 
-// BuildMode names a go-media binary variant for timing comparisons.
+// BuildMode names stacked report tiers (all use -tags purego; PGO/SIMD are incremental).
 type BuildMode string
 
 const (
-	BuildModeDefault BuildMode = "default"
-	BuildModePurego  BuildMode = "purego"
-	BuildModeSIMD    BuildMode = "simd"
+	// Tier 1: portable Go only (no asm kernels, no PGO, no simd experiment).
+	BuildModePurego BuildMode = "purego"
+	// Tier 2: tier 1 + -pgo=default.pgo.
+	BuildModePuregoPGO BuildMode = "purego_pgo"
+	// Tier 3: tier 2 + GOEXPERIMENT=simd (and simd kernel paths where implemented).
+	BuildModePuregoPGOSIMD BuildMode = "purego_pgo_simd"
 )
+
+// ShippedTimingGateBuild documents which binary the ≤20% support gate uses (in-process harness).
+const ShippedTimingGateBuild = "purego_pgo_in_process"
 
 // BuildModeTimingRow is one asset/preset timed in a specific build mode vs ffmpeg.
 type BuildModeTimingRow struct {
@@ -26,10 +32,11 @@ type BuildModeTimingRow struct {
 	Check        string    `json:"check"`
 	ThumbPreset  string    `json:"thumbPreset"`
 	BuildMode    BuildMode `json:"buildMode"`
+	Tier         int       `json:"tier"` // 1..3 stacked tiers
 	GoMediaWrite float64   `json:"goMediaWriteMs"`
 	FFmpegMS     float64   `json:"ffmpegMs"`
 	DeltaPct     float64   `json:"timingDeltaPct"`
-	GatePass     bool      `json:"timingGatePass"`
+	GatePass     bool      `json:"timingGatePass"` // vs ffmpeg ≤20%; informational for tiers
 }
 
 var _buildModeTimings []BuildModeTimingRow
@@ -38,8 +45,11 @@ func findRepoRoot(start string) string {
 	dir := start
 	for i := 0; i < 8; i++ {
 		p := filepath.Join(dir, "go.mod")
-		if b, err := os.ReadFile(p); err == nil && strings.Contains(string(b), "gtsteffaniak/go-media") {
-			return dir
+		if b, err := os.ReadFile(p); err == nil {
+			s := string(b)
+			if strings.HasPrefix(s, "module github.com/gtsteffaniak/go-media\n") {
+				return dir
+			}
 		}
 		dir = filepath.Dir(dir)
 	}
@@ -67,6 +77,11 @@ func collectBuildModeTimings(assets []Asset, flat []CheckResult, repoRoot string
 		}
 		ffByKey[r.AssetID+"|"+r.ThumbPreset] = r.FFmpegMS
 	}
+	tierOf := map[BuildMode]int{
+		BuildModePurego:         1,
+		BuildModePuregoPGO:      2,
+		BuildModePuregoPGOSIMD:  3,
+	}
 	for _, a := range assets {
 		if a.Category != "video" {
 			continue
@@ -78,7 +93,7 @@ func collectBuildModeTimings(assets []Asset, flat []CheckResult, repoRoot string
 			}
 			check := thumbnailCheckName(preset)
 			for mode, bin := range bins {
-				ms, err := runThumbModeBench(bin, a.Path, preset.Name)
+				ms, err := runThumbModeBench(bin, a.Path, preset.Name, mode)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "thumbmode %s %s %s: %v\n", mode, a.ID, preset.Name, err)
 					continue
@@ -86,7 +101,8 @@ func collectBuildModeTimings(assets []Asset, flat []CheckResult, repoRoot string
 				delta := (ms - ffMs) / ffMs
 				out = append(out, BuildModeTimingRow{
 					AssetID: a.ID, Check: string(check), ThumbPreset: preset.Name,
-					BuildMode: mode, GoMediaWrite: ms, FFmpegMS: ffMs, DeltaPct: delta,
+					BuildMode: mode, Tier: tierOf[mode],
+					GoMediaWrite: ms, FFmpegMS: ffMs, DeltaPct: delta,
 					GatePass: delta <= limit,
 				})
 			}
@@ -99,19 +115,19 @@ func buildThumbModeBinaries(repoRoot string) (map[BuildMode]string, error) {
 	dir := filepath.Join(os.TempDir(), "gomedia-thumbmode-bins")
 	_ = os.MkdirAll(dir, 0o755)
 	harnessDir := filepath.Join(repoRoot, "test/compare/harness")
-	out := map[BuildMode]string{
-		BuildModeDefault: filepath.Join(dir, "thumbmode-default"),
-		BuildModePurego:  filepath.Join(dir, "thumbmode-purego"),
-		BuildModeSIMD:    filepath.Join(dir, "thumbmode-simd"),
-	}
 	pgo := filepath.Join(repoRoot, "default.pgo")
+	if _, err := os.Stat(pgo); err != nil {
+		return nil, fmt.Errorf("default.pgo missing (run make pgo): %w", err)
+	}
+	out := map[BuildMode]string{
+		BuildModePurego:        filepath.Join(dir, "thumbmode-purego"),
+		BuildModePuregoPGO:     filepath.Join(dir, "thumbmode-purego-pgo"),
+		BuildModePuregoPGOSIMD: filepath.Join(dir, "thumbmode-purego-pgo-simd"),
+	}
 	baseEnv := append(os.Environ(), "CGO_ENABLED=0")
-	build := func(path string, tags string, goexp string) error {
-		args := []string{"build", "-o", path}
-		if tags != "" {
-			args = append(args, "-tags", tags)
-		}
-		if _, err := os.Stat(pgo); err == nil {
+	build := func(path string, usePGO bool, goexp string) error {
+		args := []string{"build", "-o", path, "-tags", "purego"}
+		if usePGO {
 			args = append(args, "-pgo="+pgo)
 		}
 		args = append(args, "./thumbmode")
@@ -129,23 +145,23 @@ func buildThumbModeBinaries(repoRoot string) (map[BuildMode]string, error) {
 		}
 		return nil
 	}
-	if err := build(out[BuildModeDefault], "", ""); err != nil {
+	if err := build(out[BuildModePurego], false, ""); err != nil {
 		return nil, err
 	}
-	if err := build(out[BuildModePurego], "purego", ""); err != nil {
+	if err := build(out[BuildModePuregoPGO], true, ""); err != nil {
 		return nil, err
 	}
-	if err := build(out[BuildModeSIMD], "", "simd"); err != nil {
+	if err := build(out[BuildModePuregoPGOSIMD], true, "simd"); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func runThumbModeBench(bin, assetPath, preset string) (float64, error) {
+func runThumbModeBench(bin, assetPath, preset string, mode BuildMode) (float64, error) {
 	cmd := exec.Command(bin, "-asset", assetPath, "-preset", preset, "-seek", "10")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
-	if strings.Contains(bin, "simd") {
-		cmd.Env = append(cmd.Env, "GOEXPERIMENT=simd")
+	if mode == BuildModePuregoPGOSIMD {
+		cmd.Env = append(cmd.Env, "GOEXPERIMENT=simd", "GOMEDIA_ENABLE_SIMD=1")
 	}
 	out, err := cmd.Output()
 	if err != nil {

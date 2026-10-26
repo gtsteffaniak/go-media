@@ -118,6 +118,10 @@ type ReportSummary struct {
 	FFmpegVersion   string         `json:"ffmpegVersion"`
 	FFprobeVersion  string         `json:"ffprobeVersion"`
 	GoMediaModule   string         `json:"goMediaModule"`
+	// TimingGateBuild is the shipped binary variant used for ≤20% support decisions (in-process).
+	TimingGateBuild string `json:"timingGateBuild"`
+	// BuildModeTiers documents stacked subprocess tiers in buildModeTimings (vs ffmpeg).
+	BuildModeTiers []string `json:"buildModeTiers,omitempty"`
 	Timing          TimingAggregate           `json:"timing"`
 	TimingRelaxed   []TimingRelaxedRow        `json:"timingRelaxed,omitempty"`
 	CapabilityChart []CapabilityBreakdown     `json:"capabilityBreakdown"`
