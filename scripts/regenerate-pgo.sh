@@ -4,7 +4,14 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-export PATH="${HOME}/ffmpeg-9.0.2:${PATH}"
+# shellcheck source=ffmpeg-path.sh
+source "$ROOT/scripts/ffmpeg-path.sh"
+FFMPEG_VERSION="${FFMPEG_VERSION:-9.0.2}"
+export FFMPEG_DIR="${FFMPEG_DIR:-$HOME/ffmpeg-$FFMPEG_VERSION}"
+prepend_ffmpeg_to_path || {
+	echo "ffmpeg not found; install ffmpeg or run make ffmpeg on Linux" >&2
+	exit 1
+}
 ./scripts/generate-fixtures.sh
 
 ASSETS="$ROOT/test/compare/harness/.assets"

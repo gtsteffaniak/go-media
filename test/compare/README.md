@@ -8,7 +8,10 @@ Developer tooling (not part of the library API) that:
 4. Writes a static dashboard to `report_site/` (`data/report.json` + HTML)
 
 ```bash
-# from repository root (pinned ffmpeg 9.0.2)
+# from repository root — uses ffmpeg on PATH when available (e.g. Homebrew)
+make compare
+
+# CI gate (pinned ffmpeg 9.0.2 on Linux)
 make ffmpeg
 make compare-gate
 ```

@@ -44,7 +44,7 @@ jobs:
           cache: true
       - name: Install static ffmpeg
         if: matrix.os == 'ubuntu-latest'
-        run: bash scripts/install-ffmpeg.sh
+        run: FFMPEG_FORCE_INSTALL=1 bash scripts/install-ffmpeg.sh
       - name: Generate fixtures
         if: matrix.os == 'ubuntu-latest' && matrix.profile == 'production'
         run: ./scripts/generate-fixtures.sh
@@ -100,7 +100,7 @@ jobs:
         run: CGO_ENABLED=0 GOEXPERIMENT=simd GOMEDIA_ENABLE_SIMD=1 go test ./internal/h264/...
       - name: Install static ffmpeg (amd64 report smoke)
         if: matrix.os == 'ubuntu-latest'
-        run: bash scripts/install-ffmpeg.sh
+        run: FFMPEG_FORCE_INSTALL=1 bash scripts/install-ffmpeg.sh
       - name: Build thumbmode simd experiment binary smoke
         if: matrix.os == 'ubuntu-latest'
         working-directory: test/compare/harness
@@ -119,7 +119,7 @@ jobs:
           check-latest: true
           cache: true
       - name: Install static ffmpeg
-        run: bash scripts/install-ffmpeg.sh
+        run: FFMPEG_FORCE_INSTALL=1 bash scripts/install-ffmpeg.sh
       - name: Verify PGO profile
         run: test -s default.pgo && test -s default.pgo.provenance.json
       - name: Check PGO freshness

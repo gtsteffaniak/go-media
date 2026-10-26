@@ -1,9 +1,10 @@
-# go-media developer targets. Comparison uses pinned ffmpeg 9.0.2 (see scripts/install-ffmpeg.sh).
+# go-media developer targets. CI/compare-gate use pinned ffmpeg 9.0.2 (scripts/install-ffmpeg.sh).
+# Local compare uses ffmpeg on PATH when present (see scripts/ffmpeg-path.sh).
 FFMPEG_VERSION ?= 9.0.2
 FFMPEG_DIR ?= $(HOME)/ffmpeg-$(FFMPEG_VERSION)
 COMPARE_REPORT_SITE ?= test/compare/report_site
 COMPARE_SERVER_PORT ?= 8765
-export PATH := $(FFMPEG_DIR):$(PATH)
+export FFMPEG_DIR FFMPEG_VERSION
 
 .PHONY: test fixtures ffmpeg compare compare-gate compare-docs ci vet server pgo check-pgo profile bench-thumb
 
@@ -19,7 +20,7 @@ fixtures:
 ffmpeg:
 	bash scripts/install-ffmpeg.sh $(FFMPEG_VERSION)
 
-compare: ffmpeg
+compare:
 	bash scripts/run-comparison.sh
 
 compare-gate: ffmpeg
