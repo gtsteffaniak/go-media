@@ -6,7 +6,7 @@ End-to-end thumbnail latency is gated in `test/compare` against ffmpeg 9.0.2 (se
 
 | Variant | Used for |
 |---------|----------|
-| **In-process `amd64_asm_kernels_pgo_in_process`** | **≤20% support gate** (comparison harness `go run` with `GOFLAGS=-pgo=default.pgo`, default asm kernels) |
+| **In-process `purego_pgo_in_process`** | **≤20% support gate** (comparison harness built with `-tags purego -pgo=default.pgo`) |
 | Report tier 1 `purego` | Subprocess thumbmode: `-tags purego`, no PGO |
 | Report tier 2 `purego_pgo` | Tier 1 + `-pgo=default.pgo` |
 | Report tier 3 `purego_pgo_simd` | Tier 2 + `GOEXPERIMENT=simd` |
@@ -103,7 +103,7 @@ make check-pgo
 
 ## SIMD experiment (Go 1.27+, CI on stable)
 
-`simd` / `simd/archsimd` require `GOEXPERIMENT=simd` at build time and are **not** stable APIs. Production paths use `internal/kernels` assembly (amd64) or portable Go (`-tags purego`). Report **tier 3** builds thumbmode with `GOEXPERIMENT=simd`. Optional experiment tests:
+`simd` / `simd/archsimd` require `GOEXPERIMENT=simd` at build time and are **not** stable APIs. Production paths use portable Go in `internal/kernels` (the scalar amd64 asm was removed; SIMD kernels are added per kernel once they beat it). Report **tier 3** builds thumbmode with `GOEXPERIMENT=simd`. Optional experiment tests:
 
 ```bash
 CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/...

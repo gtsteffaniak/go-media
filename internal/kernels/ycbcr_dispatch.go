@@ -1,9 +1,7 @@
-//go:build purego || !(amd64 || arm64)
-
 package kernels
 
 // AreaDownRowY averages source luma rows [sy0,sy1) across [x0,x1) into dstY[dx].
-func AreaDownRowY(dstY []byte, dstStride int, dx int, srcY []byte, srcStride int, sy0, sy1, x0, x1 int) {
+func AreaDownRowY(dstY []byte, _ int, dx int, srcY []byte, srcStride int, sy0, sy1, x0, x1 int) {
 	areaDownRowYPortable(dstY, dx, srcY, srcStride, sy0, sy1, x0, x1)
 }
 

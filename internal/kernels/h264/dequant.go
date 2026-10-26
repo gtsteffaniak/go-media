@@ -28,13 +28,6 @@ func levelScale4x4(m, i, j int) int32 {
 
 // Dequant4x4 scales H.264 4×4 coefficients (flat matrix).
 func Dequant4x4(coef [16]int32, qp int) [16]int32 {
-	return dequant4x4(coef, qp)
-}
-
-func dequant4x4(coef [16]int32, qp int) [16]int32 {
-	if KernelSIMD("dequant4x4") {
-		return dequant4x4SIMD(coef, qp)
-	}
 	return dequant4x4Portable(coef, qp)
 }
 

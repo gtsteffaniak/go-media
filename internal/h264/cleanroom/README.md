@@ -8,7 +8,7 @@ Full **SIMD-first rewrite** (ITU-T H.264; ffmpeg/openh264 as behavioral referenc
 - **Table-driven CAVLC** with multi-symbol LUTs — `cavlc/`
 - **Batched coefficients** — `coeff/`
 - **CABAC decode-only** — `cabac/` (Main/High)
-- **Kernels** — `internal/kernels/h264` (dequant/IDCT/reconstruct, intra pred, plane writes; asm + purego + simd)
+- **Kernels** — `internal/kernels/h264` (dequant/IDCT/reconstruct, intra pred, plane writes; portable Go reference, simd kernels added per kernel)
 - **Thumbnails:** skip in-loop deblock on fast path
 - **Zero allocations** per frame after pool warm; **PGO** via `default.pgo`
 - **Baseline:** profile per stage (`docs/BASELINE_PROFILE.md`); enable in `sps.go` only if ≤20% gate passes

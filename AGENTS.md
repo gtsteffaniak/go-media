@@ -20,7 +20,7 @@ Instructions for autonomous coding agents working in this repository.
 | `internal/vp8decode` | VP8 picture → RGBA/YCbCr scale helpers. |
 | `internal/jpegfast` | Fast MJPEG decode for thumbnails. |
 | `internal/thumb` | Thumbnail pipeline: seek, decode, YCbCr/RGBA scale, JPEG/PNG/WebP encode. |
-| `internal/kernels` | Hot loops: YCbCr area downscale, reconstruct helpers; **amd64 asm** + **`purego`** + optional **`GOEXPERIMENT=simd`** (bit-identical tests). |
+| `internal/kernels` | Hot loops: YCbCr area downscale and H.264 residual/recon/pred helpers (`kernels/h264`). Portable Go is the bit-exact reference; **`GOEXPERIMENT=simd`** (`simd/archsimd`) kernels are added per kernel only when they beat it. |
 | `internal/tagread`, `internal/mp3`, `internal/flac`, `internal/ogg`, `internal/wav` | Tags and duration helpers per format. |
 | `internal/subtitle` | Sidecar and MKV subtitle parse/convert. |
 | `internal/errs` | Typed unsupported/profile/corrupt errors. |
@@ -35,7 +35,7 @@ Instructions for autonomous coding agents working in this repository.
 3. **Go version:** **`go.mod` minimum `go 1.27`**. **CI** uses **`go-version: stable`** + **`check-latest: true`**.
 4. **Do not use [Eyevinn/hi264](https://github.com/Eyevinn/hi264)** as a module or vendored tree. All H.264 decode work stays in **`internal/h264`** (ITU-T H.264; ffmpeg/openh264 as behavioral references only — no GPL/LGPL copies).
 5. **Dependencies:** keep the graph small. **`github.com/Eyevinn/mp4ff`** is allowed **only where it pays for itself** (today: **`avc` SPS/PPS/slice/NAL** parsing in `internal/h264` validation and the legacy decoder path). Do not add mp4ff for MP4 container work — use **`abema/go-mp4`** for boxes/demux.
-6. **SIMD:** Design hot paths for **Go simd / `GOEXPERIMENT=simd`** where practical, alongside **stable amd64 asm** and **`-tags purego`** fallbacks — all **bit-identical** on shared tests. The comparison report records **three stacked tiers** vs ffmpeg: **(1) purego**, **(2) purego + PGO**, **(3) purego + PGO + simd** (subprocess thumbmode). **The ≤20% support gate uses the shipped in-process build only:** **amd64 asm kernels + `-pgo=default.pgo`** (not purego). See `docs/PROFILING.md`.
+6. **SIMD:** Design hot paths for **Go `simd/archsimd` / `GOEXPERIMENT=simd`** with a portable Go fallback (`-tags purego` forces it) — all **bit-identical** on shared tests. Kernels are batched (per row/MB/plane, never per pixel or 4×4), dispatch is resolved once at init, and a SIMD kernel is enabled only after it beats the portable version in benchmarks and tier 3 beats tier 2 on thumbnails. The comparison report records **three stacked tiers** vs ffmpeg: **(1) purego**, **(2) purego + PGO**, **(3) purego + PGO + simd** (subprocess thumbmode). **The ≤20% support gate uses the shipped in-process build only:** **`-tags purego` + `-pgo=default.pgo`** (`ShippedTimingGateBuild`; there is no asm tier anymore). See `docs/PROFILING.md`.
 7. **PGO:** Keep **`default.pgo`** and **`default.pgo.provenance.json`** in sync with hot paths (`make pgo` after corpus/decoder changes). Harness uses `GOFLAGS=-pgo=default.pgo`. CI runs **`make check-pgo`** (warn if stale).
 8. **Performance policy:** Supported features ≤**20%** slower than **ffmpeg 9.0.2** exec (10% target). Failures → **`ErrUnsupported`** / **`ErrUnsupportedProfile`**. No timing exemptions.
 9. **Quality:** PSNR/SSIM vs ffmpeg; H.264 intra decode YUV metrics on keyframe fixtures.

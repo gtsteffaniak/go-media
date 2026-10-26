@@ -8,12 +8,16 @@ import (
 )
 
 // KernelsUseSIMD is true only when GOEXPERIMENT=simd code is linked, the CPU has AVX2/ASIMD,
-// and SIMD is explicitly enabled (GOMEDIA_ENABLE_SIMD=1 or -tags gomedia_simd). Production
-// builds keep this false even under GOEXPERIMENT=simd.
-var KernelsUseSIMD bool
+// and SIMD is explicitly enabled (GOMEDIA_ENABLE_SIMD=1 or -tags gomedia_simd). It is resolved
+// once at init; kernels must not re-read the environment or CPU flags per call.
+//
+// No SIMD kernels are implemented yet, so this gate currently selects nothing. Each future
+// kernel dispatches on it (or on its own package-level flag derived from it) with a plain
+// bool read.
+var KernelsUseSIMD = resolveKernelsUseSIMD()
 
-func init() {
-	KernelsUseSIMD = simdExperimentEnabled() && cpuHasSIMD() && simdExplicitlyEnabled()
+func resolveKernelsUseSIMD() bool {
+	return simdExperimentEnabled() && cpuHasSIMD() && simdExplicitlyEnabled()
 }
 
 func cpuHasSIMD() bool {
@@ -26,14 +30,4 @@ func simdExplicitlyEnabled() bool {
 		return v == "1" || strings.EqualFold(v, "true")
 	}
 	return simdOptInByDefault()
-}
-
-// SetSIMDEnabledForTest toggles SIMD dispatch (tests only).
-func SetSIMDEnabledForTest(on bool) {
-	if on {
-		os.Setenv("GOMEDIA_ENABLE_SIMD", "1")
-	} else {
-		os.Setenv("GOMEDIA_ENABLE_SIMD", "0")
-	}
-	KernelsUseSIMD = simdExperimentEnabled() && cpuHasSIMD() && simdExplicitlyEnabled()
 }

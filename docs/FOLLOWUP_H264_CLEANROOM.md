@@ -7,7 +7,7 @@ Relocated **Eyevinn/hi264** under `internal/h264/{intradec,cabac,…}` is **unac
 ## Rewrite goals (Graham)
 
 - **Full rewrite** from **ITU-T H.264** (ffmpeg/openh264 behavioral references only; **no hi264** in any form).
-- **SIMD-first:** `GOEXPERIMENT=simd` / archsimd where applicable, **amd64 asm**, **`-tags purego`** fallbacks; bit-identical on shared kernel tests.
+- **SIMD-first:** `GOEXPERIMENT=simd` / archsimd kernels with a portable Go fallback (`-tags purego` forces it); bit-identical on shared kernel tests.
 - **Baseline (CAVLC):** design to pass **≤20%** ffmpeg thumbnail gate; **profile per stage** (demux/NAL, slice syntax, CAVLC entropy, coeff batching, dequant/IDCT, intra pred, plane writes). If gate passes → **supported**; if not → remain **unsupported** with **profile-backed root cause** in docs/PR.
 - **Main/High (CABAC):** decode-only intra; bit-exact YUV vs ffmpeg on harness fixtures.
 - **Thumbnails:** **skip in-loop deblock** on fast path; full deblock optional for parity tests.

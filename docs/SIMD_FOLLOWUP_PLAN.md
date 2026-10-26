@@ -1,6 +1,6 @@
 # SIMD / CAVLC follow-up plan (post-merge)
 
-Production ships **`-tags purego` + `default.pgo`**. Runtime SIMD is **off** unless `GOMEDIA_ENABLE_SIMD=1` (or `-tags gomedia_simd` for experiment binaries). Each kernel has a **static false** default in `internal/kernels/h264/simd_kernel_flags.go`; flip only after benchmarks beat purego+PGO end-to-end.
+Production ships **`-tags purego` + `default.pgo`**. Runtime SIMD is **off** unless `GOMEDIA_ENABLE_SIMD=1` (or `-tags gomedia_simd` for experiment binaries). Dispatch is resolved once in `internal/kernels/h264/simd_cpu.go` (`KernelsUseSIMD`); the original per-kernel SIMD bodies were removed (see `SIMD_IDCT_DIAGNOSIS.md`) and each real kernel is enabled only after benchmarks beat purego+PGO end-to-end.
 
 ## 1. Diagnose 4×4 SIMD slowness (before rewriting)
 
