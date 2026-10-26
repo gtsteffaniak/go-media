@@ -17,29 +17,42 @@ VERSION="${1:-${FFMPEG_VERSION:-9.0.2}}"
 DEST="${2:-${FFMPEG_INSTALL_DIR:-$HOME/ffmpeg-$VERSION}}"
 export FFMPEG_DIR="${FFMPEG_DIR:-$DEST}"
 
+ffmpeg_version_first_line() {
+	"$1" -version 2>&1 | sed -n '1p' || true
+}
+
+ffmpeg_pair_matches_version() {
+	local ff="$1" fp="$2" ver="$3"
+	local ff_line fp_line
+	ff_line=$(ffmpeg_version_first_line "$ff")
+	fp_line=$(ffmpeg_version_first_line "$fp")
+	[[ "$ff_line" == *"version ${ver}"* && "$fp_line" == *"version ${ver}"* ]]
+}
+
 use_path_ffmpeg() {
-	local ff fp line
+	local ff fp ff_dir fp_dir
 	ff=$(command -v ffmpeg 2>/dev/null || true)
 	fp=$(command -v ffprobe 2>/dev/null || true)
 	if ! ffmpeg_binary_usable "$ff" || ! ffmpeg_binary_usable "$fp"; then
 		return 1
 	fi
-	line=$(ffmpeg -version 2>&1 | sed -n '1p' || true)
-	if [[ "$line" != *"ffmpeg version ${VERSION}"* ]]; then
+	ff_dir=$(cd "$(dirname "$ff")" && pwd)
+	fp_dir=$(cd "$(dirname "$fp")" && pwd)
+	if [[ "$ff_dir" != "$fp_dir" ]]; then
+		return 1
+	fi
+	if ! ffmpeg_pair_matches_version "$ff" "$fp" "$VERSION"; then
 		return 1
 	fi
 	echo "Using ffmpeg $VERSION from PATH: $ff"
-	ffmpeg -version 2>&1 | sed -n '1p'
-	ffprobe -version 2>&1 | sed -n '1p'
+	ffmpeg_version_first_line "$ff"
+	ffmpeg_version_first_line "$fp"
 	return 0
 }
 
 if [[ "${FFMPEG_FORCE_INSTALL:-}" != "1" ]]; then
 	if [[ "$(uname -s)" == "Darwin" ]]; then
-		if prepend_ffmpeg_to_path; then
-			echo "Using ffmpeg from PATH: $(command -v ffmpeg)"
-			ffmpeg -version 2>&1 | sed -n '1p'
-			ffprobe -version 2>&1 | sed -n '1p'
+		if prepend_ffmpeg_to_path && use_path_ffmpeg; then
 			exit 0
 		fi
 	elif use_path_ffmpeg; then
@@ -57,7 +70,7 @@ aarch64 | arm64) ARCH=arm64 ;;
 esac
 
 if [[ "$(uname -s)" != "Linux" ]]; then
-	echo "Static ffmpeg releases are Linux-only; install ffmpeg locally (e.g. Homebrew) or set FFMPEG_PATH." >&2
+	echo "Static ffmpeg releases are Linux-only; install ffmpeg locally (e.g. Homebrew) or set FFMPEG_DIR / FFMPEG_PATH." >&2
 	exit 1
 fi
 
@@ -66,10 +79,14 @@ URL="https://github.com/gtsteffaniak/ffmpeg/releases/download/v${VERSION}/${TARB
 
 mkdir -p "$DEST"
 if ffmpeg_binary_usable "$DEST/ffmpeg" && ffmpeg_binary_usable "$DEST/ffprobe"; then
-	echo "Static ffmpeg $VERSION ($ARCH) already present at $DEST"
-	"$DEST/ffmpeg" -version 2>&1 | sed -n '1p'
-	"$DEST/ffprobe" -version 2>&1 | sed -n '1p'
-	exit 0
+	if ffmpeg_pair_matches_version "$DEST/ffmpeg" "$DEST/ffprobe" "$VERSION"; then
+		echo "Static ffmpeg $VERSION ($ARCH) already present at $DEST"
+		ffmpeg_version_first_line "$DEST/ffmpeg"
+		ffmpeg_version_first_line "$DEST/ffprobe"
+		exit 0
+	fi
+	echo "Replacing ffmpeg at $DEST (version mismatch with requested $VERSION)" >&2
+	rm -f "$DEST/ffmpeg" "$DEST/ffprobe"
 fi
 
 echo "Downloading $URL"
@@ -78,8 +95,8 @@ tar -xzf "$DEST/$TARBALL" -C "$DEST"
 rm -f "$DEST/$TARBALL"
 chmod +x "$DEST/ffmpeg" "$DEST/ffprobe"
 
-"$DEST/ffmpeg" -version 2>&1 | sed -n '1p'
-"$DEST/ffprobe" -version 2>&1 | sed -n '1p'
+ffmpeg_version_first_line "$DEST/ffmpeg"
+ffmpeg_version_first_line "$DEST/ffprobe"
 
 if [[ -n "${GITHUB_PATH:-}" ]]; then
 	echo "$DEST" >>"$GITHUB_PATH"

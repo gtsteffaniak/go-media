@@ -4,7 +4,7 @@ FFMPEG_VERSION ?= 9.0.2
 FFMPEG_DIR ?= $(HOME)/ffmpeg-$(FFMPEG_VERSION)
 COMPARE_REPORT_SITE ?= test/compare/report_site
 COMPARE_SERVER_PORT ?= 8765
-export FFMPEG_DIR FFMPEG_VERSION
+export FFMPEG_VERSION
 
 .PHONY: test fixtures ffmpeg compare compare-gate compare-docs ci vet server pgo check-pgo profile bench-thumb
 
@@ -24,7 +24,7 @@ compare:
 	bash scripts/run-comparison.sh
 
 compare-gate: ffmpeg
-	CGO_ENABLED=0 COMPARE_GATE=1 bash scripts/run-comparison.sh
+	FFMPEG_DIR="$(FFMPEG_DIR)" CGO_ENABLED=0 COMPARE_GATE=1 bash scripts/run-comparison.sh
 
 server:
 	python3 -m http.server $(COMPARE_SERVER_PORT) -d $(COMPARE_REPORT_SITE)

@@ -8,12 +8,15 @@ REPORT="$ROOT/test/compare/report_site"
 source "$ROOT/scripts/ffmpeg-path.sh"
 
 FFMPEG_VERSION="${FFMPEG_VERSION:-9.0.2}"
-export FFMPEG_DIR="${FFMPEG_DIR:-$HOME/ffmpeg-$FFMPEG_VERSION}"
+# Local compare: prefer PATH (see find_ffmpeg_bindir). Gate pins $HOME/ffmpeg-$VERSION.
+if [[ "${COMPARE_GATE:-}" == "1" ]]; then
+	export FFMPEG_DIR="${FFMPEG_DIR:-$HOME/ffmpeg-$FFMPEG_VERSION}"
+fi
 
 cd "$HARNESS"
 
 if ! prepend_ffmpeg_to_path; then
-	echo "ffmpeg not found; install ffmpeg (e.g. Homebrew), run make ffmpeg on Linux, or set FFMPEG_PATH" >&2
+	echo "ffmpeg not found; install ffmpeg (e.g. Homebrew), run make ffmpeg on Linux, or set FFMPEG_DIR / FFMPEG_PATH" >&2
 	exit 1
 fi
 
