@@ -170,7 +170,7 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	}
 	s.FFmpegVersion = ffmpegVersionLine()
 	s.FFprobeVersion = ffprobeVersionLine()
-	s.GoMediaModule = "github.com/gtsteffaniak/go-media"
+	s.GoMediaModule = "github.com/gtsteffaniak/go-media/pkg/media"
 	s.TimingGateBuild = ShippedTimingGateBuild
 	s.BuildModeTiers = []string{
 		"1: diagnostic — no PGO",

@@ -15,16 +15,13 @@ prepend_ffmpeg_to_path || {
 }
 ./scripts/generate-fixtures.sh
 
-HARNESS="$ROOT/test/compare/harness"
+HARNESS="$ROOT/cmd/gomedia-compare"
 ASSETS="$HARNESS/.assets"
 if [[ ! -f "$ASSETS/video/mjpeg.mp4" ]]; then
-	echo "Generating compare harness assets (gitignored under test/compare/harness/.assets)..."
+	echo "Generating compare harness assets (gitignored under cmd/gomedia-compare/.assets)..."
 	COMPARE_BIN="${COMPARE_BIN:-$HARNESS/.cache/gomedia-compare}"
 	mkdir -p "$(dirname "$COMPARE_BIN")"
-	(
-		cd "$HARNESS"
-		CGO_ENABLED=0 go build -pgo=off -o "$COMPARE_BIN" .
-	)
+	CGO_ENABLED=0 go build -pgo=off -o "$COMPARE_BIN" ./cmd/gomedia-compare
 	CGO_ENABLED=0 "$COMPARE_BIN" \
 		-seed-dir "$HARNESS/.seed" \
 		-assets "$HARNESS/.assets" \

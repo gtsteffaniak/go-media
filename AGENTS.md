@@ -12,7 +12,10 @@ Instructions for autonomous coding agents working in this repository.
 
 | Path | Role |
 |------|------|
-| **Repo root (`package media`)** | Public API: `Probe`, `Duration`, tags, subtitles, `Thumbnail*` / presets, `H264KeyframeYUV420`, errors (`ErrUnsupported`, `ErrUnsupportedProfile`). |
+| **`pkg/media`** | Public API (`github.com/gtsteffaniak/go-media/pkg/media`): `Probe`, `Duration`, tags, subtitles, `Thumbnail*` / presets, `H264KeyframeYUV420`, errors. |
+| **`main.go`** | Demo CLI (`probe`, `duration`, `thumb`). |
+| **`cmd/gomedia-compare`** | ffmpeg 9.0.2 comparison harness, timing gate, HTML report. |
+| **`cmd/gomedia-thumbmode`** | Single-asset thumbnail benchmark helper for tier timings. |
 | `internal/sniff`, `internal/format`, `internal/detect` | Format detection and IDs. |
 | `internal/isobmff` | MP4/MOV: boxes, sync samples, MJPEG/H.264 thumbnail demux (`abema/go-mp4`). |
 | `internal/matroska` | MKV/WebM: cues, VP8/MJPEG thumbnails. |
@@ -24,8 +27,7 @@ Instructions for autonomous coding agents working in this repository.
 | `internal/tagread`, `internal/mp3`, `internal/flac`, `internal/ogg`, `internal/wav` | Tags and duration helpers per format. |
 | `internal/subtitle` | Sidecar and MKV subtitle parse/convert. |
 | `internal/errs` | Typed unsupported/profile/corrupt errors. |
-| `test/compare/harness` | ffmpeg 9.0.2 comparison harness, timing gate, build-mode timings, HTML report. |
-| `docs/` | `PROFILING.md`, `H264.md`, `SIMD.md`. Compare harness: `test/compare/README.md`. |
+| `docs/` | `SUPPORTED_CAPABILITIES.md`, `PROFILING.md`, `H264.md`, `SIMD.md`. Compare harness: `test/compare/README.md`. |
 | `default.pgo` | Checked-in PGO profile for release-style builds. |
 
 ## Hard rules

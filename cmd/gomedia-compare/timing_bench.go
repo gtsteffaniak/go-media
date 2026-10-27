@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 const thumbTimingWarmup = 11

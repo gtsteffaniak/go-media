@@ -2,8 +2,8 @@
 
 Developer tooling (not part of the library API) that:
 
-1. Downloads the pinned go-ffmpeg seed MP4 (`harness/seed.go`)
-2. Generates a format matrix with ffmpeg (`harness/generate.go` → `harness/.assets/`, gitignored)
+1. Downloads the pinned go-ffmpeg seed MP4 (`cmd/gomedia-compare/seed.go`)
+2. Generates a format matrix with ffmpeg (`cmd/gomedia-compare/generate.go` → `cmd/gomedia-compare/.assets/`, gitignored)
 3. Runs go-media vs ffprobe/ffmpeg for duration, probe, tags, artwork, lyrics, subtitles, and thumbnails
 4. Writes a static dashboard to `report_site/` (`data/report.json` + HTML)
 
@@ -39,6 +39,6 @@ make compare-gate
 
 **Not bit-identical:** go `image/jpeg` **Quality** uses Go’s quant tables; ffmpeg MJPEG **-q:v** uses libavcodec qscale. The harness maps 1–100 → 2–31 with `ffmpegQScale`; PSNR/SSIM gate visual parity, not identical coefficients. **Colors:** H.264 thumbnails decode to YCbCr; aggressive downscales (e.g. small preset) use **`scaleYCbCrArea` with per-tile RGB averaging** (same definition as full-frame `rgbaFromYCbCr` + area, without a 1080p RGBA buffer). Mild downscales (e.g. 1080p→large) use **YCbCr plane** area (`scaleYCbCrArea` matrix path). `Fast` on the small preset affects MJPEG/cover decode, not the H.264 matrix path. Repeated thumbs from one file can use `isobmff.OpenH264MP4Thumb` to cache `mp4.Probe` + avcC.
 
-`TestThumbnailPresetMatchesMedia` and `TestFFmpegQScaleForPresets` in `harness/` guard preset parity.
+`TestThumbnailPresetMatchesMedia` and `TestFFmpegQScaleForPresets` in `cmd/gomedia-compare/` guard preset parity.
 
-The harness module lives in `harness/` so `ffmpeg_test.go` in this directory can remain a lightweight `go test` smoke check against committed `testdata/`. Set `COMPARE_GATE_TEST=1` to run the full gate via `go test` in this package.
+The compare binary lives in `cmd/gomedia-compare/` so `ffmpeg_test.go` in this directory can remain a lightweight `go test` smoke check against committed `testdata/`. Set `COMPARE_GATE_TEST=1` to run the full gate via `go test` in this package.

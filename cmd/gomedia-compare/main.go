@@ -35,7 +35,7 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 	// When invoked from repo root via script, paths are under test/compare.
 	base := cwd
 	if _, err := os.Stat(filepath.Join(base, "go.mod")); err != nil {
-		base = filepath.Join(cwd, "test", "compare", "harness")
+		base = filepath.Join(cwd, "cmd", "gomedia-compare")
 	}
 	seedDir = absUnder(base, seedDir)
 	assetsDir = absUnder(base, assetsDir)

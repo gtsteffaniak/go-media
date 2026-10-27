@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 // TestThumbnailMJPEGInMP4 is a test.

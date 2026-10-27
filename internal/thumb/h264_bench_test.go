@@ -8,27 +8,27 @@ import (
 )
 
 func BenchmarkMP4H264Large(b *testing.B) {
-	benchH264Thumb(b, "../../test/compare/harness/.assets/video/mp4_h264.mp4", h264BenchLargeOpt())
+	benchH264Thumb(b, "../../cmd/gomedia-compare/.assets/video/mp4_h264.mp4", h264BenchLargeOpt())
 }
 
 func BenchmarkMP4H264Small(b *testing.B) {
-	benchH264Thumb(b, "../../test/compare/harness/.assets/video/mp4_h264.mp4", h264BenchSmallOpt())
+	benchH264Thumb(b, "../../cmd/gomedia-compare/.assets/video/mp4_h264.mp4", h264BenchSmallOpt())
 }
 
 func BenchmarkMP4H264Baseline1080Small(b *testing.B) {
-	benchH264Thumb(b, "../../test/compare/harness/.assets/video/mp4_h264_baseline_1080.mp4", h264BenchSmallOpt())
+	benchH264Thumb(b, "../../cmd/gomedia-compare/.assets/video/mp4_h264_baseline_1080.mp4", h264BenchSmallOpt())
 }
 
 func BenchmarkMP4H264Baseline1080Large(b *testing.B) {
-	benchH264Thumb(b, "../../test/compare/harness/.assets/video/mp4_h264_baseline_1080.mp4", h264BenchLargeOpt())
+	benchH264Thumb(b, "../../cmd/gomedia-compare/.assets/video/mp4_h264_baseline_1080.mp4", h264BenchLargeOpt())
 }
 
 func BenchmarkMP4H264Main1080Large(b *testing.B) {
-	benchH264Thumb(b, "../../test/compare/harness/.assets/video/mp4_h264_main_1080.mp4", h264BenchLargeOpt())
+	benchH264Thumb(b, "../../cmd/gomedia-compare/.assets/video/mp4_h264_main_1080.mp4", h264BenchLargeOpt())
 }
 
 func BenchmarkMP4H264High1080Large(b *testing.B) {
-	benchH264Thumb(b, "../../test/compare/harness/.assets/video/mp4_h264_high_1080.mp4", h264BenchLargeOpt())
+	benchH264Thumb(b, "../../cmd/gomedia-compare/.assets/video/mp4_h264_high_1080.mp4", h264BenchLargeOpt())
 }
 
 func h264BenchLargeOpt() Options {

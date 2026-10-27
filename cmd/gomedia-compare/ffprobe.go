@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 // FFProbeFormat holds ffprobe format fields used for comparison.

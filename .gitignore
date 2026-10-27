@@ -1,9 +1,8 @@
 # Comparison harness generated output
-test/compare/harness/.seed/
-test/compare/harness/.assets/
-test/compare/harness/harness
-test/compare/harness/report_site/
-test/compare/harness/.cache/
+cmd/gomedia-compare/.seed/
+cmd/gomedia-compare/.assets/
+cmd/gomedia-compare/gomedia-compare
+cmd/gomedia-compare/.cache/
 test/compare/report_site/data/
 test/compare/report_site/media/
 test/compare/.seed_tmp/

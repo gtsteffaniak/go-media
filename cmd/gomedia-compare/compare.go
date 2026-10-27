@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 	"github.com/gtsteffaniak/go-media/internal/h264"
 )
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 // bytesAt is a minimal io.ReaderAt over a byte slice.
@@ -35,7 +35,7 @@ func TestUnsupportedErrorKeepsDetail(t *testing.T) {
 
 // openFixture opens a testdata file or skips the test.
 func openFixture(t *testing.T, name string) (*os.File, int64) {
-	f, err := os.Open("testdata/" + name)
+	f, err := os.Open("../../testdata/" + name)
 	if err != nil {
 		t.Skip("missing fixture, run scripts/generate-fixtures.sh:", err)
 	}

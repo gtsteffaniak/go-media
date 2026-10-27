@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 // ffprobeDuration reads duration seconds from ffprobe JSON.
