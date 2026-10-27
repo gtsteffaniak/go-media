@@ -15,17 +15,19 @@ import (
 )
 
 // DecodeKeyframe decodes an H.264 IDR access unit in AVCC form (length-prefixed NALs).
-func DecodeKeyframe(nal []byte, _ int, _ int) ([]byte, int, int, error) {
+func DecodeKeyframe(nal []byte, _ int, _ int) (b []byte, w, h int, err error) {
+	defer recoverDecode(&err)
 	img, err := DecodeAVCC(nil, nal, false)
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	b, w, h := rgbaBytes(img)
+	b, w, h = rgbaBytes(img)
 	return b, w, h, nil
 }
 
 // DecodeAVCC decodes one sync sample with optional avcC parameter sets prepended.
-func DecodeAVCC(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*image.RGBA, error) {
+func DecodeAVCC(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (img *image.RGBA, err error) {
+	defer recoverDecode(&err)
 	fr, err := decodeFrame(avcc, sample, fast)
 	if err != nil {
 		return nil, err
@@ -35,7 +37,8 @@ func DecodeAVCC(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*i
 
 
 // DecodeAVCCFrame returns the decoded frame without RGB conversion.
-func DecodeAVCCFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*frame.Frame, error) {
+func DecodeAVCCFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (fr *frame.Frame, err error) {
+	defer recoverDecode(&err)
 	return decodeFrame(avcc, sample, fast)
 }
 
@@ -66,6 +69,12 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 	out := cleanroom.ToFrame(dec, frames[0])
 	releaseDecoder(dec)
 	return out, nil
+}
+
+func recoverDecode(err *error) {
+	if p := recover(); p != nil {
+		*err = fmt.Errorf("h264: internal error: %v", p)
+	}
 }
 
 func mapDecodeErr(err error) error {

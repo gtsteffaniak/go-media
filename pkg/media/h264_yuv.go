@@ -8,7 +8,14 @@ import (
 )
 
 // H264KeyframeYUV420 decodes the sync sample at seekPercent to planar I420 bytes (for metrics).
-func H264KeyframeYUV420(r io.ReaderAt, size int64, seekPercent float64, fast bool) ([]byte, int, int, error) {
+func H264KeyframeYUV420(r io.ReaderAt, size int64, seekPercent float64, fast bool) (out []byte, w, h int, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			out = nil
+			w, h = 0, 0
+			err = panicErr(p)
+		}
+	}()
 	track, ok := isobmff.FirstAVCTrackIndex(r, size)
 	if !ok {
 		return nil, 0, 0, Unsupported("h264 yuv", "no avc track")
@@ -25,7 +32,7 @@ func H264KeyframeYUV420(r io.ReaderAt, size int64, seekPercent float64, fast boo
 	if err != nil {
 		return nil, 0, 0, mapErr(err)
 	}
-	out := planes.WriteI420(nil)
+	out = planes.WriteI420(nil)
 	return out, planes.Width, planes.Height, nil
 }
 

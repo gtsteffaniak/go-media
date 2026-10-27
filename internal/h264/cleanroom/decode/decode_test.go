@@ -6,43 +6,6 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/nal"
 )
 
-// align appends zero bits up to the byte boundary (pcm_alignment_zero_bit).
-func (w *bitWriter) align() {
-	for len(w.bits)%8 != 0 {
-		w.bits = append(w.bits, 0)
-	}
-}
-
-// buildIPCMSlice builds the RBSP of an IDR I-slice from a single I_PCM macroblock
-// with predictable samples: luma[i]=i, Cb[i]=i, Cr[i]=63-i (4:2:0, 8x8 chroma).
-func buildIPCMSlice(sps *SPS) []byte {
-	w := &bitWriter{}
-	// slice_header (IDR, I)
-	w.ue(0)                     // first_mb_in_slice
-	w.ue(uint32(SliceI))        // slice_type = I
-	w.ue(0)                     // pps id
-	w.u(sps.Log2MaxFrameNum, 0) // frame_num
-	w.ue(0)                     // idr_pic_id
-	w.u(sps.Log2MaxPocLsb, 0)   // pic_order_cnt_lsb
-	w.flag(false)               // no_output_of_prior_pics_flag
-	w.flag(false)               // long_term_reference_flag
-	w.se(0)                     // slice_qp_delta → SliceQP=26
-	// macroblock_layer
-	w.ue(25) // mb_type = I_PCM
-	w.align()
-	for i := 0; i < 256; i++ { // luma 16x16
-		w.u(8, uint32(i))
-	}
-	for i := 0; i < 64; i++ { // Cb 8x8
-		w.u(8, uint32(i))
-	}
-	for i := 0; i < 64; i++ { // Cr 8x8
-		w.u(8, uint32(63-i))
-	}
-	w.u(8, 0x80) // rbsp_slice_trailing_bits: stop-one-bit + zeros
-	return w.bytes()
-}
-
 func TestDecodeIPCMSlice(t *testing.T) {
 	// 16x16 Baseline 4:2:0 frame (1x1 MB).
 	sps, err := ParseSPS(encodeSPS(66, 30, 0, 0, 0, false))
@@ -50,9 +13,12 @@ func TestDecodeIPCMSlice(t *testing.T) {
 		t.Fatalf("ParseSPS: %v", err)
 	}
 	pps := testPPS() // CAVLC, no deblocking
-	frame := NewFrame(sps)
+	frame, err := NewFrame(sps)
+	if err != nil {
+		t.Fatalf("NewFrame: %v", err)
+	}
 
-	rbsp := buildIPCMSlice(sps)
+	rbsp := BuildIPCMSliceRBSP(sps, 0)
 	h, err := DecodeSlice(rbsp, nal.TypeIDR, 3, sps, pps, frame, false)
 	if err != nil {
 		t.Fatalf("DecodeSlice: %v", err)
