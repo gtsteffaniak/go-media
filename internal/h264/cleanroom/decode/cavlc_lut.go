@@ -64,3 +64,47 @@ func decodeVLCLUT(r *bitstream.Reader, lut *[1<<cavlcPeekBits]vlcSlot) int {
 	r.Skip(int(e.bits))
 	return int(e.val)
 }
+
+// buildVLCLUTN expands entries into a prefix LUT of width w bits (w ≥ max code length).
+func buildVLCLUTN(entries []vlcEntry, w int, lut []vlcSlot) {
+	for _, e := range entries {
+		L := int(e.length)
+		shift := w - L
+		lo := int(e.code) << shift
+		for k := lo; k < lo+(1<<shift); k++ {
+			lut[k] = vlcSlot{bits: uint8(L), val: e.val}
+		}
+	}
+}
+
+const (
+	tzPeekBits = 9
+	rbPeekBits = 3
+)
+
+var (
+	tzSmall       [16][1 << tzPeekBits]vlcSlot
+	tzChromaSmall [4][1 << rbPeekBits]vlcSlot
+	rbSmall       [7][1 << rbPeekBits]vlcSlot
+)
+
+func init() {
+	for i := range totalZerosTab {
+		buildVLCLUTN(totalZerosTab[i], tzPeekBits, tzSmall[i][:])
+	}
+	for i := range totalZerosChromaTab {
+		buildVLCLUTN(totalZerosChromaTab[i], rbPeekBits, tzChromaSmall[i][:])
+	}
+	for i := range runBeforeCanon {
+		buildVLCLUTN(runBeforeCanon[i], rbPeekBits, rbSmall[i][:])
+	}
+}
+
+func decodeVLCSmall(r *bitstream.Reader, lut []vlcSlot, w int) int {
+	e := lut[r.PeekBits(w)&(1<<w-1)]
+	if e.bits == 0 {
+		return 0
+	}
+	r.Skip(int(e.bits))
+	return int(e.val)
+}

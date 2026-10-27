@@ -69,16 +69,16 @@ func decodeVLC(r *bitstream.Reader, lut *[1<<cavlcPeekBits]vlcSlot) int {
 }
 
 func decodeTotalZeros(r *bitstream.Reader, totalCoeff int) int {
-	return decodeVLC(r, &tzLUTs[totalCoeff])
+	return decodeVLCSmall(r, tzSmall[totalCoeff][:], tzPeekBits)
 }
 
 func decodeTotalZerosChromaDC(r *bitstream.Reader, totalCoeff int) int {
-	return decodeVLC(r, &tzChromaLUTs[totalCoeff])
+	return decodeVLCSmall(r, tzChromaSmall[totalCoeff][:], rbPeekBits)
 }
 
 func decodeRunBefore(r *bitstream.Reader, zerosLeft int) int {
 	if zerosLeft <= 6 {
-		return decodeVLC(r, &rbLUTs[zerosLeft])
+		return decodeVLCSmall(r, rbSmall[zerosLeft][:], rbPeekBits)
 	}
 	// zerosLeft > 6: 3 bits; if nonzero → 7-temp, else a unary tail.
 	if temp := int(r.U(3)); temp != 0 {

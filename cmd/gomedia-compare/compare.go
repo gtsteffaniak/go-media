@@ -15,9 +15,6 @@ import (
 
 var activeTimingGate = defaultTimingGatePolicy()
 
-// activeExpectations is set from expectations.json before comparisons (see loadTimingGatePolicy).
-var activeExpectations ExpectationsFile
-
 // runComparisons executes all checks for every asset and writes thumbnail media under reportDir.
 func runComparisons(assets []Asset, reportDir string) ([][]CheckResult, error) {
 	thumbDir := filepath.Join(reportDir, "media", "thumbs")
@@ -523,10 +520,6 @@ func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetCo
 	res.GoMediaMS = timing.GoMS
 	res.GoMediaWriteMS = timing.WriteMS
 	res.FFmpegMS = timing.FFmpegMS
-	regLimit := activeTimingGate.maxRegression()
-	if activeExpectations.Version > 0 {
-		regLimit = maxTimingRegressionFor(activeExpectations, a.ID, res.Check)
-	}
 	if res.FFmpegMS > 0 {
 		goCmp := res.GoMediaWriteMS
 		if goCmp <= 0 {
@@ -535,7 +528,7 @@ func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetCo
 		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
 		res.TimingDeltaPct = &delta
 		// Allow 1pp slack on the timing gate (median-of-15 variance on cloud CI).
-		if delta > regLimit+0.01 && activeTimingGate.enforced(res.Check) {
+		if delta > activeTimingGate.maxRegression()+0.01 && activeTimingGate.enforced(res.Check) {
 			res.TimingGateFail = true
 		}
 	}
@@ -543,7 +536,7 @@ func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetCo
 	if res.TimingGateFail {
 		res.Status = StatusMismatch
 		res.Detail += fmt.Sprintf("; timing gate: write %.0fms vs ffmpeg %.0fms (%.0f%% > %.0f%%)",
-			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100, regLimit*100)
+			res.GoMediaWriteMS, res.FFmpegMS, *res.TimingDeltaPct*100, activeTimingGate.maxRegression()*100)
 		return res
 	}
 	if res.TimingDeltaPct != nil && *res.TimingDeltaPct > activeTimingGate.TargetMaxRegressionFraction {

@@ -67,7 +67,10 @@ func (sd *sliceDecoder) decodeMBNxN(addr int) error {
 			n := sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 16)
 			tc = uint8(n)
 			sd.nzLuma[gy*sd.w4+gx] = tc
-			d = dequant4x4(inverseScan4x4(sd.coeffScratch[:16]), qp)
+			d = h264k.DequantScan4x4(sd.coeffScratch[:16], qp)
+			if n == 1 && sd.coeffScratch[0] != 0 {
+				tc = 0 // DC-only block: take the IDCT DC shortcut
+			}
 		} else {
 			sd.nzLuma[gy*sd.w4+gx] = 0
 		}

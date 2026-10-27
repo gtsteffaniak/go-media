@@ -118,7 +118,6 @@ func loadTimingGatePolicy(reportDir, expectationsPath string) {
 		return
 	}
 	activeTimingGate = timingGatePolicyFromExpectations(exp)
-	activeExpectations = exp
 }
 
 func absUnder(base, p string) string {

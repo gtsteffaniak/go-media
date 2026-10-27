@@ -75,10 +75,36 @@ func dequant4x4Portable(coef [16]int32, qp int) [16]int32 {
 	m := qp % 6
 	shift := qp / 6
 	var d [16]int32
-	for idx := 0; idx < 16; idx++ {
-		ls := levelScale4x4(m, idx/4, idx%4)
-		c := coef[idx]
-		d[idx] = dequantCoeffAt(c, ls, shift)
+	ls := &levelScaleTab4x4[m]
+	for idx, c := range coef {
+		if c != 0 {
+			d[idx] = dequantCoeffAt(c, ls[idx], shift)
+		}
+	}
+	return d
+}
+
+var levelScaleTab4x4 = func() (t [6][16]int32) {
+	for m := range t {
+		for idx := range t[m] {
+			t[m][idx] = levelScale4x4(m, idx/4, idx%4)
+		}
+	}
+	return
+}()
+var zigzag4x4K = [16]uint8{0, 1, 4, 8, 5, 2, 3, 6, 9, 12, 13, 10, 7, 11, 14, 15}
+
+// DequantScan4x4 maps scan-order coefficients to raster order and dequantizes
+// them in one pass, touching only nonzero coefficients.
+func DequantScan4x4(scan []int32, qp int) [16]int32 {
+	var d [16]int32
+	m, shift := qp%6, qp/6
+	scan = scan[:16]
+	for s, c := range scan {
+		if c != 0 {
+			idx := zigzag4x4K[s]
+			d[idx] = dequantCoeffAt(c, levelScaleTab4x4[m][idx], shift)
+		}
 	}
 	return d
 }

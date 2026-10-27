@@ -9,6 +9,7 @@
 package bitstream
 
 import (
+	"encoding/binary"
 	"errors"
 	"math/bits"
 )
@@ -28,10 +29,13 @@ type Reader struct {
 	err  error
 	reg  uint32 // MSB-first bit window for readBit
 	nreg int    // valid bits in reg (0..32)
+
+	cache    uint64 // 64 bits MSB-first starting at bit cachePos (byte-aligned)
+	cachePos int    // -1 when invalid
 }
 
 // NewReader creates a reader over RBSP.
-func NewReader(data []byte) *Reader { return &Reader{data: data} }
+func NewReader(data []byte) *Reader { return &Reader{data: data, cachePos: -1 << 40} }
 
 // Err returns the first error that occurred (sticky), or nil.
 func (r *Reader) Err() error { return r.err }
@@ -175,7 +179,31 @@ func (r *Reader) PeekBits(n int) uint32 {
 	if n <= 0 {
 		return 0
 	}
-	return peekBitsMSB(r.data, r.pos, n)
+	off := r.pos - r.cachePos
+	if off < 0 || off+n > 64 {
+		r.reloadCache()
+		off = r.pos - r.cachePos
+	}
+	return uint32((r.cache << uint(off)) >> uint(64-n))
+}
+
+// reloadCache loads 64 bits starting at the byte containing pos; bits past the
+// end of data read as zero.
+func (r *Reader) reloadCache() {
+	bi := r.pos >> 3
+	r.cachePos = bi << 3
+	if bi+8 <= len(r.data) {
+		r.cache = binary.BigEndian.Uint64(r.data[bi:])
+		return
+	}
+	var x uint64
+	for i := 0; i < 8; i++ {
+		x <<= 8
+		if bi+i < len(r.data) {
+			x |= uint64(r.data[bi+i])
+		}
+	}
+	r.cache = x
 }
 
 // Skip advances the position by n bits (flush after PeekBits).

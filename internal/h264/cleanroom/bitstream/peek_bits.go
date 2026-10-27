@@ -1,5 +1,7 @@
 package bitstream
 
+import "encoding/binary"
+
 // peekBitsMSB reads up to 32 bits MSB-first from data at bit position pos.
 func peekBitsMSB(data []byte, pos int, n int) uint32 {
 	if n <= 0 {
@@ -13,10 +15,7 @@ func peekBitsMSB(data []byte, pos int, n int) uint32 {
 	bo := pos & 7
 	// Fast path: full 8-byte window available and all n bits within stream.
 	if pos+n <= total && bi+8 <= len(data) {
-		var x uint64
-		for i := 0; i < 8; i++ {
-			x |= uint64(data[bi+i]) << (56 - 8*i)
-		}
+		x := binary.BigEndian.Uint64(data[bi : bi+8])
 		if bo != 0 {
 			x <<= uint(bo)
 		}

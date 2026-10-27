@@ -23,24 +23,6 @@ type ExpectationCase struct {
 	Expect  CapabilityStatus `json:"expect"`
 	// Goarch, when set, limits this case to runtime.GOARCH (e.g. arm64 vs amd64 timing gates).
 	Goarch string `json:"goarch,omitempty"`
-	// MaxTimingRegressionFraction overrides timingGate.defaultMaxRegressionFraction for this case (e.g. known amd64 Baseline 1080 small).
-	MaxTimingRegressionFraction float64 `json:"maxTimingRegressionFraction,omitempty"`
-}
-
-// maxTimingRegressionFor returns the allowed write-time regression vs ffmpeg for an asset/check.
-func maxTimingRegressionFor(exp ExpectationsFile, assetID string, check CheckName) float64 {
-	limit := defaultTimingGatePolicy().maxRegression()
-	if exp.TimingGate != nil {
-		limit = exp.TimingGate.maxRegression()
-	}
-	for _, c := range exp.Cases {
-		if c.AssetID == assetID && c.Check == check && c.MaxTimingRegressionFraction > 0 {
-			if c.Goarch == "" || c.Goarch == runtime.GOARCH {
-				return c.MaxTimingRegressionFraction
-			}
-		}
-	}
-	return limit
 }
 
 func expectationCaseApplies(c ExpectationCase) bool {
@@ -166,14 +148,9 @@ func validateBuildModeTimings(exp ExpectationsFile, report FullReport) error {
 		}
 		// Subprocess tier-2 (purego+PGO) is the production gate; allow slack for CI runner variance.
 		const tier2Slack = 0.08
-		caseLimit := maxTimingRegressionFor(exp, row.AssetID, CheckName(row.Check))
-		effective := limit + tier2Slack
-		if caseLimit > limit {
-			effective = caseLimit + tier2Slack
-		}
-		if row.DeltaPct > effective {
+		if row.DeltaPct > limit+tier2Slack {
 			fails = append(fails, fmt.Sprintf("tier2 %s %s: %.0fms vs ffmpeg %.0fms (%.0f%% > %.0f%%)",
-				row.AssetID, row.ThumbPreset, row.GoMediaWrite, row.FFmpegMS, row.DeltaPct*100, caseLimit*100))
+				row.AssetID, row.ThumbPreset, row.GoMediaWrite, row.FFmpegMS, row.DeltaPct*100, limit*100))
 		}
 	}
 	if len(fails) == 0 {
