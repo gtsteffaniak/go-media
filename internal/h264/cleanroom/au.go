@@ -149,12 +149,11 @@ func (d *Decoder) pictureForSPS(sps *decode.SPS) (*decode.Frame, error) {
 	return d.pic, nil
 }
 
-// Reset clears per-stream parameter sets and picture buffers so a pooled decoder
-// cannot reuse state from a previous access unit.
+// Reset clears per-stream parameter sets so a pooled decoder cannot reuse SPS/PPS
+// from a previous access unit. The coded picture buffer is kept for allocation reuse.
 func (d *Decoder) Reset() {
 	clear(d.sps)
 	clear(d.pps)
-	d.pic = nil
 }
 
 func pictureDimsMatch(f *decode.Frame, s *decode.SPS) bool {
