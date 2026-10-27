@@ -4,7 +4,11 @@
 // phases.
 package decode
 
-import "github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
+import (
+	"fmt"
+
+	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
+)
 
 // SPS is the subset of the Sequence Parameter Set (ISO/IEC 14496-10)
 // needed for frame dimensions, chroma format and profile.
@@ -60,14 +64,25 @@ func ParseSPS(rbsp []byte) (*SPS, error) {
 	r.U(8) // constraint_set0..5_flag + reserved_zero_2bits
 	s.LevelIDC = uint8(r.U(8))
 	s.ID = r.UE()
+	if s.ID > maxSeqParameterSetID {
+		return nil, fmt.Errorf("h264 sps: seq_parameter_set_id %d exceeds maximum %d", s.ID, maxSeqParameterSetID)
+	}
 
 	if isHighProfile(s.ProfileIDC) {
 		s.ChromaFormatIDC = r.UE()
+		if s.ChromaFormatIDC > maxChromaFormatIDC {
+			return nil, fmt.Errorf("h264 sps: chroma_format_idc %d exceeds maximum %d", s.ChromaFormatIDC, maxChromaFormatIDC)
+		}
 		if s.ChromaFormatIDC == 3 {
 			s.SeparateColourPlane = r.Flag()
 		}
-		s.BitDepthLuma = r.UE() + 8
-		s.BitDepthChroma = r.UE() + 8
+		bitDepthLumaMinus8 := r.UE()
+		bitDepthChromaMinus8 := r.UE()
+		if bitDepthLumaMinus8 > maxBitDepth-8 || bitDepthChromaMinus8 > maxBitDepth-8 {
+			return nil, fmt.Errorf("h264 sps: bit depth luma_minus8=%d chroma_minus8=%d exceeds maximum %d", bitDepthLumaMinus8, bitDepthChromaMinus8, maxBitDepth-8)
+		}
+		s.BitDepthLuma = bitDepthLumaMinus8 + 8
+		s.BitDepthChroma = bitDepthChromaMinus8 + 8
 		r.Flag()      // qpprime_y_zero_transform_bypass_flag
 		if r.Flag() { // seq_scaling_matrix_present_flag
 			n := 8
@@ -86,18 +101,38 @@ func ParseSPS(rbsp []byte) (*SPS, error) {
 		}
 	}
 
-	s.Log2MaxFrameNum = int(r.UE()) + 4 // log2_max_frame_num_minus4 + 4
+	log2FN := r.UE()
+	if log2FN > maxLog2MaxFrameNumMinus4 {
+		return nil, fmt.Errorf("h264 sps: log2_max_frame_num_minus4 %d exceeds maximum %d", log2FN, maxLog2MaxFrameNumMinus4)
+	}
+	s.Log2MaxFrameNum = int(log2FN) + 4
 	s.PicOrderCntType = r.UE()
 	switch s.PicOrderCntType {
 	case 0:
-		s.Log2MaxPocLsb = int(r.UE()) + 4 // log2_max_pic_order_cnt_lsb_minus4 + 4
+		log2POC := r.UE()
+		if log2POC > maxLog2MaxPicOrderCntLsbMinus4 {
+			return nil, fmt.Errorf("h264 sps: log2_max_pic_order_cnt_lsb_minus4 %d exceeds maximum %d", log2POC, maxLog2MaxPicOrderCntLsbMinus4)
+		}
+		s.Log2MaxPocLsb = int(log2POC) + 4
 	case 1:
 		s.DeltaPicOrderAlwaysZero = r.Flag()
 		r.SE() // offset_for_non_ref_pic
+		if err := r.Err(); err != nil {
+			return nil, fmt.Errorf("h264 sps: %w", err)
+		}
 		r.SE() // offset_for_top_to_bottom_field
+		if err := r.Err(); err != nil {
+			return nil, fmt.Errorf("h264 sps: %w", err)
+		}
 		num := r.UE()
+		if num > maxNumRefFramesInPicOrderCntCycle {
+			return nil, fmt.Errorf("h264 sps: num_ref_frames_in_pic_order_cnt_cycle %d exceeds maximum %d", num, maxNumRefFramesInPicOrderCntCycle)
+		}
 		for i := uint32(0); i < num; i++ {
 			r.SE() // offset_for_ref_frame[i]
+			if err := r.Err(); err != nil {
+				return nil, fmt.Errorf("h264 sps: %w", err)
+			}
 		}
 	}
 
@@ -121,9 +156,14 @@ func ParseSPS(rbsp []byte) (*SPS, error) {
 	// vui_parameters_present_flag and the VUI are not needed for dimensions — skip them.
 
 	if err := r.Err(); err != nil {
+		return nil, fmt.Errorf("h264 sps: %w", err)
+	}
+	if err := checkMacroblockBudget(s); err != nil {
 		return nil, err
 	}
-	s.computeDimensions()
+	if err := s.computeDimensions(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -149,13 +189,16 @@ func chromaSub(idc uint32) (subW, subH int) {
 }
 
 // computeDimensions computes width/height in pixels accounting for cropping.
-func (s *SPS) computeDimensions() {
-	width := int(s.WidthMbs) * 16
-	height := int(s.HeightMapUnits) * 16
+func (s *SPS) computeDimensions() error {
+	codedW := int(s.WidthMbs) * 16
+	codedH := int(s.HeightMapUnits) * 16
 	frameMbsOnly := 1
 	if !s.FrameMbsOnly {
 		frameMbsOnly = 0
-		height *= 2 // fields: the map-units height is doubled
+		codedH *= 2 // fields: the map-units height is doubled
+	}
+	if codedW <= 0 || codedH <= 0 || codedW > maxCodedDimension || codedH > maxCodedDimension {
+		return fmt.Errorf("h264 sps: coded size %dx%d out of range", codedW, codedH)
 	}
 
 	var cropUnitX, cropUnitY int
@@ -168,12 +211,30 @@ func (s *SPS) computeDimensions() {
 		cropUnitY = subH * (2 - frameMbsOnly)
 	}
 
-	width -= int(s.CropLeft+s.CropRight) * cropUnitX
-	height -= int(s.CropTop+s.CropBottom) * cropUnitY
+	cropXu := (uint64(s.CropLeft) + uint64(s.CropRight)) * uint64(cropUnitX)
+	cropYu := (uint64(s.CropTop) + uint64(s.CropBottom)) * uint64(cropUnitY)
+	if cropXu >= uint64(codedW) || cropYu >= uint64(codedH) {
+		return fmt.Errorf("h264 sps: crop offsets remove entire %dx%d picture", codedW, codedH)
+	}
+	cropX, cropY := int(cropXu), int(cropYu)
+	width := codedW - cropX
+	height := codedH - cropY
+	if width <= 0 || height <= 0 {
+		return fmt.Errorf("h264 sps: cropped size %dx%d is not positive", width, height)
+	}
+	if width > maxCodedDimension || height > maxCodedDimension {
+		return fmt.Errorf("h264 sps: cropped size %dx%d out of range", width, height)
+	}
 	s.Width = width
 	s.Height = height
-	s.OffsetX = int(s.CropLeft) * cropUnitX // luma pixel origin of the visible region
-	s.OffsetY = int(s.CropTop) * cropUnitY
+	offX := uint64(s.CropLeft) * uint64(cropUnitX)
+	offY := uint64(s.CropTop) * uint64(cropUnitY)
+	if offX > uint64(codedW) || offY > uint64(codedH) {
+		return fmt.Errorf("h264 sps: crop origin out of coded %dx%d picture", codedW, codedH)
+	}
+	s.OffsetX = int(offX)
+	s.OffsetY = int(offY)
+	return nil
 }
 
 // skipScalingList skips over a scaling_list of the given size.

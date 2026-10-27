@@ -2,6 +2,7 @@ package decode
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
 )
@@ -52,7 +53,13 @@ func ParsePPS(rbsp []byte) (*PPS, error) {
 	r := bitstream.NewReader(rbsp)
 	p := &PPS{}
 	p.ID = r.UE()
+	if p.ID > maxParameterSetID {
+		return nil, fmt.Errorf("h264 pps: pic_parameter_set_id %d exceeds maximum %d", p.ID, maxParameterSetID)
+	}
 	p.SPSID = r.UE()
+	if p.SPSID > maxParameterSetID {
+		return nil, fmt.Errorf("h264 pps: seq_parameter_set_id %d exceeds maximum %d", p.SPSID, maxParameterSetID)
+	}
 	p.EntropyCodingMode = r.Flag()
 	p.BottomFieldPicOrderPresent = r.Flag()
 	p.NumSliceGroupsMinus1 = r.UE()
@@ -78,7 +85,7 @@ func ParsePPS(rbsp []byte) (*PPS, error) {
 		// (Their bits are not consumed here, but Transform8x8Mode is what we need.)
 	}
 	if err := r.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("h264 pps: %w", err)
 	}
 	return p, nil
 }

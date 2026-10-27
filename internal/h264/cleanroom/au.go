@@ -5,6 +5,7 @@ package cleanroom
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/decode"
@@ -32,7 +33,13 @@ func New() *Decoder {
 var ErrNoPicture = errors.New("h264 cleanroom: no decodable picture")
 
 // DecodeIDRAVC decodes the first IDR picture from AVC length-prefixed NALs.
-func (d *Decoder) DecodeIDRAVC(data []byte) ([]*decode.Frame, error) {
+func (d *Decoder) DecodeIDRAVC(data []byte) (frames []*decode.Frame, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			frames = nil
+			err = fmt.Errorf("h264 cleanroom: internal error: %v", p)
+		}
+	}()
 	nalus, err := extractAVCNalus(data)
 	if err != nil {
 		return nil, err
@@ -103,7 +110,11 @@ func (d *Decoder) decodeSliceUnit(u nal.Unit, frame *decode.Frame, lastHdr *deco
 		return frame, lastHdr, nil
 	}
 	if frame == nil {
-		frame = d.pictureForSPS(sps)
+		var allocErr error
+		frame, allocErr = d.pictureForSPS(sps)
+		if allocErr != nil {
+			return nil, lastHdr, allocErr
+		}
 	}
 	h, err := decode.DecodeSlice(u.RBSP, u.Type, u.RefIDC, sps, pps, frame, d.SkipDeblock)
 	if err != nil {
@@ -126,12 +137,23 @@ func sliceFirstMB(rbsp []byte) uint32 {
 	return bitstream.NewReader(rbsp).UE()
 }
 
-func (d *Decoder) pictureForSPS(sps *decode.SPS) *decode.Frame {
+func (d *Decoder) pictureForSPS(sps *decode.SPS) (*decode.Frame, error) {
 	if d.pic != nil && pictureDimsMatch(d.pic, sps) {
-		return d.pic
+		return d.pic, nil
 	}
-	d.pic = decode.NewFrame(sps)
-	return d.pic
+	f, err := decode.NewFrame(sps)
+	if err != nil {
+		return nil, err
+	}
+	d.pic = f
+	return d.pic, nil
+}
+
+// Reset clears per-stream parameter sets so a pooled decoder cannot reuse SPS/PPS
+// from a previous access unit. The coded picture buffer is kept for allocation reuse.
+func (d *Decoder) Reset() {
+	clear(d.sps)
+	clear(d.pps)
 }
 
 func pictureDimsMatch(f *decode.Frame, s *decode.SPS) bool {

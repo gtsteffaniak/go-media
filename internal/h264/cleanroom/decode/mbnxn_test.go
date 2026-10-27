@@ -15,7 +15,10 @@ func TestDecodeMBNxNDC(t *testing.T) {
 		t.Fatalf("ParseSPS: %v", err)
 	}
 	pps := testPPS()
-	frame := NewFrame(sps)
+	frame, err := NewFrame(sps)
+	if err != nil {
+		t.Fatalf("NewFrame: %v", err)
+	}
 	h := &SliceHeader{FirstMB: 0, Type: SliceI, SliceQP: 26}
 
 	// mb_type=0 "1" (I_NxN) | 16×prev_intra4x4_pred_mode_flag=1 "1" (mode=predMode=DC)

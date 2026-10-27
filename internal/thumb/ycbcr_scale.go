@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/gtsteffaniak/go-media/internal/h264"
+	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
 type yccRGB func(yy, cb, cr byte) (r, g, b byte)
@@ -31,7 +32,7 @@ const (
 )
 
 // scaleYCbCrArea downscales YCbCr with tile averaging, then converts to RGBA.
-func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccAreaMode) *image.RGBA {
+func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccAreaMode, lut *yuv.RGBLUT) *image.RGBA {
 	cur := src
 	if !rgbTile {
 		for cur.Bounds().Dx() > dstW*2 && cur.Bounds().Dy() > dstH*2 {
@@ -39,7 +40,7 @@ func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccA
 		}
 	}
 	if dstW*dstH <= 512*512 {
-		return scaleYCbCrAreaSerial(cur, dstW, dstH, toRGB, rgbTile)
+		return scaleYCbCrAreaSerial(cur, dstW, dstH, toRGB, rgbTile, lut)
 	}
 	sb := cur.Bounds()
 	sw, sh := sb.Dx(), sb.Dy()
@@ -75,7 +76,7 @@ func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccA
 						sx1 = sx0 + 1
 					}
 					di := dy*dst.Stride + dx*4
-					writeAreaTilePixel(dst, di, cur, sx0, sx1, sy0, sy1, toRGB, rgbTile)
+					writeAreaTilePixel(dst, di, cur, sx0, sx1, sy0, sy1, toRGB, rgbTile, lut)
 				}
 			}
 		}(y0, y1)
@@ -84,8 +85,42 @@ func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccA
 	return dst
 }
 
-func writeAreaTilePixel(dst *image.RGBA, di int, src *image.YCbCr, sx0, sx1, sy0, sy1 int, toRGB yccRGB, rgbTile yccAreaMode) {
+func writeAreaTilePixel(dst *image.RGBA, di int, src *image.YCbCr, sx0, sx1, sy0, sy1 int, toRGB yccRGB, rgbTile yccAreaMode, lut *yuv.RGBLUT) {
 	var ySum, cbSum, crSum, rSum, gSum, bSum, n int
+	if src.SubsampleRatio == image.YCbCrSubsampleRatio420 {
+		r0 := src.Rect.Min
+		for sy := sy0; sy < sy1; sy++ {
+			yrow := src.Y[(sy-r0.Y)*src.YStride-r0.X:]
+			crow := (sy/2 - r0.Y/2) * src.CStride
+			cbRow, crRow := src.Cb[crow-r0.X/2:], src.Cr[crow-r0.X/2:]
+			if rgbTile && lut != nil {
+				for sx := sx0; sx < sx1; sx++ {
+					yv := lut.Y[yrow[sx]]
+					cb, cr := cbRow[sx/2], crRow[sx/2]
+					rSum += int(yuv.Clamp8(yv + lut.CrR[cr]))
+					gSum += int(yuv.Clamp8(yv + lut.CbG[cb] + lut.CrG[cr]))
+					bSum += int(yuv.Clamp8(yv + lut.CbB[cb]))
+				}
+				continue
+			}
+			for sx := sx0; sx < sx1; sx++ {
+				yy := yrow[sx]
+				cb, cr := cbRow[sx/2], crRow[sx/2]
+				if rgbTile {
+					r8, g8, b8 := toRGB(yy, cb, cr)
+					rSum += int(r8)
+					gSum += int(g8)
+					bSum += int(b8)
+				} else {
+					ySum += int(yy)
+					cbSum += int(cb)
+					crSum += int(cr)
+				}
+			}
+		}
+		n = (sy1 - sy0) * (sx1 - sx0)
+		sy1 = sy0 // skip generic loop
+	}
 	for sy := sy0; sy < sy1; sy++ {
 		for sx := sx0; sx < sx1; sx++ {
 			yy := src.Y[src.YOffset(sx, sy)]
@@ -119,7 +154,7 @@ func writeAreaTilePixel(dst *image.RGBA, di int, src *image.YCbCr, sx0, sx1, sy0
 	dst.Pix[di+3] = 255
 }
 
-func scaleYCbCrAreaSerial(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccAreaMode) *image.RGBA {
+func scaleYCbCrAreaSerial(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccAreaMode, lut *yuv.RGBLUT) *image.RGBA {
 	sb := src.Bounds()
 	sw, sh := sb.Dx(), sb.Dy()
 	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
@@ -136,7 +171,7 @@ func scaleYCbCrAreaSerial(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTil
 				sx1 = sx0 + 1
 			}
 			di := dy*dst.Stride + dx*4
-			writeAreaTilePixel(dst, di, src, sx0, sx1, sy0, sy1, toRGB, rgbTile)
+			writeAreaTilePixel(dst, di, src, sx0, sx1, sy0, sy1, toRGB, rgbTile, lut)
 		}
 	}
 	return dst
@@ -215,7 +250,11 @@ func tryScaleYCbCrSource(img image.Image, maxW, maxH int, mode ScalerMode) (imag
 		if thumbDownscaleUsesRGBArea(sw, sh, tw, th) {
 			rgbTile = yccAreaAvgRGB
 		}
-		return scaleYCbCrArea(ycc, tw, th, toRGB, rgbTile), true
+		var lut *yuv.RGBLUT
+		if t, ok := img.(*h264.ThumbYCbCr); ok && bool(rgbTile) {
+			lut = t.RGBLUT()
+		}
+		return scaleYCbCrArea(ycc, tw, th, toRGB, rgbTile, lut), true
 	}
 	return img, false
 }

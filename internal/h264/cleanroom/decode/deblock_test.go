@@ -47,7 +47,10 @@ func TestFilterChroma(t *testing.T) {
 func TestDeblockFlatFrameUnchanged(t *testing.T) {
 	sps, _ := ParseSPS(encodeSPS(66, 30, 1, 0, 0, false)) // 2 MB per row
 	pps := testPPS()
-	frame := NewFrame(sps)
+	frame, err := NewFrame(sps)
+	if err != nil {
+		t.Fatal(err)
+	}
 	h := &SliceHeader{FirstMB: 0, Type: SliceI, SliceQP: 26}
 	// Two I_NxN DC macroblocks with no residual → the whole plane is 128.
 	mb := "1" + "1111111111111111" + "1" + "00100"

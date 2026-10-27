@@ -57,9 +57,12 @@ jobs:
           else
             CGO_ENABLED=0 go test ./...
           fi
-      - name: Fuzz smoke (subtitle, amd64 production only)
+      - name: Fuzz smoke (subtitle + h264, amd64 production only)
         if: matrix.os == 'ubuntu-latest' && matrix.profile == 'production'
-        run: CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
+        run: |
+          CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
+          CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -fuzz=FuzzParseSPS -fuzztime=30s ./internal/h264/cleanroom/decode
+          CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -fuzz=FuzzDecodeIDRAVC -fuzztime=30s ./internal/h264/cleanroom
 
   test-go-latest:
     runs-on: ubuntu-latest

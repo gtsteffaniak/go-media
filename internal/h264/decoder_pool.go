@@ -12,6 +12,7 @@ var decoderPool = sync.Pool{
 
 func borrowDecoder(fast bool) *cleanroom.Decoder {
 	dec := decoderPool.Get().(*cleanroom.Decoder)
+	dec.Reset()
 	dec.SkipDeblock = fast
 	return dec
 }

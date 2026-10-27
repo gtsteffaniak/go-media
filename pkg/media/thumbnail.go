@@ -1,6 +1,7 @@
 package media
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/gtsteffaniak/go-media/internal/h264"
@@ -8,17 +9,23 @@ import (
 )
 
 // Thumbnail returns a scaled JPEG, PNG, or WebP preview.
-func Thumbnail(r io.ReaderAt, size int64, opt ThumbnailOptions) (ThumbnailResult, error) {
-	res, err := thumb.Generate(r, size, mapThumbOptions(opt))
+func Thumbnail(r io.ReaderAt, size int64, opt ThumbnailOptions) (res ThumbnailResult, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			res = ThumbnailResult{}
+			err = panicErr(p)
+		}
+	}()
+	out, err := thumb.Generate(r, size, mapThumbOptions(opt))
 	if err != nil {
 		return ThumbnailResult{}, mapErr(err)
 	}
 	return ThumbnailResult{
-		MIME:   res.MIME,
-		Data:   res.Data,
-		Source: Source(res.Source),
-		Width:  res.Width,
-		Height: res.Height,
+		MIME:   out.MIME,
+		Data:   out.Data,
+		Source: Source(out.Source),
+		Width:  out.Width,
+		Height: out.Height,
 	}, nil
 }
 
@@ -33,8 +40,14 @@ func ThumbnailLarge(r io.ReaderAt, size int64, seekPercent float64) (ThumbnailRe
 }
 
 // ThumbnailRasterPNG returns a lossless PNG of the scaled decode (before JPEG/WebP).
-func ThumbnailRasterPNG(r io.ReaderAt, size int64, opt ThumbnailOptions) ([]byte, error) {
-	data, _, err := thumb.RasterPNG(r, size, mapThumbOptions(opt))
+func ThumbnailRasterPNG(r io.ReaderAt, size int64, opt ThumbnailOptions) (data []byte, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			data = nil
+			err = panicErr(p)
+		}
+	}()
+	data, _, err = thumb.RasterPNG(r, size, mapThumbOptions(opt))
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -81,10 +94,21 @@ func mapThumbOptions(opt ThumbnailOptions) thumb.Options {
 }
 
 // DecodeH264Keyframe exposes the intra-only H.264 decoder entry point.
-func DecodeH264Keyframe(nal []byte, width, height int) ([]byte, int, int, error) {
-	data, w, h, err := h264.DecodeKeyframe(nal, width, height)
+func DecodeH264Keyframe(nal []byte, width, height int) (data []byte, w, h int, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			data = nil
+			w, h = 0, 0
+			err = panicErr(p)
+		}
+	}()
+	data, w, h, err = h264.DecodeKeyframe(nal, width, height)
 	if err != nil {
 		return nil, 0, 0, mapErr(err)
 	}
 	return data, w, h, nil
+}
+
+func panicErr(p interface{}) error {
+	return fmt.Errorf("media: internal error: %v", p)
 }

@@ -49,3 +49,6 @@ func (t *ThumbYCbCr) At(x, y int) color.Color {
 	r, g, b := t.RGB(yy, cb, cr)
 	return color.RGBA{R: r, G: g, B: b, A: 255}
 }
+
+// RGBLUT returns lookup tables matching RGB for this frame's colour space.
+func (t *ThumbYCbCr) RGBLUT() *yuv.RGBLUT { return yuv.NewRGBLUT(t.CS, t.RNG) }

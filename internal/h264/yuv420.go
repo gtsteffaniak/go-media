@@ -16,7 +16,8 @@ type YUV420 struct {
 }
 
 // DecodeAVCCYUV420 decodes a sync sample to planar YUV (matches ffmpeg yuv420p on golden fixtures).
-func DecodeAVCCYUV420(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (YUV420, error) {
+func DecodeAVCCYUV420(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (planes YUV420, err error) {
+	defer recoverDecode(&err)
 	fr, err := decodeFrame(avcc, sample, fast)
 	if err != nil {
 		return YUV420{}, err

@@ -1,6 +1,10 @@
 package decode
 
-import "image"
+import (
+	"fmt"
+	"image"
+	"math"
+)
 
 // Frame is a decoded frame in planar YCbCr (8 bits per sample). The planes are
 // stored at the coded size (a multiple of the macroblock); the visible area is
@@ -19,37 +23,71 @@ type Frame struct {
 }
 
 // NewFrame allocates a frame buffer for the dimensions from the SPS.
-func NewFrame(s *SPS) *Frame {
+// s must come from ParseSPS; dimensions are checked again before allocation.
+func NewFrame(s *SPS) (*Frame, error) {
+	if s == nil {
+		return nil, fmt.Errorf("h264 frame: nil SPS")
+	}
+	if s.Width <= 0 || s.Height <= 0 || s.Width > maxCodedDimension || s.Height > maxCodedDimension {
+		return nil, fmt.Errorf("h264 frame: invalid cropped size %dx%d", s.Width, s.Height)
+	}
 	mbW := int(s.WidthMbs)
 	frameMbsOnly := 1
 	if !s.FrameMbsOnly {
 		frameMbsOnly = 0
 	}
-	mbH := int(s.HeightMapUnits) * (2 - frameMbsOnly) // FrameHeightInMbs
+	mbH := int(s.HeightMapUnits) * (2 - frameMbsOnly)
+	if mbW <= 0 || mbH <= 0 || mbW > maxCodedDimension/16 || mbH > maxCodedDimension/16 {
+		return nil, fmt.Errorf("h264 frame: invalid macroblock grid %dx%d", mbW, mbH)
+	}
+
+	codedW := mbW * 16
+	codedH := mbH * 16
+	if codedW <= 0 || codedH <= 0 || codedW > maxCodedDimension || codedH > maxCodedDimension {
+		return nil, fmt.Errorf("h264 frame: invalid coded size %dx%d", codedW, codedH)
+	}
+	yBytes, ok := mulInt(codedW, codedH)
+	if !ok {
+		return nil, fmt.Errorf("h264 frame: luma plane size overflows")
+	}
 
 	f := &Frame{
 		MbWidth:         mbW,
 		MbHeight:        mbH,
 		ChromaArrayType: s.ChromaArrayType(),
-		CodedWidth:      mbW * 16,
-		CodedHeight:     mbH * 16,
+		CodedWidth:      codedW,
+		CodedHeight:     codedH,
 		CropWidth:       s.Width,
 		CropHeight:      s.Height,
 		CropX:           s.OffsetX,
 		CropY:           s.OffsetY,
 	}
 	f.StrideY = f.CodedWidth
-	f.Y = make([]byte, f.CodedWidth*f.CodedHeight)
+	f.Y = make([]byte, yBytes)
 
 	if f.ChromaArrayType != 0 {
 		f.MbWidthC, f.MbHeightC = mbChromaDims(f.ChromaArrayType)
 		cw := mbW * f.MbWidthC
 		ch := mbH * f.MbHeightC
+		cBytes, ok := mulInt(cw, ch)
+		if !ok {
+			return nil, fmt.Errorf("h264 frame: chroma plane size overflows")
+		}
 		f.StrideC = cw
-		f.Cb = make([]byte, cw*ch)
-		f.Cr = make([]byte, cw*ch)
+		f.Cb = make([]byte, cBytes)
+		f.Cr = make([]byte, cBytes)
 	}
-	return f
+	return f, nil
+}
+
+func mulInt(a, b int) (int, bool) {
+	if a <= 0 || b <= 0 {
+		return 0, false
+	}
+	if a > math.MaxInt/b {
+		return 0, false
+	}
+	return a * b, true
 }
 
 // mbChromaDims returns the chroma dimensions of one macroblock (MbWidthC, MbHeightC).

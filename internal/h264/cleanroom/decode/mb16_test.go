@@ -12,7 +12,10 @@ func TestDecodeMB16DCOnly(t *testing.T) {
 		t.Fatalf("ParseSPS: %v", err)
 	}
 	pps := testPPS() // PicInitQPMinus26=0, CAVLC, no deblocking
-	frame := NewFrame(sps)
+	frame, err := NewFrame(sps)
+	if err != nil {
+		t.Fatalf("NewFrame: %v", err)
+	}
 	h := &SliceHeader{FirstMB: 0, Type: SliceI, SliceQP: 26}
 
 	// slice_data of a single MB:
@@ -48,7 +51,10 @@ func TestDecodeTwoMBsHorizontalPred(t *testing.T) {
 		t.Fatalf("ParseSPS: %v", err)
 	}
 	pps := testPPS()
-	frame := NewFrame(sps)
+	frame, err := NewFrame(sps)
+	if err != nil {
+		t.Fatalf("NewFrame: %v", err)
+	}
 	h := &SliceHeader{FirstMB: 0, Type: SliceI, SliceQP: 26}
 
 	// MB0: I_16x16 DC, no luma residual (DC coeff=0 → residual 0) → 128.
