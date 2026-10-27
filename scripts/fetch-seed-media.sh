@@ -2,7 +2,7 @@
 # Download and verify the pinned go-ffmpeg seed clip (used by the comparison harness).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEST="${1:-$ROOT/test/compare/harness/.seed}"
+DEST="${1:-$ROOT/cmd/gomedia-compare/.seed}"
 mkdir -p "$DEST"
 URL="https://raw.githubusercontent.com/gtsteffaniak/go-ffmpeg/eaaf6b064cf7143a719af6c50e222914b525e88b/test/data/Big_Buck_Bunny_1080_10s_2MB.mp4"
 OUT="$DEST/Big_Buck_Bunny_1080_10s_2MB.mp4"

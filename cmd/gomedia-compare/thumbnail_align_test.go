@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 func TestThumbnailPresetMatchesMedia(t *testing.T) {

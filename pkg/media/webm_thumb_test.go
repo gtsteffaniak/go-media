@@ -3,7 +3,7 @@ package media_test
 import (
 	"testing"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 func TestThumbnailVP8WebM(t *testing.T) {

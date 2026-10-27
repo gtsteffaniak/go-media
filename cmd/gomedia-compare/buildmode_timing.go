@@ -113,7 +113,6 @@ func collectBuildModeTimings(assets []Asset, flat []CheckResult, repoRoot string
 func buildThumbModeBinaries(repoRoot string) (map[BuildMode]string, error) {
 	dir := filepath.Join(os.TempDir(), "gomedia-thumbmode-bins")
 	_ = os.MkdirAll(dir, 0o755)
-	harnessDir := filepath.Join(repoRoot, "test/compare/harness")
 	pgo := filepath.Join(repoRoot, "default.pgo")
 	if _, err := os.Stat(pgo); err != nil {
 		return nil, fmt.Errorf("default.pgo missing (run make pgo): %w", err)
@@ -129,9 +128,9 @@ func buildThumbModeBinaries(repoRoot string) (map[BuildMode]string, error) {
 		if usePGO {
 			args = append(args, "-pgo="+pgo)
 		}
-		args = append(args, "./thumbmode")
+		args = append(args, "./cmd/gomedia-thumbmode")
 		cmd := exec.Command("go", args...)
-		cmd.Dir = harnessDir
+		cmd.Dir = repoRoot
 		env := baseEnv
 		if goexp != "" {
 			env = append(env, "GOEXPERIMENT="+goexp)

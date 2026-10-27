@@ -3,7 +3,7 @@ package media_test
 import (
 	"testing"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 // TestExternalSubtitleTracksStemMatch is a test.

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 // h264DecodeYUVMetrics compares go-media IDR YUV420 to ffmpeg -skip_frame nokey yuv420p (decode-level gate).

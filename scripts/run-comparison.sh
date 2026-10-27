@@ -2,7 +2,7 @@
 # Fetch seed media, generate fixtures, run go-media vs ffmpeg comparisons, and write report_site/.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HARNESS="$ROOT/test/compare/harness"
+HARNESS="$ROOT/cmd/gomedia-compare"
 REPORT="$ROOT/test/compare/report_site"
 # shellcheck source=ffmpeg-path.sh
 source "$ROOT/scripts/ffmpeg-path.sh"
@@ -12,8 +12,6 @@ FFMPEG_VERSION="${FFMPEG_VERSION:-9.0.2}"
 if [[ "${COMPARE_GATE:-}" == "1" ]]; then
 	export FFMPEG_DIR="${FFMPEG_DIR:-$HOME/ffmpeg-$FFMPEG_VERSION}"
 fi
-
-cd "$HARNESS"
 
 if ! prepend_ffmpeg_to_path; then
 	echo "ffmpeg not found; install ffmpeg (e.g. Homebrew), run make ffmpeg on Linux, or set FFMPEG_DIR / FFMPEG_PATH" >&2
@@ -31,7 +29,7 @@ COMPARE_BIN="${COMPARE_BIN:-$HARNESS/.cache/gomedia-compare}"
 mkdir -p "$(dirname "$COMPARE_BIN")"
 # Production compare gate: CGO_ENABLED=0 + PGO (see ShippedTimingGateBuild). Tier 3 simd binaries
 # tier 3 is built with GOEXPERIMENT=simd only (no enable env).
-CGO_ENABLED=0 go build -pgo="$PGO" -o "$COMPARE_BIN" .
+CGO_ENABLED=0 go build -pgo="$PGO" -o "$COMPARE_BIN" ./cmd/gomedia-compare
 if ((${#GATE_ARGS[@]} > 0)); then
 	CGO_ENABLED=0 "$COMPARE_BIN" -seed-dir "$HARNESS/.seed" -assets "$HARNESS/.assets" -report "$REPORT" "${GATE_ARGS[@]}"
 else

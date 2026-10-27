@@ -2,8 +2,8 @@
 # Print Baseline 1080p thumbnail timing vs ffmpeg for report tiers (amd64 only).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ASSET="$ROOT/test/compare/harness/.assets/video/mp4_h264_baseline_1080.mp4"
-HARNESS="$ROOT/test/compare/harness"
+ASSET="$ROOT/cmd/gomedia-compare/.assets/video/mp4_h264_baseline_1080.mp4"
+HARNESS="$ROOT/cmd/gomedia-compare"
 PGO="$ROOT/default.pgo"
 export PATH="${HOME}/ffmpeg-9.0.2:${PATH}:$PATH"
 
@@ -27,10 +27,10 @@ build_bin() {
   local out="/tmp/thumbmode-baseline-$name"
   local args=(build -o "$out")
   [[ "$pgo" == 1 ]] && args+=(-pgo="$PGO")
-  args+=(./thumbmode)
+  args+=(./cmd/gomedia-thumbmode)
   local env=(CGO_ENABLED=0)
   [[ "$simd" == 1 ]] && env+=(GOEXPERIMENT=simd)
-  (cd "$HARNESS" && env "${env[@]}" go "${args[@]}")
+  (cd "$ROOT" && env "${env[@]}" go "${args[@]}")
   echo "$out"
 }
 

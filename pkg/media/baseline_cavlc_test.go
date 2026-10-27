@@ -19,7 +19,7 @@ const baselineCAVLCffmpegSHA256 = "6149432c430b183258275804da8d3fe3855d39eb64110
 // (stale run_before values from a reused scratch buffer) while every CABAC stream was
 // exact, and it went unnoticed because Baseline was rejected before decoding.
 func TestBaselineCAVLCMatchesFFmpeg(t *testing.T) {
-	f, err := os.Open("testdata/baseline_cavlc_128x128.mp4")
+	f, err := os.Open("../../testdata/baseline_cavlc_128x128.mp4")
 	if err != nil {
 		t.Fatal(err)
 	}

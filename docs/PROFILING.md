@@ -33,7 +33,7 @@ Harness ffmpeg flags align with go-media thumbs: `-skip_frame nokey`, H.264 `-sk
 
 ```bash
 export PATH="$HOME/ffmpeg-9.0.2:$PATH"
-GOMAXPROCS=1 CGO_ENABLED=0 go test -count=1 -run='^$' -bench=ThumbnailTiming -benchtime=20x ./test/compare/harness/
+GOMAXPROCS=1 CGO_ENABLED=0 go test -count=1 -run='^$' -bench=ThumbnailTiming -benchtime=20x ./cmd/gomedia-compare/
 ```
 
 **CPU profile (thumb pipeline):**

@@ -1,0 +1,249 @@
+# Supported capabilities
+
+What **go-media** implements in pure Go (`CGO_ENABLED=0`). This is **not** a ffmpeg compatibility matrix: it documents library behavior. Where validation or a common fallback exists, the **ffmpeg / ffprobe** equivalent is listed for comparison.
+
+Unsupported inputs should return typed errors (`ErrUnsupported`, `ErrUnsupportedProfile`, …) so callers can use [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) or ffmpeg.
+
+**Import:** `github.com/gtsteffaniak/go-media/pkg/media`
+
+Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/README.md`](../test/compare/README.md)).
+
+## Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Supported |
+| 🟡 | Partial or conditional |
+| 📋 | Planned |
+| 🔬 | Research / not committed |
+| ❌ | Out of scope (use ffmpeg) |
+
+---
+
+## Container detection
+
+**API:** `Probe` (format sniff), `Format` constants  
+
+**ffmpeg equivalent:** `ffprobe -show_entries format=format_name`
+
+| Container / extension | Video | Audio | Status | Notes |
+|----------------------|:-----:|:-----:|:------:|-------|
+| MP4 / `.mp4` | ✅ | ✅ | ✅ | ISO BMFF |
+| M4V / `.m4v` | ✅ | — | ✅ | Same family as MP4 |
+| M4A / `.m4a` | — | ✅ | ✅ | |
+| MOV / `.mov` | ✅ | ✅ | ✅ | |
+| 3GP / `.3gp` | ✅ | ✅ | ✅ | |
+| MKV / `.mkv` | ✅ | ✅ | ✅ | |
+| WebM / `.webm` | ✅ | ✅ | ✅ | |
+| WAV / `.wav` | — | ✅ | ✅ | |
+| FLAC / `.flac` | — | ✅ | ✅ | |
+| OGG Vorbis / `.ogg` | — | ✅ | ✅ | |
+| Opus in OGG | — | ✅ | ✅ | |
+| MP3 / `.mp3` | — | ✅ | ✅ | |
+| M4A AAC (in MP4) | — | ✅ | 🟡 | Container yes; AAC ADTS elementary ❌ |
+| AIFF / `.aiff` | — | ✅ | 📋 | |
+| AU / `.sun` | — | ✅ | 📋 | |
+| MPEG-TS, AVI, FLV, WMV, ASF | ✅ | ✅ | ❌ | |
+| HEIC / HEIF | ✅ | — | ❌ | 🔬 embedded thumb research only |
+
+---
+
+## Duration
+
+**API:** `Duration()` — returns `Duration` + `Source` (`header`, `estimate`, `scan`)
+
+**ffmpeg equivalent:** `ffprobe -show_entries format=duration -of default=noprint_wrappers=1:nokey=1`
+
+| Container / extension | Status | Method / notes |
+|----------------------|:------:|----------------|
+| MP4, M4V, M4A, MOV, 3GP | ✅ | `mvhd` / movie header |
+| MKV, WebM | 🟡 | Matroska `Duration` when present; missing on some streamed WebM |
+| WAV | ✅ | `data` size ÷ byte rate |
+| FLAC | ✅ | `STREAMINFO` total samples ÷ sample rate |
+| OGG (Vorbis / Opus) | ✅ | Last page granule position |
+| MP3 | 🟡 | Xing / Info / VBRI; else CBR frame-header estimate |
+| AIFF, AU | 📋 | |
+| AAC (ADTS), TS, AVI, FLV, WMV, ASF | ❌ | |
+
+---
+
+## Stream probe
+
+**API:** `Probe()` — streams, duration, tag flags, subtitle track list
+
+**ffmpeg equivalent:** `ffprobe -show_streams -show_format` (JSON compared field-wise in the compare harness)
+
+### Video containers
+
+| Extension | Status | Typical fields |
+|-----------|:------:|----------------|
+| `.mp4`, `.m4v`, `.mov`, `.3gp` | ✅ | H.264, MJPEG, … via `stsd` / `tkhd` |
+| `.mkv`, `.webm` | ✅ | Codecs via `Tracks` |
+| TS, AVI, FLV, WMV | ❌ | |
+
+### Audio containers
+
+| Extension | Status | Typical fields |
+|-----------|:------:|----------------|
+| `.wav`, `.flac`, `.ogg`, `.mp3`, `.m4a` | ✅ | Sample rate, channels, codec name |
+| `.aiff`, `.au` | 🟡 | |
+| AAC ADTS | ❌ | |
+
+---
+
+## Tags (metadata)
+
+**API:** `ReadTags()`  
+
+**ffmpeg equivalent:** `ffprobe -show_entries format_tags` (and stream tags where applicable); ID3/Vorbis via same sources as [dhowden/tag](https://github.com/dhowden/tag)
+
+| Tag system | Containers / files | Status | Notes |
+|------------|-------------------|:------:|-------|
+| ID3v1 / ID3v2 | `.mp3` | ✅ | |
+| MP4 `ilst` | `.m4a`, `.mp4`, `.m4v`, `.mov` | ✅ | |
+| Vorbis comments | `.flac`, `.ogg` | ✅ | |
+| Matroska `Tags` | `.mkv`, `.webm` | 📋 | Partial via tag readers where possible |
+| WAV INFO | `.wav` | 🟡 | Limited |
+
+---
+
+## Embedded artwork
+
+**API:** `HasArtwork()`, `EmbeddedArtwork()`
+
+**ffmpeg equivalent:** `ffmpeg -i file -map 0:v:0 -c copy cover.jpg` or ffprobe disposition `attached_pic`; for audio, extract APIC/`covr`/FLAC picture
+
+| Source | Containers | Status |
+|--------|------------|:------:|
+| ID3 `APIC` | `.mp3` | ✅ |
+| MP4 `covr` | `.m4a`, `.mp4`, `.mov`, … | ✅ |
+| FLAC `PICTURE` | `.flac` | ✅ |
+| Vorbis cover (METADATA_BLOCK_PICTURE) | `.ogg` | 🟡 |
+| MKV attachments | `.mkv`, `.webm` | 📋 |
+| HEIC/AVIF embedded preview | `.heic` | 🔬 |
+
+---
+
+## Lyrics
+
+**API:** `HasLyrics()`, `LyricsFromReader()`, `LyricsSidecar()` (`.lrc` next to media)
+
+**ffmpeg equivalent:** no single standard; often USLT/LYRICS ID3 or custom tags — compare harness uses fixtures + sidecar `.lrc`
+
+| Source | Applies to | Status | Notes |
+|--------|------------|:------:|-------|
+| Embedded (ID3 USLT, etc.) | Audio containers | 🟡 | Format-dependent |
+| Sidecar `.lrc` | Any path with sibling `.lrc` | ✅ | |
+
+---
+
+## Subtitles
+
+**API:** `ListSubtitleTracks()`, `ExtractEmbeddedSubtitle()` → WebVTT, `SubtitleToWebVTT()`, `ExternalSubtitleTracks()`
+
+**ffmpeg equivalent:** `ffprobe -show_streams` (subtitle streams); extract/convert e.g. `ffmpeg -i file -map 0:s:0 out.vtt`
+
+### Embedded (in video container)
+
+| Container | Text tracks (SRT, ASS, WebVTT in MKV) | MP4 `tx3g` / `wvtt` | Image (PGS, VobSub) |
+|-----------|:-------------------------------------:|:-------------------:|:-------------------:|
+| `.mkv` | ✅ extract to WebVTT | — | ❌ |
+| `.webm` | ✅ | — | ❌ |
+| `.mp4`, `.mov` | 🟡 list / partial | 📋 | ❌ |
+
+### Sidecar (not a container)
+
+| File types | API | Status |
+|------------|-----|:------:|
+| `.srt`, `.vtt`, `.ass` | `SubtitleToWebVTT()` | ✅ parse + convert to WebVTT |
+| Sibling discovery | `ExternalSubtitleTracks()` | ✅ |
+
+---
+
+## Video thumbnails
+
+**API:** `Thumbnail()`, `ThumbnailSmall`, `ThumbnailLarge`, `ThumbnailRasterPNG`, `OptionsForPreset`, `ApplyPreset`
+
+**ffmpeg equivalent (compare harness):** `ffmpeg -ss <seek> -i file -frames:v 1 -vf scale=… -q:v … out.jpg` (H.264: keyframe seek + skip loop filter; see [`test/compare/README.md`](../test/compare/README.md))
+
+Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream.
+
+### By video codec
+
+| Codec | Containers | Status | Notes |
+|-------|------------|:------:|-------|
+| **MJPEG** | MP4, MOV, MKV, … | ✅ | Direct frame extract |
+| **VP8** | `.webm`, `.mkv` | ✅ | Pure-Go VP8 decode (`gen2brain/vpx`) |
+| **H.264** Baseline CAVLC, 8-bit 4:2:0 intra IDR | MP4, MOV, M4V, … | ✅ | Clean-room intra decoder; H.264 in MKV returns `ErrUnsupportedProfile` |
+| **H.264** Main / High CABAC intra | MP4, MOV, M4V, … | ✅ | Not MKV (see above) |
+| **H.264** interlaced, 10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
+| **VP9** | `.webm`, `.mkv` | ❌ | Typed unsupported in gate |
+| **AV1**, **HEVC** | — | ❌ | |
+
+### Cover art instead of video frame
+
+**Option:** `ThumbnailOptions.PreferEmbedded`
+
+| Container | Status |
+|-----------|:------:|
+| MP4, M4A, MOV, MP3, FLAC | ✅ |
+| MKV, WebM | 📋 |
+
+---
+
+## Thumbnail output encoding
+
+**API:** `ThumbnailOptions.Format`, `Quality` / `JPEGQuality`
+
+**ffmpeg equivalent:** `-f image2`, `-q:v` (JPEG), PNG/WebP encoders in ffmpeg
+
+| Output | Status | Notes |
+|--------|:------:|-------|
+| JPEG | ✅ | Primary; stdlib `image/jpeg` |
+| PNG | ✅ | stdlib; `ThumbnailRasterPNG` for lossless raster |
+| WebP lossless | ✅ | `Format: webp-lossless` |
+| WebP lossy | 🔬 | |
+
+---
+
+## H.264 / MP4 helpers (advanced)
+
+**API:** `MP4KeyframeSamples()`, `DecodeH264Keyframe()`, `H264KeyframeYUV420()`, `H264KeyframeTimeSec()`
+
+**ffmpeg equivalent:** `ffprobe` sample index / `ffmpeg -frames:v 1` raw YUV for metrics
+
+| Capability | Containers | Status |
+|------------|------------|:------:|
+| MP4 sync sample index | `.mp4`, `.mov`, `.m4v`, `.3gp` | ✅ |
+| IDR decode to RGB/YUV | H.264 in MP4/MOV | ✅ | MKV H.264 thumbnail/decode not supported |
+| Gated profiles (`ErrUnsupportedProfile`) | — | — | Profiles that fail timing gate in `gatedProfiles` (`internal/h264/sps.go`); none gated today |
+
+---
+
+## Runtime
+
+| API | Purpose |
+|-----|---------|
+| `SIMDActive()` | Whether experiment `GOEXPERIMENT=simd` kernels are active (not required for production) |
+
+---
+
+## Public API index
+
+| Function | Purpose |
+|----------|---------|
+| `Probe` | Format, duration, streams, tags flags, subtitle tracks |
+| `Duration` | Duration + source |
+| `ReadTags` | Title, artist, album, … |
+| `HasArtwork`, `EmbeddedArtwork` | Cover image bytes |
+| `HasLyrics`, `LyricsFromReader`, `LyricsSidecar` | Lyrics |
+| `ListSubtitleTracks`, `ExtractEmbeddedSubtitle`, `SubtitleToWebVTT`, `ExternalSubtitleTracks` | Subtitles |
+| `Thumbnail`, `ThumbnailSmall`, `ThumbnailLarge`, `ThumbnailRasterPNG` | Thumbnails |
+| `ApplyPreset`, `OptionsForPreset` | FileBrowser-style presets |
+| `AllThumbnailFilters`, `ThumbnailFilterLabel` | Scaler metadata |
+| `MP4KeyframeSamples` | Sync samples |
+| `DecodeH264Keyframe`, `H264KeyframeYUV420`, `H264KeyframeTimeSec` | H.264 metrics / debug |
+| `SIMDActive` | SIMD experiment status |
+| `Unsupported`, `UnsupportedProfile` | Error helpers |
+
+**Errors:** `ErrUnsupported`, `ErrUnsupportedProfile`, `ErrCorrupt`, `ErrNotMedia`.
