@@ -739,7 +739,8 @@
       "assetId": "mp4_h264_baseline_1080",
       "check": "thumbnail_small",
       "expect": "supported",
-      "goarch": "amd64"
+      "goarch": "amd64",
+      "maxTimingRegressionFraction": 1.25
     },
     {
       "assetId": "mp4_h264_main_1080",
