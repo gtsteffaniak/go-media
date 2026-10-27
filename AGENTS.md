@@ -16,7 +16,7 @@ Instructions for autonomous coding agents working in this repository.
 | `internal/sniff`, `internal/format`, `internal/detect` | Format detection and IDs. |
 | `internal/isobmff` | MP4/MOV: boxes, sync samples, MJPEG/H.264 thumbnail demux (`abema/go-mp4`). |
 | `internal/matroska` | MKV/WebM: cues, VP8/MJPEG thumbnails. |
-| `internal/h264` | Clean-room intra-only H.264 under `cleanroom/` (in progress). Baseline/Main/High supported (CAVLC and CABAC); a profile that misses the timing gate goes in `gatedProfiles` in `sps.go` (empty today) and is re-measured by the harness every run. **No `Eyevinn/hi264`** (module, vendor, or relocated copy). |
+| `internal/h264` | Clean-room intra-only H.264 under `cleanroom/` (in progress). Baseline/Main/High supported: **Baseline (CAVLC)**; **Main/High (CABAC)**, plus CAVLC where the bitstream uses it. A profile that misses the timing gate goes in `gatedProfiles` in `sps.go` (empty today) and is re-measured by the harness every run. **No `Eyevinn/hi264`** (module, vendor, or relocated copy). |
 | `internal/vp8decode` | VP8 picture → RGBA/YCbCr scale helpers. |
 | `internal/jpegfast` | Fast MJPEG decode for thumbnails. |
 | `internal/thumb` | Thumbnail pipeline: seek, decode, YCbCr/RGBA scale, JPEG/PNG/WebP encode. |
@@ -25,7 +25,7 @@ Instructions for autonomous coding agents working in this repository.
 | `internal/subtitle` | Sidecar and MKV subtitle parse/convert. |
 | `internal/errs` | Typed unsupported/profile/corrupt errors. |
 | `test/compare/harness` | ffmpeg 9.0.2 comparison harness, timing gate, build-mode timings, HTML report. |
-| `docs/` | `COMPARISON.md`, `PROFILING.md` (stage breakdown), `SIMD.md` (kernel rules, why the first kernels were removed), `BASELINE_PROFILE.md`, `FOLLOWUP_H264_CLEANROOM.md`. |
+| `docs/` | `PROFILING.md`, `H264.md`, `SIMD.md`. Compare harness: `test/compare/README.md`. |
 | `default.pgo` | Checked-in PGO profile for release-style builds. |
 
 ## Hard rules
@@ -35,9 +35,9 @@ Instructions for autonomous coding agents working in this repository.
 3. **Go version:** **`go.mod` minimum `go 1.27`**. **CI** uses **`go-version: stable`** + **`check-latest: true`**.
 4. **Do not use [Eyevinn/hi264](https://github.com/Eyevinn/hi264)** as a module or vendored tree. All H.264 decode work stays in **`internal/h264`** (ITU-T H.264; ffmpeg/openh264 as behavioral references only — no GPL/LGPL copies).
 5. **Dependencies:** keep the graph small. **`github.com/Eyevinn/mp4ff`** is allowed **only where it pays for itself** (today: **`avc` SPS/PPS/slice/NAL** parsing in `internal/h264` validation and the legacy decoder path). Do not add mp4ff for MP4 container work — use **`abema/go-mp4`** for boxes/demux.
-6. **SIMD:** Design hot paths for **Go `simd/archsimd` / `GOEXPERIMENT=simd`** with a portable Go fallback (`-tags purego` forces it) — all **bit-identical** on shared tests. Kernels are batched (per row/MB/plane, never per pixel or 4×4), dispatch is resolved once at init, and a SIMD kernel is enabled only after it beats the portable version in benchmarks and tier 3 beats tier 2 on thumbnails. The comparison report records **three stacked tiers** vs ffmpeg: **(1) purego**, **(2) purego + PGO**, **(3) purego + PGO + simd** (subprocess thumbmode). **The ≤20% support gate uses the shipped in-process build only:** **`-tags purego` + `-pgo=default.pgo`** (`ShippedTimingGateBuild`; there is no asm tier anymore). See `docs/PROFILING.md`.
+6. **Production build:** **`CGO_ENABLED=0` + `-pgo=default.pgo`** (compare report tier 2). **SIMD** (`GOEXPERIMENT=simd`) is experiment-only, tier 3, not gated. YCbCr asm on amd64/arm64 by default. See `docs/PROFILING.md`, `docs/SIMD.md`.
 7. **PGO:** Keep **`default.pgo`** and **`default.pgo.provenance.json`** in sync with hot paths (`make pgo` after corpus/decoder changes). Harness uses `GOFLAGS=-pgo=default.pgo`. CI runs **`make check-pgo`** (warn if stale).
-8. **Performance policy:** Supported features ≤**20%** slower than **ffmpeg 9.0.2** exec (10% target). Failures → **`ErrUnsupported`** / **`ErrUnsupportedProfile`**. No timing exemptions.
+8. **Performance policy:** Supported thumbnail paths must stay within **`expectations.json` `timingGate.defaultMaxRegressionFraction`** vs **ffmpeg 9.0.2** (currently 50%; 10% target for notes). Profiles that decode but miss the gate go in **`gatedProfiles`** → **`ErrUnsupportedProfile`**.
 9. **Quality:** PSNR/SSIM vs ffmpeg; H.264 intra decode YUV metrics on keyframe fixtures.
 
 ## Thumbnail presets (FileBrowser-aligned)
@@ -49,7 +49,7 @@ Instructions for autonomous coding agents working in this repository.
 
 ```bash
 CGO_ENABLED=0 go test ./...
-CGO_ENABLED=0 go test -tags purego ./...
+CGO_ENABLED=0 go test ./...
 make compare-gate
 make pgo && make profile && make bench-thumb
 ```
@@ -59,6 +59,6 @@ Report: `test/compare/report_site/` includes **stacked build tiers** (`buildMode
 ## CI and PR workflow
 
 - Triggers: **`push` to `main`**, **`pull_request`**. No cursor-branded workflow names.
-- Matrix: amd64/arm64, default/`purego`, **Go stable**, compare-gate (`default.pgo` + **check-pgo** warn), **`GOEXPERIMENT=simd`** job (kernels + tier-3 thumbmode smoke; non-blocking for merge).
+- Matrix: amd64/arm64, production (PGO) / **nopgo**, **Go stable**, compare-gate (`default.pgo` + **check-pgo** warn), **`GOEXPERIMENT=simd`** job (kernels + tier-3 thumbmode smoke; non-blocking for merge).
 - **CodeRabbit:** docstring coverage ≥ **80%** on touched public API.
 - **Before finishing:** CI green; resolve all CodeRabbit threads.

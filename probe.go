@@ -2,6 +2,7 @@ package media
 
 import (
 	"io"
+	"strings"
 
 	"github.com/gtsteffaniak/go-media/internal/flac"
 	"github.com/gtsteffaniak/go-media/internal/format"
@@ -24,9 +25,48 @@ func Probe(r io.ReaderAt, size int64) (*ProbeInfo, error) {
 		return nil, mapErr(err)
 	}
 	info := &ProbeInfo{Format: toFormat(id)}
+	if id == format.MP4 {
+		return probeMP4(r, size, info)
+	}
+	return probeOther(r, size, id, info)
+}
+
+func probeMP4(r io.ReaderAt, size int64, info *ProbeInfo) (*ProbeInfo, error) {
+	fm, err := isobmff.OpenFileMeta(r, size)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	info.FormatName = fm.FormatName()
+	if dr, err := fm.Duration(); err == nil {
+		mapped := mapDuration(dr)
+		info.Duration = mapped.Duration
+		info.DurationSrc = mapped.Source
+	}
+	info.Streams = mapStreams(fm.Streams())
+	subs := fm.SubtitleStreams()
+	info.HasArtwork = fm.HasAttachedCover()
+	// Video-only MP4 (e.g. MJPEG) often has no ilst; skip dhowden/tag when nothing needs it.
+	if info.HasArtwork || len(subs) > 0 {
+		if tags, hasArt, hasLyrics, err := tagread.InspectTags(r, size, format.MP4); err == nil {
+			info.Tags = mapTags(tags)
+			info.HasLyrics = hasLyrics
+			info.HasArtwork = info.HasArtwork || hasArt
+		}
+	}
+	for _, s := range subs {
+		info.SubtitleTracks = append(info.SubtitleTracks, SubtitleTrack{
+			Index:    s.Index,
+			Codec:    s.Codec,
+			Language: s.Language,
+			Title:    s.Title,
+			Embedded: true,
+		})
+	}
+	return info, nil
+}
+
+func probeOther(r io.ReaderAt, size int64, id format.ID, info *ProbeInfo) (*ProbeInfo, error) {
 	switch id {
-	case format.MP4:
-		info.FormatName = isobmff.FormatName(r, size)
 	case format.WebM:
 		info.FormatName = "webm"
 	case format.MKV:
@@ -55,7 +95,7 @@ func Probe(r io.ReaderAt, size int64) (*ProbeInfo, error) {
 	if tags, err := tagread.ReadTags(r, size, id); err == nil {
 		info.Tags = mapTags(tags)
 	}
-	info.HasLyrics = tagread.HasEmbeddedLyrics(r, size, id) || info.Tags.Raw["lyrics"] != ""
+	info.HasLyrics = strings.TrimSpace(info.Tags.Raw["lyrics"]) != "" || tagread.HasEmbeddedLyrics(r, size, id)
 	if id == format.MP4 {
 		info.HasArtwork = isobmff.HasCover(r, size)
 	} else {

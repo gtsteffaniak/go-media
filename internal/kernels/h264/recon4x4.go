@@ -5,7 +5,7 @@ package h264
 // res is raster-order int32 residuals from InverseTransform4x4Residual.
 // WriteBlock4x4 adds prediction and residual for one 4×4 luma/chroma block.
 func WriteBlock4x4(plane []byte, stride, px0, py0 int, pred []byte, predStride, lx, ly int, res [16]int32) {
-	writeBlock4x4Portable(plane, stride, px0, py0, pred, predStride, lx, ly, res)
+	writeBlock4x4(plane, stride, px0, py0, pred, predStride, lx, ly, res)
 }
 
 func writeBlock4x4Portable(plane []byte, stride, px0, py0 int, pred []byte, predStride, lx, ly int, res [16]int32) {

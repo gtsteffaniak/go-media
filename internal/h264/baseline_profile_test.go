@@ -10,7 +10,7 @@ import (
 )
 
 // BenchmarkBaselineThumbnailDecode profiles CAVLC decode for mp4_h264_baseline_1080
-// (decoder only, no SPS validation). Feeds docs/BASELINE_PROFILE.md.
+// (decoder only, no SPS validation). Feeds docs/H264.md.
 func BenchmarkBaselineThumbnailDecode(b *testing.B) {
 	avcc, sample := openBaselineKeyframe(b)
 	data := prependParameterSets(avcc, sample)

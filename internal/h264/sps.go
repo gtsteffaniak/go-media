@@ -8,7 +8,7 @@ import (
 )
 
 // gatedProfiles maps profile_idc to the reason a profile that decodes correctly is not
-// enabled: it has not met the ≤20% ffmpeg thumbnail timing gate. It is empty today (H.264
+// enabled: it has not met the ffmpeg thumbnail timing gate. It is empty today (H.264
 // Baseline/CAVLC, profile_idc 66, met the gate and was enabled). The comparison harness
 // decodes gated profiles through AllowGatedProfiles and fails when one starts to pass, so
 // an entry here is removed as soon as the measurement says it can be.

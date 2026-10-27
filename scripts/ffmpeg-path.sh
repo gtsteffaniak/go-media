@@ -6,6 +6,28 @@ ffmpeg_binary_usable() {
 	[[ -n "${1:-}" && -x "$1" ]] && "$1" -version >/dev/null 2>&1
 }
 
+ffmpeg_version_first_line() {
+	"$1" -version 2>&1 | sed -n '1p' || true
+}
+
+# True when the ffmpeg -version first line reports ver (not a longer prefix, e.g. 7.1 vs 7.1.1).
+ffmpeg_version_line_matches() {
+	local line="$1" ver="$2"
+	local needle="version ${ver}"
+	[[ "$line" == *"$needle"* ]] || return 1
+	local rest="${line#*"$needle"}"
+	[[ "$rest" =~ ^[0-9.] ]] && return 1
+	return 0
+}
+
+ffmpeg_pair_matches_version() {
+	local ff="$1" fp="$2" ver="$3"
+	local ff_line fp_line
+	ff_line=$(ffmpeg_version_first_line "$ff")
+	fp_line=$(ffmpeg_version_first_line "$fp")
+	ffmpeg_version_line_matches "$ff_line" "$ver" && ffmpeg_version_line_matches "$fp_line" "$ver"
+}
+
 # _ffmpeg_bindir_if_usable prints dir when dir/ffmpeg and dir/ffprobe work, else returns 1.
 _ffmpeg_bindir_if_usable() {
 	local dir="$1" ff fp
@@ -56,12 +78,14 @@ find_ffmpeg_bindir() {
 		return 0
 	fi
 
-	# Gate / explicit pin: prefer FFMPEG_DIR before PATH.
+	# Gate / explicit pin: require FFMPEG_DIR; do not fall back to PATH (avoids silent version skew).
 	if [[ -n "${FFMPEG_DIR:-}" && "${COMPARE_GATE:-}" == "1" ]]; then
 		if dir=$(_ffmpeg_bindir_if_usable "${FFMPEG_DIR}"); then
 			printf '%s\n' "$dir"
 			return 0
 		fi
+		echo "COMPARE_GATE: FFMPEG_DIR=${FFMPEG_DIR} has no usable ffmpeg/ffprobe" >&2
+		return 1
 	fi
 
 	if dir=$(_ffmpeg_scan_path); then

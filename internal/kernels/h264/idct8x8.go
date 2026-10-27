@@ -3,7 +3,7 @@ package h264
 // InverseTransform8x8Residual applies the H.264 8×8 inverse integer transform with
 // (coeff + 32) >> 6 rounding. Coefficients are dequantized int32 values in raster order.
 func InverseTransform8x8Residual(d [64]int32) [64]int32 {
-	return inverseTransform8x8ResidualPortable(d)
+	return inverseTransform8x8Residual(d)
 }
 
 func inverseTransform8x8ResidualPortable(d [64]int32) [64]int32 {

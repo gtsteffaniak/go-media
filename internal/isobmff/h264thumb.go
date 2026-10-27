@@ -6,7 +6,6 @@ import (
 
 	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/h264"
-	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
 type h264ThumbCtx struct {
@@ -16,29 +15,15 @@ type h264ThumbCtx struct {
 }
 
 func loadH264Thumb(r io.ReaderAt, size int64, seekPercent float64) (h264ThumbCtx, bool) {
-	info, err := mp4.Probe(ioat.New(r, size))
-	if err != nil {
-		return h264ThumbCtx{}, false
-	}
-	track := -1
-	for i, tr := range info.Tracks {
-		if tr.Codec == mp4.CodecAVC1 {
-			track = i
-			break
-		}
-	}
-	if track < 0 {
-		return h264ThumbCtx{}, false
-	}
-	avcc, ok := AVCDecoderConfig(r, size, track)
+	t, ok := OpenH264MP4Thumb(r, size)
 	if !ok {
 		return h264ThumbCtx{}, false
 	}
-	sample, ok := h264SyncSampleFromInfo(r, size, track, seekPercent, info)
+	sample, ok := h264SyncSampleFromInfo(r, size, t.Track, seekPercent, t.Probe)
 	if !ok {
 		return h264ThumbCtx{}, false
 	}
-	return h264ThumbCtx{track: track, avcc: avcc, sample: sample}, true
+	return h264ThumbCtx{track: t.Track, avcc: t.AVCC, sample: sample}, true
 }
 
 // H264ThumbnailYCbCr decodes an IDR frame to YCbCr for area/box downscale before JPEG encode.

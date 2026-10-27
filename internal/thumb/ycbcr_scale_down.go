@@ -70,15 +70,8 @@ func tryScaleYCbCrDown(img image.Image, maxW, maxH int, mode ScalerMode) (image.
 	case *image.YCbCr:
 		ycc = v
 	case *h264.ThumbYCbCr:
-		// YCbCr→JPEG skips custom matrix coeffs; small thumbs keep the RGB path for ffmpeg parity.
-		ycc = v.YCbCr
-		if ycc == nil {
-			return img, false
-		}
-		tw, th := fitThumbSize(ycc.Bounds().Dx(), ycc.Bounds().Dy(), maxW, maxH)
-		if tw <= 320 || th <= 320 {
-			return img, false
-		}
+		// Decoded H.264 is limited/full video YCbCr; JPEG encode needs RGB (see encodeImageRaster).
+		return img, false
 	}
 	if ycc == nil {
 		return img, false

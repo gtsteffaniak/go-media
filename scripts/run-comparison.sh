@@ -29,9 +29,9 @@ fi
 PGO="$ROOT/default.pgo"
 COMPARE_BIN="${COMPARE_BIN:-$HARNESS/.cache/gomedia-compare}"
 mkdir -p "$(dirname "$COMPARE_BIN")"
-# Production compare gate: purego + PGO (see ShippedTimingGateBuild). Tier 3 simd binaries
-# are built separately in buildThumbModeBinaries with GOMEDIA_ENABLE_SIMD=1 at runtime.
-CGO_ENABLED=0 go build -tags purego -pgo="$PGO" -o "$COMPARE_BIN" .
+# Production compare gate: CGO_ENABLED=0 + PGO (see ShippedTimingGateBuild). Tier 3 simd binaries
+# tier 3 is built with GOEXPERIMENT=simd only (no enable env).
+CGO_ENABLED=0 go build -pgo="$PGO" -o "$COMPARE_BIN" .
 if ((${#GATE_ARGS[@]} > 0)); then
 	CGO_ENABLED=0 "$COMPARE_BIN" -seed-dir "$HARNESS/.seed" -assets "$HARNESS/.assets" -report "$REPORT" "${GATE_ARGS[@]}"
 else

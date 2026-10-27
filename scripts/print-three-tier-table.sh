@@ -13,7 +13,7 @@ with open("$JSON") as f:
     r = json.load(f)
 rows = r.get("buildModeTimings") or []
 modes = ["purego", "purego_pgo", "purego_pgo_simd"]
-labels = {"purego": "T1 purego", "purego_pgo": "T2 purego+PGO", "purego_pgo_simd": "T3 +SIMD"}
+labels = {"purego": "T1 no PGO", "purego_pgo": "T2 production (+PGO)", "purego_pgo_simd": "T3 +SIMD (diag)"}
 by = {}
 for row in rows:
     k = (row["assetId"], row.get("thumbPreset") or row.get("check", ""))

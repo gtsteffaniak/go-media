@@ -1,18 +1,11 @@
 # Clean-room H.264 intra decoder
 
-Full **SIMD-first rewrite** (ITU-T H.264; ffmpeg/openh264 as behavioral references only).
-
-## Design pillars (Graham)
+ITU-T H.264 decode in pure Go (ffmpeg/openh264 as behavioral references). See **`docs/H264.md`** for gate policy, profiling, and package map.
 
 - **64-bit bit cache** — `bitstream/`
-- **Table-driven CAVLC** with multi-symbol LUTs — `cavlc/`
-- **Batched coefficients** — `coeff/`
-- **CABAC decode-only** — `cabac/` (Main/High)
-- **Kernels** — `internal/kernels/h264` (dequant/IDCT/reconstruct, intra pred, plane writes; portable Go reference, simd kernels added per kernel)
-- **Thumbnails:** skip in-loop deblock on fast path
-- **Zero allocations** per frame after pool warm; **PGO** via `default.pgo`
-- **Baseline:** profile per stage (`docs/BASELINE_PROFILE.md`); enable in `sps.go` only if ≤20% gate passes
+- **Table-driven CAVLC** — `decode/cavlc_lut.go`, canonical tables in `cavlc_canon_decode.go`
+- **CABAC** — Main/High (`decode/cabac*.go`)
+- **Kernels** — `internal/kernels/h264` (dequant, IDCT, recon, intra pred)
+- **Thumbnails:** skip in-loop deblock on fast path; pooled buffers; **PGO** via `default.pgo`
 
-Sibling `intradec`/`cabac`/… packages are **hi264 relocations** — delete when this tree is parity-clean.
-
-See `docs/FOLLOWUP_H264_CLEANROOM.md`.
+Baseline/Main/High intra paths are exercised by `test/compare` and kernel parity tests.

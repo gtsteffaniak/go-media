@@ -13,14 +13,9 @@ func HasCover(r io.ReaderAt, size int64) bool {
 	if tagread.HasArtwork(r, size, format.MP4) {
 		return true
 	}
-	metas, err := listTrakMeta(r, size)
+	m, err := OpenFileMeta(r, size)
 	if err != nil {
 		return false
 	}
-	for _, m := range metas {
-		if m.AttachedCover {
-			return true
-		}
-	}
-	return false
+	return m.HasAttachedCover()
 }

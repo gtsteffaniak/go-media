@@ -4,7 +4,7 @@ import "sync/atomic"
 
 // allowGatedProfiles lifts the performance-based profile restrictions in gatedProfiles.
 //
-// Support for a profile is decided by the ≤20% ffmpeg timing gate, not asserted: a profile
+// Support for a profile is decided by the ffmpeg timing gate in expectations.json (not asserted): a profile
 // that has not met the gate is listed in gatedProfiles and rejected with
 // ErrUnsupportedProfile in production. The
 // comparison harness sets this so it can still decode and time such a profile, and report

@@ -66,6 +66,13 @@ func timingComparable(r CheckResult) bool {
 	}
 }
 
+func timingGateRow(r CheckResult) bool {
+	if r.Check != CheckThumbnailSmall && r.Check != CheckThumbnailLarge {
+		return false
+	}
+	return timingComparable(r)
+}
+
 func clearNonComparableTiming(r *CheckResult) {
 	if timingComparable(*r) {
 		return
@@ -87,7 +94,8 @@ func enrichResults(flat []CheckResult, prev *FullReport) {
 	var timingRegressions, statusRegressions, compared int
 	for i := range flat {
 		r := &flat[i]
-		if timingComparable(*r) {
+		// Timing delta % and the support gate apply to thumbnail rows only (median write vs ffmpeg).
+		if timingComparable(*r) && timingGateRow(*r) {
 			goMs := r.GoMediaMS
 			if r.GoMediaWriteMS > 0 {
 				goMs = r.GoMediaWriteMS
@@ -165,9 +173,9 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	s.GoMediaModule = "github.com/gtsteffaniak/go-media"
 	s.TimingGateBuild = ShippedTimingGateBuild
 	s.BuildModeTiers = []string{
-		"1: purego (no PGO)",
-		"2: purego + PGO (-pgo=default.pgo) — production gate",
-		"3: tier 2 + GOEXPERIMENT=simd + GOMEDIA_ENABLE_SIMD=1 (experiment)",
+		"1: diagnostic — no PGO",
+		"2: production — CGO_ENABLED=0 + -pgo=default.pgo (support gate)",
+		"3: diagnostic — production + GOEXPERIMENT=simd (not gated)",
 	}
 	checkNames := []CheckName{
 		CheckDuration, CheckProbe, CheckTags, CheckArtwork,
@@ -179,7 +187,9 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	}
 	var deltaPcts []float64
 	var totalGo, totalFF float64
+	var avgGoSum, avgFFSum float64
 	comparable := 0
+	ffmpegActions := 0
 	var relaxedRows []TimingRelaxedRow
 	for _, group := range nested {
 		for _, r := range group {
@@ -189,9 +199,22 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 				s.ByCheck[string(r.Check)]++
 			}
 			byCheckStatus[r.Check][r.Status]++
-			if timingComparable(r) {
+			if timingComparable(r) && r.FFmpegMS > 0 {
+				ffmpegActions++
+				goMs := r.GoMediaMS
+				if r.GoMediaWriteMS > 0 {
+					goMs = r.GoMediaWriteMS
+				}
+				avgGoSum += goMs
+				avgFFSum += r.FFmpegMS
+			}
+			if timingGateRow(r) {
 				comparable++
-				totalGo += r.GoMediaMS
+				goMs := r.GoMediaMS
+				if r.GoMediaWriteMS > 0 {
+					goMs = r.GoMediaWriteMS
+				}
+				totalGo += goMs
 				totalFF += r.FFmpegMS
 				if r.TimingDeltaPct != nil {
 					deltaPcts = append(deltaPcts, *r.TimingDeltaPct)
@@ -222,9 +245,14 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 		})
 	}
 	s.Timing = TimingAggregate{
-		ComparableRows: comparable,
-		TotalGoMediaMS: totalGo,
-		TotalFFmpegMS:  totalFF,
+		ComparableRows:   comparable,
+		FfmpegActionRows: ffmpegActions,
+		TotalGoMediaMS:   totalGo,
+		TotalFFmpegMS:    totalFF,
+	}
+	if ffmpegActions > 0 {
+		s.Timing.AvgGoMediaMS = avgGoSum / float64(ffmpegActions)
+		s.Timing.AvgFfmpegMS = avgFFSum / float64(ffmpegActions)
 	}
 	if len(deltaPcts) > 0 {
 		var sum float64

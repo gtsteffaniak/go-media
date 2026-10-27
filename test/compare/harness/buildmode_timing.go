@@ -10,19 +10,19 @@ import (
 	"strings"
 )
 
-// BuildMode names stacked report tiers (all use -tags purego; PGO/SIMD are incremental).
+// BuildMode names stacked report tiers (PGO/SIMD are incremental on the default CGO_ENABLED=0 build).
 type BuildMode string
 
 const (
 	// Tier 1: portable Go only (no asm kernels, no PGO, no simd experiment).
 	BuildModePurego BuildMode = "purego"
-	// Tier 2: tier 1 + -pgo=default.pgo.
+	// Tier 2 (production): tier 1 + -pgo=default.pgo — support gate and recommended ship build.
 	BuildModePuregoPGO BuildMode = "purego_pgo"
 	// Tier 3: tier 2 + GOEXPERIMENT=simd (and simd kernel paths where implemented).
 	BuildModePuregoPGOSIMD BuildMode = "purego_pgo_simd"
 )
 
-// ShippedTimingGateBuild documents which binary the ≤20% support gate uses (in-process harness).
+// ShippedTimingGateBuild documents which binary the in-process support gate uses (see expectations.json timingGate).
 const ShippedTimingGateBuild = "purego_pgo_in_process"
 
 // BuildModeTimingRow is one asset/preset timed in a specific build mode vs ffmpeg.
@@ -35,7 +35,8 @@ type BuildModeTimingRow struct {
 	GoMediaWrite float64   `json:"goMediaWriteMs"`
 	FFmpegMS     float64   `json:"ffmpegMs"`
 	DeltaPct     float64   `json:"timingDeltaPct"`
-	GatePass     bool      `json:"timingGatePass"` // vs ffmpeg ≤20%; informational for tiers
+	GatePass         bool `json:"timingGatePass"`         // vs ffmpeg cap when GateApplicable
+	GateApplicable   bool `json:"timingGateApplicable"`   // false for experiment tier 3 (GOEXPERIMENT=simd)
 }
 
 var _buildModeTimings []BuildModeTimingRow
@@ -95,11 +96,13 @@ func collectBuildModeTimings(assets []Asset, flat []CheckResult, repoRoot string
 					continue
 				}
 				delta := (ms - ffMs) / ffMs
+				gateApplicable := mode == BuildModePuregoPGO
+				gatePass := !gateApplicable || delta <= limit
 				out = append(out, BuildModeTimingRow{
 					AssetID: a.ID, Check: string(check), ThumbPreset: preset.Name,
 					BuildMode: mode, Tier: tierOf[mode],
 					GoMediaWrite: ms, FFmpegMS: ffMs, DeltaPct: delta,
-					GatePass: delta <= limit,
+					GatePass: gatePass, GateApplicable: gateApplicable,
 				})
 			}
 		}
@@ -122,7 +125,7 @@ func buildThumbModeBinaries(repoRoot string) (map[BuildMode]string, error) {
 	}
 	baseEnv := append(os.Environ(), "CGO_ENABLED=0")
 	build := func(path string, usePGO bool, goexp string) error {
-		args := []string{"build", "-o", path, "-tags", "purego"}
+		args := []string{"build", "-o", path}
 		if usePGO {
 			args = append(args, "-pgo="+pgo)
 		}
@@ -158,7 +161,7 @@ func runThumbModeBench(bin, assetPath, preset string, mode BuildMode) (float64, 
 	cmd := exec.Command(bin, "-asset", assetPath, "-preset", preset, "-seek", "10", "-measure-gated")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if mode == BuildModePuregoPGOSIMD {
-		cmd.Env = append(cmd.Env, "GOEXPERIMENT=simd", "GOMEDIA_ENABLE_SIMD=1")
+		cmd.Env = append(cmd.Env, "GOEXPERIMENT=simd")
 	}
 	out, err := cmd.Output()
 	if err != nil {

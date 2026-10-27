@@ -4,7 +4,7 @@ package h264
 // the standard (coeff + 32) >> 6 rounding. Input coefficients are dequantized
 // int32 values in raster order; output is the 4×4 residual block (raster order).
 func InverseTransform4x4Residual(d [16]int32) [16]int32 {
-	return inverseTransform4x4ResidualPortable(d)
+	return inverseTransform4x4Residual(d)
 }
 
 func inverseTransform4x4ResidualPortable(d [16]int32) [16]int32 {

@@ -73,6 +73,25 @@ func TestReadSE(t *testing.T) {
 	}
 }
 
+func TestReadUnaryPrefix(t *testing.T) {
+	cases := []struct {
+		bits string
+		want int
+	}{
+		{"1", 0},
+		{"01", 1},
+		{"001", 2},
+		{"0001", 3},
+		{"00000000000000001", 16},
+	}
+	for _, c := range cases {
+		r := NewReader(bitsToBytes(c.bits + "0"))
+		if got := r.ReadUnaryPrefix(); got != c.want {
+			t.Errorf("ReadUnaryPrefix(%q) = %d, want %d", c.bits, got, c.want)
+		}
+	}
+}
+
 func TestEOFSticky(t *testing.T) {
 	r := NewReader([]byte{0xff})
 	r.U(8)     // read everything

@@ -17,18 +17,6 @@ VERSION="${1:-${FFMPEG_VERSION:-9.0.2}}"
 DEST="${2:-${FFMPEG_INSTALL_DIR:-$HOME/ffmpeg-$VERSION}}"
 export FFMPEG_DIR="${FFMPEG_DIR:-$DEST}"
 
-ffmpeg_version_first_line() {
-	"$1" -version 2>&1 | sed -n '1p' || true
-}
-
-ffmpeg_pair_matches_version() {
-	local ff="$1" fp="$2" ver="$3"
-	local ff_line fp_line
-	ff_line=$(ffmpeg_version_first_line "$ff")
-	fp_line=$(ffmpeg_version_first_line "$fp")
-	[[ "$ff_line" == *"version ${ver}"* && "$fp_line" == *"version ${ver}"* ]]
-}
-
 use_path_ffmpeg() {
 	local ff fp ff_dir fp_dir
 	ff=$(command -v ffmpeg 2>/dev/null || true)

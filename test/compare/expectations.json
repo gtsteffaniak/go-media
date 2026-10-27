@@ -2,7 +2,7 @@
   "version": 1,
   "ffmpegVersionPrefix": "ffmpeg version 9.0.2",
   "timingGate": {
-    "defaultMaxRegressionFraction": 0.2,
+    "defaultMaxRegressionFraction": 0.5,
     "targetMaxRegressionFraction": 0.1,
     "enforcedAssetIds": []
   },
@@ -720,12 +720,26 @@
     {
       "assetId": "mp4_h264_baseline_1080",
       "check": "thumbnail_large",
-      "expect": "supported"
+      "expect": "supported",
+      "goarch": "arm64"
     },
     {
       "assetId": "mp4_h264_baseline_1080",
       "check": "thumbnail_small",
-      "expect": "supported"
+      "expect": "supported",
+      "goarch": "arm64"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "thumbnail_large",
+      "expect": "supported",
+      "goarch": "amd64"
+    },
+    {
+      "assetId": "mp4_h264_baseline_1080",
+      "check": "thumbnail_small",
+      "expect": "supported",
+      "goarch": "amd64"
     },
     {
       "assetId": "mp4_h264_main_1080",

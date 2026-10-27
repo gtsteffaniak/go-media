@@ -1,7 +1,7 @@
 // Package kernels provides hot numeric paths for thumbnail decode/scale/color.
 //
-// Every kernel has a portable Go implementation that is the bit-exact reference. SIMD
-// variants (GOEXPERIMENT=simd, simd/archsimd) are added per kernel only when they beat the
-// portable version; see internal/kernels/h264 for the runtime opt-in gate. Build with
-// -tags purego to force portable Go.
+// Production builds use CGO_ENABLED=0 with -pgo=default.pgo (see docs/PROFILING.md).
+// On amd64/arm64, YCbCr area
+// downscale uses plan9 assembly; other GOARCHes use portable Go. Optional H.264 SIMD
+// kernels require GOEXPERIMENT=simd at build time (see docs/SIMD.md).
 package kernels

@@ -49,9 +49,10 @@ h2 { margin-top: 2rem; font-size: 1.15rem; }
 
 .charts-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
+  align-items: stretch;
 }
 .chart-box {
   background: var(--card);
@@ -59,7 +60,21 @@ h2 { margin-top: 2rem; font-size: 1.15rem; }
   border-radius: 8px;
   padding: 1rem;
 }
-.chart-box.compact { min-height: 280px; }
+.chart-box.compact {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+.chart-box.compact .chart-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 260px;
+  padding: 0.25rem 0;
+}
+.chart-box.compact .chart-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
 .charts-metrics {
   display: flex;
   flex-direction: column;
@@ -121,6 +136,20 @@ h2 { margin-top: 2rem; font-size: 1.15rem; }
 .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--border); text-align: left; }
+.chart-caption {
+  margin: -0.25rem 0 0.75rem;
+  font-size: 0.85rem;
+  color: #9aa8bc;
+}
+
+#buildmode-tier-summary-charts.hidden {
+  display: none;
+}
+
+#buildmode-table tr.production-tier td {
+  background: rgba(61, 214, 140, 0.08);
+  border-bottom-color: rgba(61, 214, 140, 0.25);
+}
 th {
   background: var(--card);
   position: sticky;

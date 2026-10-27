@@ -23,15 +23,15 @@ jobs:
           - os: ubuntu-latest
             arch: amd64
             profile: production
-          - os: ubuntu-latest
-            arch: amd64
-            profile: purego
           - os: ubuntu-24.04-arm
             arch: arm64
             profile: production
+          - os: ubuntu-latest
+            arch: amd64
+            profile: nopgo
           - os: ubuntu-24.04-arm
             arch: arm64
-            profile: purego
+            profile: nopgo
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -49,25 +49,21 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.profile == 'production'
         run: ./scripts/generate-fixtures.sh
       - name: Vet
-        run: |
-          if [ "${{ matrix.profile }}" = "production" ]; then
-            CGO_ENABLED=0 go vet -tags purego ./...
-          else
-            CGO_ENABLED=0 go vet -tags purego ./...
-          fi
+        run: CGO_ENABLED=0 go vet ./...
       - name: Test
         run: |
           if [ "${{ matrix.profile }}" = "production" ]; then
-            CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -tags purego ./...
+            CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test ./...
           else
-            CGO_ENABLED=0 go test -tags purego ./...
+            CGO_ENABLED=0 go test ./...
           fi
       - name: Fuzz smoke (subtitle, amd64 production only)
         if: matrix.os == 'ubuntu-latest' && matrix.profile == 'production'
-        run: CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -tags purego -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
+        run: CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
 
-  test-amd64-asm-optin:
+  test-go-latest:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,9 +72,9 @@ jobs:
         with:
           go-version: stable
           check-latest: true
-          cache: true
-      - name: Test amd64 asm kernels (opt-in, informational)
-        run: CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test ./internal/kernels/...
+          cache: false
+      - name: Smoke test on latest Go (archsimd API churn)
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/h264/ -run 'TestSIMDConsumer|TestSIMDCPU' -count=1
 
   test-simd-experiment:
     strategy:
@@ -94,17 +90,21 @@ jobs:
           go-version: stable
           check-latest: true
           cache: true
-      - name: Test GOEXPERIMENT=simd kernels (explicit SIMD opt-in)
-        run: CGO_ENABLED=0 GOEXPERIMENT=simd GOMEDIA_ENABLE_SIMD=1 go test ./internal/kernels/...
+      - name: Consumer-style SIMD (no enable env)
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/h264/ -run 'TestSIMD'
+      - name: GODEBUG=simd=0 parity smoke
+        run: GODEBUG=simd=0 CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/h264/ ./internal/h264/...
+      - name: Test GOEXPERIMENT=simd kernels
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/...
       - name: Test GOEXPERIMENT=simd h264 decode
-        run: CGO_ENABLED=0 GOEXPERIMENT=simd GOMEDIA_ENABLE_SIMD=1 go test ./internal/h264/...
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/h264/...
       - name: Install static ffmpeg (amd64 report smoke)
         if: matrix.os == 'ubuntu-latest'
         run: FFMPEG_FORCE_INSTALL=1 bash scripts/install-ffmpeg.sh
       - name: Build thumbmode simd experiment binary smoke
         if: matrix.os == 'ubuntu-latest'
         working-directory: test/compare/harness
-        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -tags purego -pgo=../../../default.pgo -o /tmp/thumbmode-simd ./thumbmode
+        run: CGO_ENABLED=0 GOEXPERIMENT=simd go build -pgo=../../../default.pgo -o /tmp/thumbmode-simd ./thumbmode
 
   compare-gate:
     name: ffmpeg comparison gate

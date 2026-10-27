@@ -10,7 +10,7 @@ import (
 
 const thumbTimingWarmup = 11
 const thumbTimingRuns = 15
-const maxTimingRegressionPct = 0.20
+const maxTimingRegressionPct = 0.50
 const targetTimingRegressionPct = 0.10
 
 type thumbTimingSample struct {

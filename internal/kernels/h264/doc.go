@@ -1,9 +1,7 @@
-// Package h264 provides H.264 decode kernels: 4×4/8×8 IDCT residual, dequant, 4×4
-// prediction+residual write, and intra prediction helpers.
+// Package h264 provides SIMD-oriented H.264 decode kernels: 4×4 IDCT residual,
+// 4×4 prediction+residual write, and future intra/8×8 helpers.
 //
-// Every kernel has a portable Go implementation, which is the bit-exact reference. SIMD
-// kernels are added per kernel behind KernelsUseSIMD (GOEXPERIMENT=simd, a CPU with
-// AVX2/ASIMD, and GOMEDIA_ENABLE_SIMD=1 or -tags gomedia_simd); -tags purego forces portable
-// only. A SIMD kernel must be bit-identical to its portable version on shared tests and
-// must beat it in benchmarks before it is enabled.
+// Default builds use portable Go for H.264 DSP. GOEXPERIMENT=simd links optional
+// experiment SIMD bodies (simd_kernel_flags.go; docs/SIMD.md). All paths must be
+// bit-identical on shared tests.
 package h264

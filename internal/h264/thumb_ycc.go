@@ -18,14 +18,7 @@ type ThumbYCbCr struct {
 
 // NewThumbYCbCr wraps a decoded frame for the thumbnail pipeline.
 func NewThumbYCbCr(f *frame.Frame) *ThumbYCbCr {
-	cs := yuv.BT601
-	rng := yuv.LimitedRange
-	if f.ColorDescriptionValid && f.MatrixCoefficients != 0 {
-		cs = yuv.ColorSpaceFromMatrixCoefficients(f.MatrixCoefficients)
-	}
-	if f.VideoFullRangeFlag {
-		rng = yuv.FullRange
-	}
+	cs, rng := ThumbColorFromFrame(f)
 	return &ThumbYCbCr{
 		YCbCr: FrameToYCbCr(f),
 		CS:    cs,
@@ -39,6 +32,20 @@ func (t *ThumbYCbCr) RGB(yy, cb, cr byte) (r, g, b byte) {
 	return byte(ri), byte(gi), byte(bi)
 }
 
-func (t *ThumbYCbCr) ColorModel() color.Model { return t.YCbCr.ColorModel() }
-func (t *ThumbYCbCr) Bounds() image.Rectangle { return t.YCbCr.Bounds() }
-func (t *ThumbYCbCr) At(x, y int) color.Color { return t.YCbCr.At(x, y) }
+func (t *ThumbYCbCr) ColorModel() color.Model { return color.RGBAModel }
+func (t *ThumbYCbCr) Bounds() image.Rectangle {
+	if t.YCbCr == nil {
+		return image.Rect(0, 0, 0, 0)
+	}
+	return t.YCbCr.Bounds()
+}
+func (t *ThumbYCbCr) At(x, y int) color.Color {
+	if t.YCbCr == nil {
+		return color.RGBA{}
+	}
+	yy := t.YCbCr.Y[t.YCbCr.YOffset(x, y)]
+	cb := t.YCbCr.Cb[t.YCbCr.COffset(x, y)]
+	cr := t.YCbCr.Cr[t.YCbCr.COffset(x, y)]
+	r, g, b := t.RGB(yy, cb, cr)
+	return color.RGBA{R: r, G: g, B: b, A: 255}
+}

@@ -1,5 +1,7 @@
 package decode
 
+import h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"
+
 // High-profile Intra_8x8 macroblock decoding (CABAC). One transform_size_8x8
 // luma block per 8x8 quadrant: 8x8 intra prediction + 8x8 residual/transform.
 // Chroma stays on the 4x4 path.
@@ -82,12 +84,7 @@ func (sd *sliceDecoder) decodeMB8x8Cabac(addr int) error {
 				sd.recon4[(gy+dy)*sd.w4+gx+dx] = true
 			}
 		}
-		for yy := 0; yy < 8; yy++ {
-			for xx := 0; xx < 8; xx++ {
-				v := int(pred[yy*8+xx]) + int(res[yy*8+xx])
-				f.Y[(py0+yy)*f.StrideY+px0+xx] = clip1(v)
-			}
-		}
+		h264k.IDCT8x8Add(f.Y, f.StrideY, px0, py0, pred[:], res)
 	}
 
 	switch f.ChromaArrayType {
