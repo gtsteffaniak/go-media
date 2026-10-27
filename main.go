@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -78,6 +79,9 @@ func main() {
 		if err != nil {
 			fatal(err)
 		}
+		if err := rejectOutputOverwritesInput(path, out, st); err != nil {
+			fatal(err)
+		}
 		if err := os.WriteFile(out, tr.Data, 0o644); err != nil {
 			fatal(err)
 		}
@@ -96,4 +100,31 @@ func usage() {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
+}
+
+// rejectOutputOverwritesInput returns an error when out names the same file as input
+// (including via symlinks), which would truncate the source on write.
+func rejectOutputOverwritesInput(inputPath, outputPath string, inputInfo os.FileInfo) error {
+	inAbs, err := filepath.Abs(inputPath)
+	if err != nil {
+		return err
+	}
+	outAbs, err := filepath.Abs(outputPath)
+	if err != nil {
+		return err
+	}
+	if inAbs == outAbs {
+		return errors.New("output path must not be the input file")
+	}
+	outInfo, err := os.Stat(outputPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if os.SameFile(inputInfo, outInfo) {
+		return errors.New("output path must not be the input file")
+	}
+	return nil
 }

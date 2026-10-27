@@ -130,10 +130,10 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 
 **ffmpeg equivalent:** no single standard; often USLT/LYRICS ID3 or custom tags — compare harness uses fixtures + sidecar `.lrc`
 
-| Source | Applies to | Status |
-|--------|------------|:------:|
+| Source | Applies to | Status | Notes |
+|--------|------------|:------:|-------|
 | Embedded (ID3 USLT, etc.) | Audio containers | 🟡 | Format-dependent |
-| Sidecar `.lrc` | Any path with sibling `.lrc` | ✅ |
+| Sidecar `.lrc` | Any path with sibling `.lrc` | ✅ | |
 
 ---
 
@@ -174,8 +174,8 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns
 |-------|------------|:------:|-------|
 | **MJPEG** | MP4, MOV, MKV, … | ✅ | Direct frame extract |
 | **VP8** | `.webm`, `.mkv` | ✅ | Pure-Go VP8 decode (`gen2brain/vpx`) |
-| **H.264** Baseline CAVLC, 8-bit 4:2:0 intra IDR | MP4, MOV, MKV, … | ✅ | Clean-room intra decoder |
-| **H.264** Main / High CABAC intra | Same | ✅ | |
+| **H.264** Baseline CAVLC, 8-bit 4:2:0 intra IDR | MP4, MOV, M4V, … | ✅ | Clean-room intra decoder; H.264 in MKV returns `ErrUnsupportedProfile` |
+| **H.264** Main / High CABAC intra | MP4, MOV, M4V, … | ✅ | Not MKV (see above) |
 | **H.264** interlaced, 10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
 | **VP9** | `.webm`, `.mkv` | ❌ | Typed unsupported in gate |
 | **AV1**, **HEVC** | — | ❌ | |
@@ -201,7 +201,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns
 |--------|:------:|-------|
 | JPEG | ✅ | Primary; stdlib `image/jpeg` |
 | PNG | ✅ | stdlib; `ThumbnailRasterPNG` for lossless raster |
-| WebP lossless | 🔬 | |
+| WebP lossless | ✅ | `Format: webp-lossless` |
 | WebP lossy | 🔬 | |
 
 ---
@@ -215,7 +215,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns
 | Capability | Containers | Status |
 |------------|------------|:------:|
 | MP4 sync sample index | `.mp4`, `.mov`, `.m4v`, `.3gp` | ✅ |
-| IDR decode to RGB/YUV | H.264 in MP4/MOV/MKV | ✅ / 🟡 | MKV path varies by mux |
+| IDR decode to RGB/YUV | H.264 in MP4/MOV | ✅ | MKV H.264 thumbnail/decode not supported |
 | Gated profiles (`ErrUnsupportedProfile`) | — | — | Profiles that fail timing gate in `gatedProfiles` (`internal/h264/sps.go`); none gated today |
 
 ---
