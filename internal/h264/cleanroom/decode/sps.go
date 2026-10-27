@@ -76,11 +76,13 @@ func ParseSPS(rbsp []byte) (*SPS, error) {
 		if s.ChromaFormatIDC == 3 {
 			s.SeparateColourPlane = r.Flag()
 		}
-		s.BitDepthLuma = r.UE() + 8
-		s.BitDepthChroma = r.UE() + 8
-		if s.BitDepthLuma > maxBitDepth || s.BitDepthChroma > maxBitDepth {
-			return nil, fmt.Errorf("h264 sps: bit depth luma=%d chroma=%d exceeds maximum %d", s.BitDepthLuma, s.BitDepthChroma, maxBitDepth)
+		bitDepthLumaMinus8 := r.UE()
+		bitDepthChromaMinus8 := r.UE()
+		if bitDepthLumaMinus8 > maxBitDepth-8 || bitDepthChromaMinus8 > maxBitDepth-8 {
+			return nil, fmt.Errorf("h264 sps: bit depth luma_minus8=%d chroma_minus8=%d exceeds maximum %d", bitDepthLumaMinus8, bitDepthChromaMinus8, maxBitDepth-8)
 		}
+		s.BitDepthLuma = bitDepthLumaMinus8 + 8
+		s.BitDepthChroma = bitDepthChromaMinus8 + 8
 		r.Flag()      // qpprime_y_zero_transform_bypass_flag
 		if r.Flag() { // seq_scaling_matrix_present_flag
 			n := 8
@@ -209,11 +211,12 @@ func (s *SPS) computeDimensions() error {
 		cropUnitY = subH * (2 - frameMbsOnly)
 	}
 
-	cropX := int(s.CropLeft+s.CropRight) * cropUnitX
-	cropY := int(s.CropTop+s.CropBottom) * cropUnitY
-	if cropX >= codedW || cropY >= codedH {
+	cropXu := (uint64(s.CropLeft) + uint64(s.CropRight)) * uint64(cropUnitX)
+	cropYu := (uint64(s.CropTop) + uint64(s.CropBottom)) * uint64(cropUnitY)
+	if cropXu >= uint64(codedW) || cropYu >= uint64(codedH) {
 		return fmt.Errorf("h264 sps: crop offsets remove entire %dx%d picture", codedW, codedH)
 	}
+	cropX, cropY := int(cropXu), int(cropYu)
 	width := codedW - cropX
 	height := codedH - cropY
 	if width <= 0 || height <= 0 {
@@ -224,8 +227,13 @@ func (s *SPS) computeDimensions() error {
 	}
 	s.Width = width
 	s.Height = height
-	s.OffsetX = int(s.CropLeft) * cropUnitX
-	s.OffsetY = int(s.CropTop) * cropUnitY
+	offX := uint64(s.CropLeft) * uint64(cropUnitX)
+	offY := uint64(s.CropTop) * uint64(cropUnitY)
+	if offX > uint64(codedW) || offY > uint64(codedH) {
+		return fmt.Errorf("h264 sps: crop origin out of coded %dx%d picture", codedW, codedH)
+	}
+	s.OffsetX = int(offX)
+	s.OffsetY = int(offY)
 	return nil
 }
 
