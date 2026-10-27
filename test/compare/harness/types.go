@@ -67,6 +67,9 @@ type CheckResult struct {
 	PrevTimingDelta *float64 `json:"prevTimingDeltaPct,omitempty"`
 	TimingRegression *bool   `json:"timingRegression,omitempty"`
 	StatusRegression *bool   `json:"statusRegression,omitempty"`
+
+	// goErr is the error media returned for this check, used to classify unsupported rows.
+	goErr error
 }
 
 // TimingRelaxedRow documents a thumbnail row that passed under a relaxed timing gate.
@@ -83,11 +86,15 @@ type TimingRelaxedRow struct {
 
 // TimingAggregate summarizes latency across comparable rows.
 type TimingAggregate struct {
-	ComparableRows int     `json:"comparableRows"`
-	TotalGoMediaMS float64 `json:"totalGoMediaMs"`
-	TotalFFmpegMS  float64 `json:"totalFfmpegMs"`
-	AvgDeltaPct    float64 `json:"avgTimingDeltaPct"`
-	MedianDeltaPct float64 `json:"medianTimingDeltaPct"`
+	ComparableRows int `json:"comparableRows"` // thumbnail gate rows (Δ% stats)
+	// FfmpegActionRows is every check with an ffmpeg/ffprobe timing sample (duration, probe, thumbs, …).
+	FfmpegActionRows int     `json:"ffmpegActionRows"`
+	AvgGoMediaMS     float64 `json:"avgGoMediaMs"`
+	AvgFfmpegMS      float64 `json:"avgFfmpegMs"`
+	TotalGoMediaMS   float64 `json:"totalGoMediaMs"` // deprecated: sum of thumbnail gate rows only
+	TotalFFmpegMS    float64 `json:"totalFfmpegMs"`
+	AvgDeltaPct      float64 `json:"avgTimingDeltaPct"`
+	MedianDeltaPct   float64 `json:"medianTimingDeltaPct"`
 }
 
 // CapabilityBreakdown is supported vs other counts per check name.
@@ -118,7 +125,7 @@ type ReportSummary struct {
 	FFmpegVersion   string         `json:"ffmpegVersion"`
 	FFprobeVersion  string         `json:"ffprobeVersion"`
 	GoMediaModule   string         `json:"goMediaModule"`
-	// TimingGateBuild is the shipped binary variant used for ≤20% support decisions (in-process).
+	// TimingGateBuild is the shipped binary variant used for timing gate decisions (in-process).
 	TimingGateBuild string `json:"timingGateBuild"`
 	// BuildModeTiers documents stacked subprocess tiers in buildModeTimings (vs ffmpeg).
 	BuildModeTiers []string `json:"buildModeTiers,omitempty"`

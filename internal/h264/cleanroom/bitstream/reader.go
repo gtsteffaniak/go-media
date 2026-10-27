@@ -8,7 +8,10 @@
 // checking the error after each field — a single Err() at the end is enough.
 package bitstream
 
-import "errors"
+import (
+	"errors"
+	"math/bits"
+)
 
 // ErrEOF — attempt to read past the end of data.
 var ErrEOF = errors.New("bitstream: read past the end of data")
@@ -47,21 +50,13 @@ func (r *Reader) refillReg() {
 		r.err = ErrEOF
 		return
 	}
-	var v uint32
-	bits := 0
-	p := r.pos
-	for bits < 32 && p < total {
-		b := r.data[p>>3]
-		v = (v << 1) | uint32((b>>(7-(p&7)))&1)
-		bits++
-		p++
+	want := 32
+	if total-r.pos < want {
+		want = total - r.pos
 	}
-	if bits == 0 {
-		r.err = ErrEOF
-		return
-	}
-	r.reg = v << (32 - bits)
-	r.nreg = bits
+	v := peekBitsMSB(r.data, r.pos, want)
+	r.reg = v << (32 - want)
+	r.nreg = want
 }
 
 // readBit reads one bit; on reading past the end of data it sets ErrEOF and
@@ -89,16 +84,29 @@ func (r *Reader) Bit() uint32 { return r.readBit() }
 // ReadUnaryPrefix counts leading zero bits then consumes the terminating one-bit
 // (H.264 level_prefix and Exp-Golomb zero run).
 func (r *Reader) ReadUnaryPrefix() int {
+	if r.err != nil {
+		return 0
+	}
+	r.flushReg()
 	n := 0
+	const w = 16
 	for {
-		if r.readBit() == 0 {
-			n++
+		peek := r.PeekBits(w)
+		if peek == 0 {
+			n += w
+			r.Skip(w)
 			if n > 31 {
 				return n
 			}
 			continue
 		}
-		return n
+		lz := bits.LeadingZeros32(peek << 16)
+		if lz < w {
+			r.Skip(lz + 1)
+			return n + lz
+		}
+		n += w
+		r.Skip(w)
 	}
 }
 
@@ -111,10 +119,19 @@ func (r *Reader) U(n int) uint32 {
 		r.err = errBitsRange
 		return 0
 	}
-	var v uint32
-	for i := 0; i < n; i++ {
-		v = (v << 1) | r.readBit()
+	if n == 0 {
+		return 0
 	}
+	r.flushReg()
+	if n <= 16 {
+		v := r.PeekBits(n)
+		r.Skip(n)
+		return v
+	}
+	v := r.PeekBits(16)
+	r.Skip(16)
+	v = (v << uint(n-16)) | r.PeekBits(n-16)
+	r.Skip(n - 16)
 	return v
 }
 
@@ -128,16 +145,11 @@ func (r *Reader) UE() uint32 {
 	if r.err != nil {
 		return 0
 	}
-	zeros := 0
-	for r.readBit() == 0 {
-		if r.err != nil {
-			return 0
-		}
-		zeros++
-		if zeros > 31 { // 32+ leading zeros do not fit in uint32 — corrupt bitstream
-			r.err = errExpGolomb
-			return 0
-		}
+	r.flushReg()
+	zeros := r.ReadUnaryPrefix()
+	if zeros > 31 {
+		r.err = errExpGolomb
+		return 0
 	}
 	if zeros == 0 {
 		return 0
@@ -160,16 +172,10 @@ func (r *Reader) SE() int32 {
 // Bits missing at the end of the bitstream are treated as zeros (needed for
 // table-based variable-length-code parsing, where a fixed-length window is peeked first).
 func (r *Reader) PeekBits(n int) uint32 {
-	var v uint32
-	total := len(r.data) * 8
-	for i := 0; i < n; i++ {
-		var bit uint32
-		if p := r.pos + i; p < total {
-			bit = uint32((r.data[p>>3] >> uint(7-(p&7))) & 1)
-		}
-		v = (v << 1) | bit
+	if n <= 0 {
+		return 0
 	}
-	return v
+	return peekBitsMSB(r.data, r.pos, n)
 }
 
 // Skip advances the position by n bits (flush after PeekBits).
@@ -184,6 +190,17 @@ func (r *Reader) Skip(n int) {
 
 // ByteAligned reports that the position sits on a byte boundary.
 func (r *Reader) ByteAligned() bool { return r.pos%8 == 0 }
+
+// AlignedBytes returns the unread bytes from the current position, which must be
+// byte-aligned (call AlignToByte first). It does not advance the reader; callers
+// that decode the tail with their own engine (CABAC) take ownership of the position.
+func (r *Reader) AlignedBytes() []byte {
+	i := r.pos >> 3
+	if i > len(r.data) {
+		i = len(r.data)
+	}
+	return r.data[i:]
+}
 
 // AlignToByte advances to the nearest byte boundary (for pcm_alignment_zero_bit
 // and cabac_alignment_one_bit the skipped bits' values do not matter to us).

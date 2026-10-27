@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gtsteffaniak/go-media"
+	"github.com/gtsteffaniak/go-media/internal/h264"
 )
 
 func main() {
@@ -17,7 +18,9 @@ func main() {
 	seek := flag.Float64("seek", 10, "seek percent")
 	warmup := flag.Int("warmup", 11, "warmup iterations")
 	runs := flag.Int("runs", 15, "timed iterations")
+	measureGated := flag.Bool("measure-gated", false, "decode profiles rejected only for missing the timing gate (measurement only)")
 	flag.Parse()
+	h264.AllowGatedProfiles(*measureGated)
 	if *asset == "" {
 		fmt.Fprintln(os.Stderr, "thumbmode: -asset required")
 		os.Exit(2)

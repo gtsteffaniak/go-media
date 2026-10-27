@@ -35,6 +35,23 @@ function compareSliderMarkup({ assetId, goSrc, ffSrc, goMissing, ffMissing, extr
       </div>`;
 }
 
+let lightboxReturnFocus = null;
+
+function closeLightbox() {
+  const box = document.getElementById('lightbox');
+  if (!box) return;
+  box.classList.add('hidden');
+  const el = lightboxReturnFocus;
+  lightboxReturnFocus = null;
+  if (el && typeof el.focus === 'function') {
+    try {
+      el.focus();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+}
+
 function openThumbCompareLightbox(card, pct) {
   const slider = card.querySelector('.compare-slider');
   if (!slider) return;
@@ -42,6 +59,7 @@ function openThumbCompareLightbox(card, pct) {
   const ffImg = slider.querySelector('.compare-clip img');
   const body = document.getElementById('lightbox-body');
   const box = document.getElementById('lightbox');
+  lightboxReturnFocus = document.activeElement;
   body.innerHTML = compareSliderMarkup({
     assetId: card.dataset.assetId || '',
     goSrc: goImg.src,
@@ -53,8 +71,10 @@ function openThumbCompareLightbox(card, pct) {
   body.querySelectorAll('img').forEach(attachThumbImgFallback);
   const enlarged = initCompareSlider(body.querySelector('.compare-slider'));
   if (enlarged) enlarged.setPct(pct);
-  document.getElementById('lightbox-caption').textContent = card.querySelector('h3')?.textContent?.trim() || '';
+  const cap = document.getElementById('lightbox-caption');
+  if (cap) cap.textContent = card.querySelector('h3')?.textContent?.trim() || '';
   box.classList.remove('hidden');
+  box.querySelector('.lightbox-close')?.focus();
 }
 
 let chartInstances = [];
@@ -77,6 +97,97 @@ function metricBar(value, max, kind, format, title) {
 
 function timingComparableRow(r) {
   return r.status === 'supported' || r.status === 'mismatch';
+}
+
+function timingGateRow(r) {
+  return r.check === 'thumbnail_small' || r.check === 'thumbnail_large';
+}
+
+const CHART_GO_COLOR = '#5b9bd5';
+const CHART_FF_COLOR = '#6b7a90';
+
+function goMsForCompare(r) {
+  if (r.goMediaWriteMs > 0) return r.goMediaWriteMs;
+  return r.goMediaMs || 0;
+}
+
+function medianValues(values) {
+  const v = values.filter((n) => n != null && !Number.isNaN(n) && n > 0).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const mid = Math.floor(v.length / 2);
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+}
+
+function medianMsByCheck(results, checks, pick) {
+  return checks.map((c) => {
+    const vals = results
+      .filter((r) => r.check === c && timingComparableRow(r) && (r.ffmpegMs || 0) > 0)
+      .map(pick);
+    return medianValues(vals) ?? 0;
+  });
+}
+
+function sumMsByAsset(results) {
+  const go = {};
+  const ff = {};
+  for (const r of results) {
+    if (!timingComparableRow(r) || (r.ffmpegMs || 0) <= 0) continue;
+    const id = r.assetId;
+    go[id] = (go[id] || 0) + goMsForCompare(r);
+    ff[id] = (ff[id] || 0) + r.ffmpegMs;
+  }
+  return { go, ff };
+}
+
+function pairedMsChartOptions(title, extra = {}) {
+  return {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom', labels: { color: '#9aa8bc', boxWidth: 12 } },
+      title: { display: true, text: title, color: '#e7ecf3', font: { size: 13 } },
+      ...extra.plugins,
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        grid: { color: '#2a3544' },
+        ticks: { color: '#9aa8bc' },
+        title: { display: true, text: 'milliseconds', color: '#9aa8bc' },
+      },
+      y: { grid: { display: false }, ticks: { color: '#e7ecf3' } },
+      ...extra.scales,
+    },
+    ...extra,
+  };
+}
+
+/** Mean ms for every row that timed ffmpeg/ffprobe (duration, probe, thumbs, …). */
+function ffmpegActionAverages(report) {
+  const t = report.summary?.timing || {};
+  if (t.ffmpegActionRows > 0 && t.avgFfmpegMs >= 0) {
+    return { go: t.avgGoMediaMs, ff: t.avgFfmpegMs, n: t.ffmpegActionRows };
+  }
+  const rows = (report.results || []).filter(
+    (r) => timingComparableRow(r) && (r.ffmpegMs || 0) > 0,
+  );
+  if (!rows.length) return { go: 0, ff: 0, n: 0 };
+  let goSum = 0;
+  let ffSum = 0;
+  for (const r of rows) {
+    goSum += goMsForCompare(r);
+    ffSum += r.ffmpegMs;
+  }
+  return { go: goSum / rows.length, ff: ffSum / rows.length, n: rows.length };
+}
+
+function compactChartOptions(extra = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    ...extra,
+  };
 }
 
 function thumbQualityLine(r) {
@@ -136,10 +247,10 @@ function initLightbox() {
   const box = document.getElementById('lightbox');
   const body = document.getElementById('lightbox-body');
   const cap = document.getElementById('lightbox-caption');
-  const close = () => box.classList.add('hidden');
   document.body.addEventListener('click', (e) => {
     const t = e.target;
     if (t.matches('.thumb-compare img, .thumb-pair img')) {
+      lightboxReturnFocus = document.activeElement;
       body.innerHTML = `<img class="lightbox-img" src="${t.src}" alt="" />`;
       const img = body.querySelector('img');
       img.alt = t.alt || '';
@@ -147,10 +258,10 @@ function initLightbox() {
       box.classList.remove('hidden');
     }
   });
-  box.querySelector('.lightbox-close').addEventListener('click', close);
-  box.addEventListener('click', (e) => { if (e.target === box) close(); });
+  box.querySelector('.lightbox-close').addEventListener('click', closeLightbox);
+  box.addEventListener('click', (e) => { if (e.target === box) closeLightbox(); });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !box.classList.contains('hidden')) close();
+    if (e.key === 'Escape' && !box.classList.contains('hidden')) closeLightbox();
   });
 }
 
@@ -205,22 +316,226 @@ function initCompareSlider(sliderOrRoot, { onZoom } = {}) {
 
 const BUILD_MODE_ORDER = ['purego', 'purego_pgo', 'purego_pgo_simd'];
 const BUILD_MODE_LABELS = {
-  purego: '1 · purego',
-  purego_pgo: '2 · purego+PGO',
-  purego_pgo_simd: '3 · purego+PGO+simd',
+  purego: 'Tier 1 — diagnostic (no PGO)',
+  purego_pgo: 'Tier 2 — production (PGO, gated)',
+  purego_pgo_simd: 'Tier 3 — experiment (PGO + SIMD)',
 };
+const BUILD_MODE_AXIS_LABELS = {
+  purego: 'Tier 1\nno PGO',
+  purego_pgo: 'Tier 2\nproduction',
+  purego_pgo_simd: 'Tier 3\n+ SIMD',
+};
+
+function medianOf(nums) {
+  const v = nums.filter((n) => n != null && !Number.isNaN(n)).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const mid = Math.floor(v.length / 2);
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+}
+
+function aggregateBuildModeByTier(modeRows) {
+  return BUILD_MODE_ORDER.map((mode) => {
+    const rows = modeRows.filter((r) => r.buildMode === mode);
+    return {
+      mode,
+      n: rows.length,
+      goWriteMed: medianOf(rows.map((r) => r.goMediaWriteMs)),
+      ffMed: medianOf(rows.map((r) => r.ffmpegMs)),
+      deltaMed: medianOf(rows.map((r) => (r.timingDeltaPct != null ? r.timingDeltaPct * 100 : null))),
+    };
+  });
+}
+
+function formatTierSummaryLine(tiers) {
+  const parts = tiers
+    .filter((t) => t.n > 0 && t.goWriteMed != null)
+    .map((t) => {
+      const label = BUILD_MODE_LABELS[t.mode] || t.mode;
+      const delta =
+        t.deltaMed != null ? `, median ${t.deltaMed >= 0 ? '+' : ''}${t.deltaMed.toFixed(0)}% vs ffmpeg` : '';
+      return `${label}: ${t.goWriteMed.toFixed(0)} ms go+write${delta} (n=${t.n})`;
+    });
+  if (!parts.length) return '';
+  let line = parts.join(' · ');
+  const t1 = tiers.find((t) => t.mode === 'purego');
+  const t2 = tiers.find((t) => t.mode === 'purego_pgo');
+  const t3 = tiers.find((t) => t.mode === 'purego_pgo_simd');
+  if (t1?.goWriteMed && t2?.goWriteMed) {
+    const pgoSave = ((t1.goWriteMed - t2.goWriteMed) / t1.goWriteMed) * 100;
+    line += ` · PGO (tier 1→2) saves ~${pgoSave.toFixed(0)}% on median go+write`;
+  }
+  if (t2?.goWriteMed && t3?.goWriteMed) {
+    const simdSave = ((t2.goWriteMed - t3.goWriteMed) / t2.goWriteMed) * 100;
+    line += ` · SIMD (tier 2→3) saves ~${simdSave.toFixed(0)}% on median go+write`;
+  }
+  return line;
+}
+
+function buildModeRowKey(r) {
+  return `${r.assetId}|${r.thumbPreset}`;
+}
+
+function parseBuildModeRowKey(k) {
+  const sep = k.indexOf('|');
+  return { assetId: k.slice(0, sep), thumbPreset: k.slice(sep + 1) };
+}
+
+function buildModeChartLayoutOptions(extra = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    layout: { padding: { top: 12, right: 20, bottom: 8, left: 12 } },
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: { color: '#e7ecf3', padding: 14, boxWidth: 14 },
+      },
+      ...extra.plugins,
+    },
+    ...extra,
+  };
+}
+
+function setBuildModeChartWrapHeights(labelCount) {
+  const h = `${Math.max(320, labelCount * 22 + 120)}px`;
+  for (const id of ['chart-build-modes', 'chart-build-modes-ms']) {
+    const wrap = document.getElementById(id)?.closest('.chart-wrap');
+    if (wrap) wrap.style.height = h;
+  }
+}
+
+function renderBuildModeTierSummaryCharts(modeRows) {
+  const canvasDelta = document.getElementById('chart-tier-median-delta');
+  const canvasMs = document.getElementById('chart-tier-median-ms');
+  const summaryEl = document.getElementById('buildmode-tier-summary');
+  const rowWrap = document.getElementById('buildmode-tier-summary-charts');
+  if (!canvasDelta || !canvasMs) return;
+
+  const tiers = aggregateBuildModeByTier(modeRows);
+  if (summaryEl) summaryEl.textContent = formatTierSummaryLine(tiers);
+
+  if (!modeRows.length) {
+    rowWrap?.classList.add('hidden');
+    return;
+  }
+  rowWrap?.classList.remove('hidden');
+
+  const axisLabels = BUILD_MODE_ORDER.map((m) => BUILD_MODE_AXIS_LABELS[m] || m);
+  const deltaVals = tiers.map((t) => t.deltaMed);
+  const msVals = tiers.map((t) => t.goWriteMed);
+  const msFF = tiers[0]?.ffMed;
+
+  chartInstances.push(new Chart(canvasDelta, {
+    type: 'bar',
+    data: {
+      labels: axisLabels,
+      datasets: [{
+        label: 'Median Δ% vs ffmpeg',
+        data: deltaVals,
+        backgroundColor: deltaVals.map((d) => (d != null && d <= 0 ? '#3dd68c' : '#f07178')), // Δ%: green=faster
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Median thumbnail Δ% vs ffmpeg (all fixtures)',
+          color: '#e7ecf3',
+          font: { size: 14 },
+        },
+      },
+      scales: {
+        y: {
+          ticks: { color: '#9aa8bc', callback: (v) => v + '%' },
+          grid: { color: '#2a3544' },
+          title: { display: true, text: 'vs ffmpeg (negative = faster)', color: '#9aa8bc' },
+        },
+        x: { ticks: { color: '#e7ecf3' }, grid: { display: false } },
+      },
+    },
+  }));
+
+  chartInstances.push(new Chart(canvasMs, {
+    type: 'bar',
+    data: {
+      labels: axisLabels,
+      datasets: [
+        {
+          label: 'go-media decode + write',
+          data: msVals,
+          backgroundColor: CHART_GO_COLOR,
+          borderRadius: 4,
+        },
+        ...(msFF != null
+          ? [{
+              label: 'ffmpeg / ffprobe (reference)',
+              data: BUILD_MODE_ORDER.map(() => msFF),
+              backgroundColor: CHART_FF_COLOR,
+              borderRadius: 4,
+            }]
+          : []),
+      ],
+    },
+    options: {
+      plugins: {
+        title: {
+          display: true,
+          text: 'Median thumbnail time (ms, all fixtures)',
+          color: '#e7ecf3',
+          font: { size: 14 },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#9aa8bc' },
+          grid: { color: '#2a3544' },
+          title: { display: true, text: 'milliseconds', color: '#9aa8bc' },
+        },
+        x: { ticks: { color: '#e7ecf3' }, grid: { display: false } },
+      },
+    },
+  }));
+}
 
 function renderBuildModeCharts(modeRows) {
   const canvas = document.getElementById('chart-build-modes');
   const canvasMs = document.getElementById('chart-build-modes-ms');
-  if (!canvas || !modeRows.length) return;
-  const keys = [...new Set(modeRows.map((r) => `${r.assetId}:${r.thumbPreset}`))].sort();
+  const emptyEl = document.getElementById('buildmode-charts-empty');
+  if (!canvas || !canvasMs) return;
+
+  renderBuildModeTierSummaryCharts(modeRows);
+
+  if (!modeRows.length) {
+    if (emptyEl) emptyEl.classList.remove('hidden');
+    canvas.closest('.chart-box')?.classList.add('hidden');
+    canvasMs.closest('.chart-box')?.classList.add('hidden');
+    return;
+  }
+
+  if (emptyEl) emptyEl.classList.add('hidden');
+  canvas.closest('.chart-box')?.classList.remove('hidden');
+  canvasMs.closest('.chart-box')?.classList.remove('hidden');
+
+  const keys = [...new Set(modeRows.map(buildModeRowKey))].sort();
+  const labels = keys.map((k) => {
+    const { assetId, thumbPreset } = parseBuildModeRowKey(k);
+    return `${assetId} (${thumbPreset})`;
+  });
+  setBuildModeChartWrapHeights(keys.length);
+
   const colors = ['#6b7a90', '#5b9bd5', '#3dd68c'];
+  const findRow = (k, mode) => {
+    const { assetId, thumbPreset } = parseBuildModeRowKey(k);
+    return modeRows.find((r) => r.assetId === assetId && r.thumbPreset === thumbPreset && r.buildMode === mode);
+  };
+
   const deltaDatasets = BUILD_MODE_ORDER.map((mode, i) => ({
     label: BUILD_MODE_LABELS[mode] || mode,
     data: keys.map((k) => {
-      const [assetId, preset] = k.split(':');
-      const row = modeRows.find((r) => r.assetId === assetId && r.thumbPreset === preset && r.buildMode === mode);
+      const row = findRow(k, mode);
       return row ? row.timingDeltaPct * 100 : null;
     }),
     backgroundColor: colors[i],
@@ -228,48 +543,77 @@ function renderBuildModeCharts(modeRows) {
   }));
   chartInstances.push(new Chart(canvas, {
     type: 'bar',
-    data: { labels: keys, datasets: deltaDatasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
+    data: { labels, datasets: deltaDatasets },
+    options: buildModeChartLayoutOptions({
       plugins: {
-        legend: { labels: { color: '#e7ecf3' } },
-        title: { display: false },
+        title: {
+          display: true,
+          text: 'Δ% vs ffmpeg — every video fixture × preset',
+          color: '#e7ecf3',
+          font: { size: 14 },
+        },
       },
       scales: {
-        x: { ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45 }, grid: { color: '#2a3544' } },
+        x: {
+          ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45, autoSkip: keys.length > 24 },
+          grid: { color: '#2a3544' },
+        },
         y: {
           ticks: { color: '#9aa8bc', callback: (v) => v + '%' },
           grid: { color: '#2a3544' },
-          title: { display: true, text: 'Δ% vs ffmpeg (20% gate)', color: '#c55' },
+          title: { display: true, text: 'vs ffmpeg (0% = tie, negative = faster)', color: '#9aa8bc' },
         },
       },
-    },
+    }),
   }));
 
-  if (!canvasMs) return;
   const msDatasets = BUILD_MODE_ORDER.map((mode, i) => ({
     label: BUILD_MODE_LABELS[mode] || mode,
     data: keys.map((k) => {
-      const [assetId, preset] = k.split(':');
-      const row = modeRows.find((r) => r.assetId === assetId && r.thumbPreset === preset && r.buildMode === mode);
+      const row = findRow(k, mode);
       return row ? row.goMediaWriteMs : null;
     }),
     backgroundColor: colors[i],
     borderRadius: 3,
   }));
+  const ffPerFixture = keys.map((k) => {
+    for (const mode of BUILD_MODE_ORDER) {
+      const row = findRow(k, mode);
+      if (row?.ffmpegMs > 0) return row.ffmpegMs;
+    }
+    return null;
+  });
+  msDatasets.push({
+    label: 'ffmpeg / ffprobe (reference)',
+    data: ffPerFixture,
+    backgroundColor: CHART_FF_COLOR,
+    borderRadius: 3,
+  });
   chartInstances.push(new Chart(canvasMs, {
     type: 'bar',
-    data: { labels: keys, datasets: msDatasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#e7ecf3' } } },
-      scales: {
-        x: { stacked: true, ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45 }, grid: { color: '#2a3544' } },
-        y: { stacked: true, beginAtZero: true, ticks: { color: '#9aa8bc' }, grid: { color: '#2a3544' }, title: { display: true, text: 'ms', color: '#9aa8bc' } },
+    data: { labels, datasets: msDatasets },
+    options: buildModeChartLayoutOptions({
+      plugins: {
+        title: {
+          display: true,
+          text: 'Decode + write (ms) vs ffmpeg — every fixture × preset',
+          color: '#e7ecf3',
+          font: { size: 14 },
+        },
       },
-    },
+      scales: {
+        x: {
+          ticks: { color: '#9aa8bc', maxRotation: 45, minRotation: 45, autoSkip: keys.length > 24 },
+          grid: { color: '#2a3544' },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#9aa8bc' },
+          grid: { color: '#2a3544' },
+          title: { display: true, text: 'milliseconds', color: '#9aa8bc' },
+        },
+      },
+    }),
   }));
 }
 
@@ -287,56 +631,85 @@ function renderCharts(report) {
       labels: statusLabels,
       datasets: [{ data: statusData, backgroundColor: statusColors, borderWidth: 0 }],
     },
-    options: {
+    options: compactChartOptions({
       plugins: {
-        legend: { position: 'bottom', labels: { color: '#9aa8bc', boxWidth: 12 } },
-        title: { display: true, text: 'Check outcomes', color: '#e7ecf3' },
+        legend: { position: 'bottom', labels: { color: '#9aa8bc', boxWidth: 12, padding: 8 } },
+        title: { display: true, text: 'All checks by outcome', color: '#e7ecf3', font: { size: 14 } },
       },
-    },
+    }),
   }));
 
+  const avgMs = ffmpegActionAverages(report);
   chartInstances.push(new Chart(document.getElementById('chart-timing-totals'), {
     type: 'bar',
     data: {
-      labels: ['go-media', 'ffmpeg'],
+      labels: ['go-media', 'ffmpeg / ffprobe'],
       datasets: [{
-        label: 'Total ms (comparable checks)',
-        data: [s.timing?.totalGoMediaMs || 0, s.timing?.totalFfmpegMs || 0],
-        backgroundColor: ['#5b9bd5', '#6b7a90'],
+        label: 'Average ms per check',
+        data: [avgMs.go, avgMs.ff],
+        backgroundColor: [CHART_GO_COLOR, CHART_FF_COLOR],
         borderRadius: 4,
       }],
     },
-    options: {
-      plugins: { legend: { display: false }, title: { display: true, text: 'Aggregate latency', color: '#e7ecf3' } },
+    options: compactChartOptions({
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: `Average latency per ffmpeg comparison (n=${avgMs.n})`,
+          color: '#e7ecf3',
+          font: { size: 14 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.parsed.y.toFixed(1)} ms`,
+          },
+        },
+      },
       scales: {
-        y: { beginAtZero: true, grid: { color: '#2a3544' }, ticks: { color: '#9aa8bc' } },
+        y: {
+          beginAtZero: true,
+          grid: { color: '#2a3544' },
+          ticks: { color: '#9aa8bc' },
+          title: { display: true, text: 'milliseconds (mean)', color: '#9aa8bc' },
+        },
         x: { grid: { display: false }, ticks: { color: '#e7ecf3' } },
       },
-    },
+    }),
   }));
 
   const cap = s.capabilityBreakdown || [];
+  const capLabels = cap.map((c) => c.check.replace('thumbnail_', 'thumb '));
   chartInstances.push(new Chart(document.getElementById('chart-capability'), {
     type: 'bar',
     data: {
-      labels: cap.map((c) => c.check),
+      labels: capLabels,
       datasets: [
         { label: 'supported', data: cap.map((c) => c.supported), backgroundColor: '#3dd68c', stack: 's' },
         { label: 'other', data: cap.map((c) => c.other), backgroundColor: '#f5c542', stack: 's' },
         { label: 'skipped', data: cap.map((c) => c.skipped), backgroundColor: '#6b7a90', stack: 's' },
       ],
     },
-    options: {
-      plugins: { title: { display: true, text: 'Capability breakdown', color: '#e7ecf3' } },
-      scales: {
-        x: { stacked: true, grid: { display: false }, ticks: { color: '#9aa8bc', maxRotation: 45 } },
-        y: { stacked: true, beginAtZero: true, grid: { color: '#2a3544' }, ticks: { color: '#9aa8bc' } },
+    options: compactChartOptions({
+      indexAxis: 'y',
+      plugins: {
+        title: {
+          display: true,
+          text: 'Capability by check type',
+          color: '#e7ecf3',
+          font: { size: 14 },
+        },
+        legend: { position: 'bottom', labels: { color: '#9aa8bc', boxWidth: 12 } },
       },
-    },
+      scales: {
+        x: { stacked: true, beginAtZero: true, grid: { color: '#2a3544' }, ticks: { color: '#9aa8bc', stepSize: 1 } },
+        y: { stacked: true, grid: { display: false }, ticks: { color: '#e7ecf3', font: { size: 11 } } },
+      },
+    }),
   }));
 
   const deltas = results
-    .filter((r) => r.timingDeltaPct != null && timingComparableRow(r))
+    .filter((r) => r.timingDeltaPct != null && timingComparableRow(r) && timingGateRow(r))
     .map((r) => r.timingDeltaPct * 100);
   const histBins = [-100, -50, -25, -10, 0, 10, 25, 50, 100, 200];
   const histCounts = new Array(histBins.length - 1).fill(0);
@@ -361,7 +734,10 @@ function renderCharts(report) {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: 'Thumbnail Δ% distribution (gated rows)', color: '#e7ecf3', font: { size: 13 } },
+      },
       scales: {
         x: { beginAtZero: true, grid: { color: '#2a3544' }, ticks: { color: '#9aa8bc' } },
         y: { grid: { display: false }, ticks: { color: '#e7ecf3', font: { size: 11 } } },
@@ -370,57 +746,41 @@ function renderCharts(report) {
   }));
 
   const checks = ['duration', 'probe', 'tags', 'artwork', 'lyrics', 'subtitles', 'thumbnail_small', 'thumbnail_large'];
-  const medByCheck = checks.map((c) => {
-    const ms = results.filter((r) => r.check === c && r.status === 'supported').map((r) => r.goMediaMs);
-    if (!ms.length) return 0;
-    ms.sort((a, b) => a - b);
-    const mid = Math.floor(ms.length / 2);
-    return ms.length % 2 ? ms[mid] : (ms[mid - 1] + ms[mid]) / 2;
-  });
+  const checkLabels = checks.map((c) => c.replace('thumbnail_', 'thumb '));
+  const medGoByCheck = medianMsByCheck(results, checks, (r) => goMsForCompare(r));
+  const medFfByCheck = medianMsByCheck(results, checks, (r) => r.ffmpegMs);
   chartInstances.push(new Chart(document.getElementById('chart-check-median'), {
     type: 'bar',
     data: {
-      labels: checks,
-      datasets: [{ label: 'median ms', data: medByCheck, backgroundColor: '#5b9bd5', borderRadius: 4 }],
+      labels: checkLabels,
+      datasets: [
+        { label: 'go-media', data: medGoByCheck, backgroundColor: CHART_GO_COLOR, borderRadius: 3 },
+        { label: 'ffmpeg / ffprobe', data: medFfByCheck, backgroundColor: CHART_FF_COLOR, borderRadius: 3 },
+      ],
     },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { beginAtZero: true, grid: { color: '#2a3544' }, ticks: { color: '#9aa8bc' } },
-        y: { grid: { display: false }, ticks: { color: '#e7ecf3' } },
-      },
-    },
+    options: pairedMsChartOptions('Median latency by check type (single harness run)'),
   }));
 
-  const byAsset = {};
-  for (const r of results) {
-    if (r.status !== 'supported') continue;
-    if (!byAsset[r.assetId]) byAsset[r.assetId] = 0;
-    byAsset[r.assetId] += r.goMediaMs;
-  }
-  const assetLabels = Object.keys(byAsset).sort();
-  const assetVals = assetLabels.map((k) => byAsset[k]);
+  const { go: byAssetGo, ff: byAssetFf } = sumMsByAsset(results);
+  const assetLabels = Object.keys(byAssetGo).sort();
+  const assetGoVals = assetLabels.map((k) => byAssetGo[k] || 0);
+  const assetFfVals = assetLabels.map((k) => byAssetFf[k] || 0);
   const wrap = document.getElementById('chart-per-asset').closest('.chart-wrap');
-  if (wrap) wrap.style.height = `${Math.max(280, assetLabels.length * 14 + 48)}px`;
+  if (wrap) wrap.style.height = `${Math.max(280, assetLabels.length * 16 + 56)}px`;
   chartInstances.push(new Chart(document.getElementById('chart-per-asset'), {
     type: 'bar',
     data: {
       labels: assetLabels,
-      datasets: [{ label: 'go-media ms', data: assetVals, backgroundColor: '#7cb3ff', borderRadius: 3 }],
+      datasets: [
+        { label: 'go-media', data: assetGoVals, backgroundColor: CHART_GO_COLOR, borderRadius: 3 },
+        { label: 'ffmpeg / ffprobe', data: assetFfVals, backgroundColor: CHART_FF_COLOR, borderRadius: 3 },
+      ],
     },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+    options: pairedMsChartOptions('Total time per asset (all timed checks)', {
       scales: {
-        x: { beginAtZero: true, grid: { color: '#2a3544' }, ticks: { color: '#9aa8bc' } },
         y: { grid: { display: false }, ticks: { color: '#e7ecf3', font: { size: 10 }, autoSkip: false } },
       },
-    },
+    }),
   }));
 }
 
@@ -430,7 +790,7 @@ function renderReport(report) {
   document.getElementById('meta').textContent =
     `${s.generatedAt} · seed ${s.seedCommit.slice(0, 7)} · ${s.ffmpegVersion}`;
   const t = s.timing || {};
-  let timingLine = `Comparable timing rows: ${t.comparableRows || 0} · avg Δ ${((t.avgTimingDeltaPct || 0) * 100).toFixed(1)}% · median Δ ${((t.medianTimingDeltaPct || 0) * 100).toFixed(1)}%`;
+  let timingLine = `Thumbnail gate rows: ${t.comparableRows || 0} · avg Δ ${((t.avgTimingDeltaPct || 0) * 100).toFixed(1)}% · median Δ ${((t.medianTimingDeltaPct || 0) * 100).toFixed(1)}% (vs ffmpeg, in-process)`;
   if (s.previousRun) {
     const pr = s.previousRun;
     timingLine += ` · prev run ${pr.generatedAt} (${pr.timingRegressions} timing regressions, ${pr.statusRegressions} status regressions)`;
@@ -451,7 +811,7 @@ function renderReport(report) {
     const gate = s.timingGateBuild || 'amd64_asm_kernels_pgo_in_process';
     const tiers = (s.buildModeTiers || []).join(' · ');
     gateEl.textContent =
-      `Support gate (≤20%): in-process ${gate} (asm kernels + -pgo=default.pgo, not purego). Report tiers: ${tiers || 'purego → purego+PGO → purego+PGO+simd'}.`;
+      `Production: CGO_ENABLED=0 + -pgo=default.pgo (tier 2 / in-process ${gate}). Gate: expectations.json timingGate. Tiers: ${tiers || 'diagnostic → production (gated) → +SIMD (diagnostic)'}.`;
   }
 
   const cards = document.getElementById('summary-cards');
@@ -554,7 +914,7 @@ function renderReport(report) {
         <td class="status-${r.status}">${r.status}${stReg}</td>
         <td class="metric-col">${timingComparableRow(r) ? metricBar(r.goMediaMs || 0, maxMs, 'go', (v) => `${v.toFixed(2)}`, `go-media ${r.goMediaMs?.toFixed(2)} ms`) + reg : '—'}</td>
         <td class="metric-col">${timingComparableRow(r) && r.ffmpegMs ? metricBar(r.ffmpegMs, maxMs, 'ff', (v) => `${v.toFixed(2)}`, `ffmpeg ${r.ffmpegMs.toFixed(2)} ms`) : '—'}</td>
-        <td>${timingComparableRow(r) ? deltaPctCell(r.timingDeltaPct) : '—'}</td>
+        <td>${timingGateRow(r) && timingComparableRow(r) ? deltaPctCell(r.timingDeltaPct) : '—'}</td>
         <td>${qualityBar(r.durationDeltaSec, 1, false)}</td>
         <td>${r.psnr ? qualityBar(r.psnr, maxPsnr, true) : '—'}</td>
         <td>${r.ssim ? qualityBar(r.ssim, 1, true) : '—'}</td>
@@ -614,7 +974,9 @@ function renderReport(report) {
     );
     for (const r of sorted) {
       const tr = document.createElement('tr');
-      const deltaClass = r.timingGatePass ? 'delta-good' : 'delta-bad';
+      const gated = r.timingGateApplicable !== false && r.buildMode !== 'purego_pgo_simd';
+      const deltaClass = gated ? (r.timingGatePass ? 'delta-good' : 'delta-bad') : '';
+      const pctClass = gated ? deltaClass : '';
       const prevMode = BUILD_MODE_ORDER[(r.tier || 1) - 2];
       let inc = '—';
       if (prevMode) {
@@ -623,16 +985,20 @@ function renderReport(report) {
           inc = `${(((r.goMediaWriteMs - prev.goMediaWriteMs) / prev.goMediaWriteMs) * 100).toFixed(0)}%`;
         }
       }
-      tr.innerHTML = `<td>${r.tier ?? '—'}</td><td>${r.assetId}</td><td>${r.thumbPreset}</td><td>${r.buildMode}</td>
+      const gateCell = gated
+        ? (r.timingGatePass ? 'pass' : 'fail')
+        : 'n/a';
+      if (r.buildMode === 'purego_pgo') {
+        tr.classList.add('production-tier');
+      }
+      tr.innerHTML = `<td>${r.tier ?? '—'}</td><td>${r.assetId}</td><td>${r.thumbPreset}</td><td>${BUILD_MODE_LABELS[r.buildMode] || r.buildMode}</td>
         <td>${r.goMediaWriteMs?.toFixed(1) ?? '—'}</td><td>${r.ffmpegMs?.toFixed(1) ?? '—'}</td>
-        <td class="${deltaClass}">${(r.timingDeltaPct * 100).toFixed(0)}%</td>
+        <td class="${pctClass}">${(r.timingDeltaPct * 100).toFixed(0)}%</td>
         <td>${inc}</td>
-        <td class="${deltaClass}">${r.timingGatePass ? 'pass' : 'fail'}</td>`;
+        <td class="${deltaClass}">${gateCell}</td>`;
       modeTbody.appendChild(tr);
     }
   }
-  renderBuildModeCharts(modeRows);
-
   const scalerRows = report.scalerBenchmarks || [];
   const renderScalerBody = (sortKey, sortDir) => {
     const tbody = document.querySelector('#scaler-table tbody');
@@ -663,6 +1029,7 @@ function renderReport(report) {
     makeSortable(scalerTable, () => scalerRows, renderScalerBody)();
   }
   renderCharts(report);
+  renderBuildModeCharts(modeRows);
 }
 
 async function loadReport() {

@@ -19,6 +19,15 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	}
 	_ = ffprobe
 
+	encoders, err := ffmpegEncoderSet(ffmpeg)
+	if err != nil {
+		return nil, err
+	}
+	vorbisEnc, err := pickEncoder(encoders, "libvorbis", "vorbis")
+	if err != nil {
+		return nil, fmt.Errorf("ogg_vorbis fixture: %w", err)
+	}
+
 	clip := filepath.Join(outDir, "_seed_clip.mp4")
 	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
 		"-i", seedPath, "-t", "5", "-c", "copy", clip); err != nil {
@@ -78,7 +87,7 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		{"wav_pcm", "audio", "WAV PCM", "audio/wav_pcm.wav",
 			[]string{"-f", "lavfi", "-i", audioSrc, "-c:a", "pcm_s16le"}, nil},
 		{"ogg_vorbis", "audio", "OGG Vorbis", "audio/ogg_vorbis.ogg",
-			[]string{"-f", "lavfi", "-i", audioSrc, "-c:a", "libvorbis", "-metadata", "title=OGG"}, nil},
+			[]string{"-f", "lavfi", "-i", audioSrc, "-ac", "2", "-strict", "-2", "-c:a", vorbisEnc, "-metadata", "title=OGG"}, nil},
 		{"opus_ogg", "audio", "Opus in Ogg", "audio/opus.ogg",
 			[]string{"-f", "lavfi", "-i", audioSrc, "-strict", "-2", "-c:a", "opus"}, nil},
 		{"m4a_aac", "audio", "M4A AAC + tags", "audio/m4a_aac.m4a",
@@ -201,6 +210,39 @@ func writeSampleSubtitles(srt, vtt, ass string) error {
 		return err
 	}
 	return os.WriteFile(ass, []byte(assBody), 0o644)
+}
+
+// ffmpegEncoderSet lists encoder short names from ffmpeg -encoders.
+func ffmpegEncoderSet(ffmpeg string) (map[string]bool, error) {
+	out, err := exec.Command(ffmpeg, "-hide_banner", "-encoders").Output()
+	if err != nil {
+		return nil, fmt.Errorf("ffmpeg -encoders: %w", err)
+	}
+	set := make(map[string]bool)
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		flags := fields[0]
+		if len(flags) < 6 {
+			continue
+		}
+		if flags[0] != 'V' && flags[0] != 'A' {
+			continue
+		}
+		set[fields[1]] = true
+	}
+	return set, nil
+}
+
+func pickEncoder(set map[string]bool, names ...string) (string, error) {
+	for _, name := range names {
+		if set[name] {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("no encoder among %v", names)
 }
 
 // runFF executes ffmpeg with the given arguments.

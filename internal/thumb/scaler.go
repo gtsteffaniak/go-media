@@ -104,6 +104,9 @@ func fitThumbSize(w, h, maxW, maxH int) (int, int) {
 		maxH = h
 	}
 	if w <= maxW && h <= maxH {
+		if w%2 != 0 {
+			w++
+		}
 		if h%2 != 0 {
 			h++
 		}
@@ -122,6 +125,9 @@ func fitThumbSize(w, h, maxW, maxH int) (int, int) {
 	}
 	if th < 1 {
 		th = 1
+	}
+	if tw%2 != 0 {
+		tw++
 	}
 	if th%2 != 0 {
 		th++

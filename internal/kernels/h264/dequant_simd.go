@@ -1,4 +1,4 @@
-//go:build goexperiment.simd && !purego
+//go:build goexperiment.simd
 
 package h264
 
@@ -12,7 +12,7 @@ func dequant4x4SIMD(coef [16]int32, qp int) [16]int32 {
 	if shift >= 4 {
 		for idx := 0; idx < 16; idx++ {
 			ls := levelScale4x4(m, idx/4, idx%4)
-			d[idx] = (coef[idx] * ls) << uint(shift-4)
+			d[idx] = dequantCoeffAt(coef[idx], ls, shift)
 		}
 		return d
 	}
@@ -28,8 +28,12 @@ func dequant4x4SIMD(coef [16]int32, qp int) [16]int32 {
 		}
 		cv, _ := simd.LoadInt32sPart(c4[:])
 		lsv, _ := simd.LoadInt32sPart(ls4[:])
-		out := cv.Mul(lsv).Add(bv).ShiftAllRight(uint64(sh))
-		out.StorePart(d[idx : idx+4])
+		sum := cv.Mul(lsv).Add(bv)
+		var part [4]int32
+		sum.StorePart(part[:])
+		for i := 0; i < 4; i++ {
+			d[idx+i] = saturateDequantCoeff(part[i] >> sh)
+		}
 	}
 	return d
 }

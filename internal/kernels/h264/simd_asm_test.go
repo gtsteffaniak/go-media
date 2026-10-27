@@ -24,7 +24,7 @@ func TestSIMDBinaryContainsVectorOps(t *testing.T) {
 	tmp := t.TempDir()
 	bin := filepath.Join(tmp, "h264k.test")
 	cmd := exec.Command("go", "test", "-c", "-o", bin, ".")
-	cmd.Env = append(os.Environ(), "GOEXPERIMENT=simd", "GOMEDIA_ENABLE_SIMD=1", "CGO_ENABLED=0")
+	cmd.Env = append(os.Environ(), "GOEXPERIMENT=simd", "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go test -c: %v\n%s", err, out)
 	}

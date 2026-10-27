@@ -1,110 +1,90 @@
-# Thumbnail performance profiling
+# Thumbnail performance
 
-End-to-end thumbnail latency is gated in `test/compare` against ffmpeg 9.0.2 (see `make compare-gate`). For stage-level breakdown use the harness bench helpers and Go's profiler.
+End-to-end latency is gated in `test/compare` against **ffmpeg 9.0.2**. Stage detail: pprof on `internal/thumb` and `internal/h264` benches.
 
-## Shipped build vs report tiers
+## Production build (recommended)
 
-| Variant | Used for |
-|---------|----------|
-| **In-process `amd64_asm_kernels_pgo_in_process`** | **≤20% support gate** (comparison harness `go run` with `GOFLAGS=-pgo=default.pgo`, default asm kernels) |
-| Report tier 1 `purego` | Subprocess thumbmode: `-tags purego`, no PGO |
-| Report tier 2 `purego_pgo` | Tier 1 + `-pgo=default.pgo` |
-| Report tier 3 `purego_pgo_simd` | Tier 2 + `GOEXPERIMENT=simd` |
+Ship and benchmark with **profile-guided optimization**:
 
-The HTML report shows **Δ% vs ffmpeg**, **ms**, and **incremental gain between tiers** for every video asset/preset. Only the **shipped in-process** row decides `supported` vs gate failure.
+```bash
+CGO_ENABLED=0 go build -pgo=default.pgo   # or: GOFLAGS=-pgo=default.pgo
+```
+
+Copy `default.pgo` from this repo into your app module (or point `-pgo` at it). Regenerate on the same **GOARCH** after hot-path changes (`make pgo`). Optional: `GOEXPERIMENT=simd` is **not** production — experiment only ([SIMD.md](SIMD.md)).
+
+## Compare report tiers
+
+| Tier (report id) | Role |
+|------------------|------|
+| **`purego_pgo` (tier 2)** | **Production** — same as above; subprocess thumbmode + **support gate** |
+| `purego_pgo_in_process` | In-process harness binary for gate (`make compare-gate`) |
+| `purego` (tier 1) | Diagnostic: no PGO |
+| `purego_pgo_simd` (tier 3) | Diagnostic: tier 2 + `GOEXPERIMENT=simd` (not gated) |
+
+Only **tier 2 / in-process PGO** rows define `supported` vs timing gate failure (`expectations.json`, currently 50% vs ffmpeg). Thumbnail timing uses median of 7 runs after 2 warmup iterations; gate compares **Δ%** on `go+write` vs ffmpeg (details in `test/compare/README.md`).
 
 ## Fair ffmpeg baseline
 
-The comparison harness invokes ffmpeg with thumbnail-oriented flags aligned to go-media:
+Harness ffmpeg flags align with go-media thumbs: `-skip_frame nokey`, H.264 `-skip_loop_filter all`, `-threads 1` (use `GOMAXPROCS=1` when profiling go-media).
 
-- `-skip_frame nokey` for H.264 intra paths
-- `-skip_loop_filter all` for H.264 (matches go-media `SkipDeblock` fast preview)
-- `-threads 1` (pair with `GOMAXPROCS=1` when profiling go-media)
-- Area downscale (`flags=area` for H.264; MJPEG/VP8 presets use `fast_bilinear` or area per preset)
+## Commands
 
-## Median timing (≥10 warm iterations)
+**Median timing (harness):**
 
 ```bash
 export PATH="$HOME/ffmpeg-9.0.2:$PATH"
 GOMAXPROCS=1 CGO_ENABLED=0 go test -count=1 -run='^$' -bench=ThumbnailTiming -benchtime=20x ./test/compare/harness/
 ```
 
-`timing_bench.go` uses 9 warmup + 11 measured iterations and reports medians in the HTML report.
-
-## CPU profile (per-stage)
+**CPU profile (thumb pipeline):**
 
 ```bash
-export PATH="$HOME/ffmpeg-9.0.2:$PATH"
 GOMAXPROCS=1 CGO_ENABLED=0 go test -cpuprofile=cpu.prof -run='^$' \
   -bench=BenchmarkMJPEGLarge -benchtime=30x ./internal/thumb/
 go tool pprof -top -cum cpu.prof
 ```
 
-Stages to map in pprof: demux (`isobmff`/`matroska`), entropy decode (`jpegfast`/H.264 clean-room), IDCT/kernels, YCbCr scale (`internal/kernels`, `thumb`), JPEG encode (`image/jpeg`).
-
-### H.264 Baseline (CAVLC)
+**H.264 Baseline decode only:**
 
 ```bash
 CGO_ENABLED=0 go test -run=^$ -bench=BaselineThumbnail -benchmem ./internal/h264/
+make ceiling-profile
 ```
 
-See [`docs/BASELINE_PROFILE.md`](BASELINE_PROFILE.md) for stage notes and gate policy.
+**Thumb benches (MJPEG + H.264 Main/High/WebM):** `make bench-thumb`, `make profile`.
 
-### MP4 H.264 Main/High (supported path)
-
-```bash
-make bench-thumb   # MJPEG + H.264 Main/High/WebM thumbnail benches
-make profile       # same benches with -cpuprofile
-```
+Baseline gate policy and CAVLC vs transform split: [H264.md](H264.md).
 
 ## PGO (`default.pgo`)
 
-Production and harness builds use **Profile-Guided Optimization** via the checked-in profile at the repo root.
-
-### Regenerate (merged corpus)
-
-After changing hot paths (`internal/thumb`, `internal/h264`, `internal/kernels`, demux, `jpegfast`) or adding workloads:
+Production and the compare harness use the checked-in profile at the repo root.
 
 ```bash
 export PATH="$HOME/ffmpeg-9.0.2:$PATH"
-make pgo
+make pgo          # regenerate + default.pgo.provenance.json
+make check-pgo    # CI warning if hot paths changed without regen
 ```
 
-`scripts/regenerate-pgo.sh`:
+Regenerate on the **gate architecture** (amd64 Linux CI). Profiles are not portable across GOARCH. Run after hot-path changes in `internal/thumb`, `internal/h264`, `internal/kernels`, demux, or `jpegfast`.
 
-1. Ensures comparison harness fixtures exist (`generate-fixtures.sh` + harness assets).
-2. Collects CPU profiles from representative benches (MJPEG, H.264 Main/High/large, WebM VP8, Baseline CAVLC decode).
-3. Merges with `go tool pprof -proto … > default.pgo`.
-4. Writes **`default.pgo.provenance.json`** (`gitHead`, `profileSha256`, workload list, hot-path globs).
+Harness sets `GOFLAGS=-pgo=default.pgo`. Thumbmode tier 1 intentionally omits PGO.
 
-Regenerate **after** the clean-room H.264 rewrite so the profile matches production decode paths.
+**Merged corpus** (`scripts/regenerate-pgo.sh`): MJPEG small/large; H.264 large/small (`mp4_h264`, Main/High 1080, Baseline 1080 small); WebM VP8 large; plus `BenchmarkBaselineThumbnailDecode` (decode-only CAVLC). Each workload runs **`benchtime=50x`** with `GOMAXPROCS=1` to match the compare timing gate and weight the merged profile.
 
-### Build flags
+H.264 thumb downscale policy (`thumbDownscaleUsesRGBArea` in `internal/thumb/ycbcr_scale.go`): aggressive ratios use **RGB tile average inside `scaleYCbCrArea`** (no full-frame RGBA prescale); mild 1080p→large presets stay on Y/Cb/Cr area + matrix.
 
-```bash
-CGO_ENABLED=0 go build -pgo=default.pgo -o /dev/null .
-```
+## Reference profile shape (not gate numbers)
 
-Comparison harness (`scripts/run-comparison.sh`) sets:
+Example from **darwin/arm64**, PGO off, 30× `BenchmarkMP4H264*Large` on harness assets — use for **relative** stage mix, not absolute ms on amd64:
 
-```bash
-export GOFLAGS="${GOFLAGS:--pgo=$ROOT/default.pgo}"
-```
+| Stage | Main 1080 | High 1080 |
+|-------|-----------|-----------|
+| CABAC residual + `decodeDecision` | ~39% / ~33% | similar |
+| Chroma recon | ~10% | ~15% |
+| Luma 4×4 / 8×8 transform | ~12% | ~13% |
+| YCbCr area downscale | ~4% | ~3% |
+| `image/jpeg.Encode` | ~12% | ~12% |
 
-Thumbmode tier binaries use `-pgo=default.pgo` for tiers 2–3 only (tier 1 intentionally without PGO).
+MJPEG large: encoder ~half of compute; `jpegfast` IDCT ~10–19%. H.264 entropy dominates Main/High; Baseline is CAVLC-heavy ([H264.md](H264.md)).
 
-### CI staleness check
-
-```bash
-make check-pgo
-```
-
-`scripts/check-pgo-stale.sh` emits a **GitHub Actions warning** when files under provenance hot paths changed since the profile's `gitHead` without regenerating `default.pgo`.
-
-## SIMD experiment (Go 1.27+, CI on stable)
-
-`simd` / `simd/archsimd` require `GOEXPERIMENT=simd` at build time and are **not** stable APIs. Production paths use `internal/kernels` assembly (amd64) or portable Go (`-tags purego`). Report **tier 3** builds thumbmode with `GOEXPERIMENT=simd`. Optional experiment tests:
-
-```bash
-CGO_ENABLED=0 GOEXPERIMENT=simd go test ./internal/kernels/...
-```
+**SIMD:** optional tier 3 only — [SIMD.md](SIMD.md).

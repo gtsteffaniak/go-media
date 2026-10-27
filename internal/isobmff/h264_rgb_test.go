@@ -1,15 +1,12 @@
 package isobmff
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/gtsteffaniak/go-media/internal/errs"
 )
 
-func TestH264BaselineThumbnailRejected(t *testing.T) {
+func TestH264BaselineThumbnailDecodes(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "compare", "harness", ".assets", "video", "mp4_h264_baseline_1080.mp4")
 	f, err := os.Open(path)
 	if err != nil {
@@ -17,11 +14,11 @@ func TestH264BaselineThumbnailRejected(t *testing.T) {
 	}
 	defer f.Close()
 	st, _ := f.Stat()
-	_, err = H264ThumbnailRGBA(f, st.Size(), 10, false)
-	if err == nil {
-		t.Fatal("expected baseline profile to be rejected")
+	img, err := H264ThumbnailRGBA(f, st.Size(), 10, false)
+	if err != nil {
+		t.Fatalf("Baseline (CAVLC) thumbnail: %v", err)
 	}
-	if !errors.Is(err, errs.UnsupportedProfile) {
-		t.Fatalf("expected ErrUnsupportedProfile, got %v", err)
+	if b := img.Bounds(); b.Dx() == 0 || b.Dy() == 0 {
+		t.Fatalf("empty image %v", b)
 	}
 }

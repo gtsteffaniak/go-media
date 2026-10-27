@@ -91,13 +91,35 @@ func probeFFprobe(path string) (FFProbeResult, error) {
 	return res, nil
 }
 
-// ffprobeDuration returns duration in seconds.
+// ffprobeDuration returns duration in seconds (full probe; used for correctness checks).
 func ffprobeDuration(path string) (float64, error) {
 	p, err := probeFFprobe(path)
 	if err != nil {
 		return 0, err
 	}
 	return p.Format.Duration, nil
+}
+
+// ffprobeDurationHeader times ffprobe reading format duration only (matches lightweight header work).
+func ffprobeDurationHeader(path string) (float64, error) {
+	ffprobe, err := lookFFprobe()
+	if err != nil {
+		return 0, err
+	}
+	out, err := exec.Command(ffprobe,
+		"-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		path,
+	).Output()
+	if err != nil {
+		return 0, err
+	}
+	s := strings.TrimSpace(string(out))
+	if s == "" {
+		return 0, fmt.Errorf("ffprobe: empty duration")
+	}
+	return strconv.ParseFloat(s, 64)
 }
 
 // ffmpegVersionLine returns the first line of ffmpeg -version.

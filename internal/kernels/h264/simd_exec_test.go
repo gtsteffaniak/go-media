@@ -25,9 +25,9 @@ func TestSIMDKernelsExecuteWhenEnabled(t *testing.T) {
 	if os.Getenv("GOEXPERIMENT") == "" && !simdExperimentEnabled() {
 		t.Skip("build with GOEXPERIMENT=simd to assert SIMD execution")
 	}
+	ResetSIMDTestHooks()
+	SetCPUHasSIMDForTest(true)
 	SetSIMDEnabledForTest(true)
-	SetKernelSIMDForTest("idct4x4", true)
-	SetKernelSIMDForTest("recon4x4", true)
 	if !KernelSIMD("idct4x4") {
 		t.Skip("CPU lacks AVX2/ASIMD or simd experiment disabled")
 	}
@@ -43,4 +43,5 @@ func TestSIMDKernelsExecuteWhenEnabled(t *testing.T) {
 	if SIMDProbeHits() < 2 {
 		t.Fatalf("expected SIMD probe hits >=2, got %d", SIMDProbeHits())
 	}
+	ResetSIMDTestHooks()
 }

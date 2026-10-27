@@ -1,10 +1,12 @@
 {
-  "generatedAt": "2026-10-25T17:26:44Z",
-  "gitHead": "e6b5b131de3891ee6b6b57f24ce7b673758ba226",
-  "profileSha256": "790bb11277296cb3b20b43879ee5367d1f6e65d9ac153239f90953e181b7c2f9",
+  "generatedAt": "2026-10-27T00:13:06Z",
+  "gitHead": "bcc1bd312fae301c4a66851cee99e1ca00d18cce",
+  "profileSha256": "759a72699848f4f731f11e444c1237ac5f3b93813a2731f9289844e2f0f5ba7c",
   "workloads": [
     "internal/thumb BenchmarkMJPEGSmall/Large",
     "internal/thumb BenchmarkMP4H264Large",
+    "internal/thumb BenchmarkMP4H264Small (full pipeline)",
+    "internal/thumb BenchmarkMP4H264Baseline1080Small (CAVLC + thumb)",
     "internal/thumb BenchmarkMP4H264Main1080Large",
     "internal/thumb BenchmarkMP4H264High1080Large",
     "internal/thumb BenchmarkThumbnailLargeWebM",

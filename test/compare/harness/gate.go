@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 )
 
@@ -20,6 +21,15 @@ type ExpectationCase struct {
 	AssetID string           `json:"assetId"`
 	Check   CheckName        `json:"check"`
 	Expect  CapabilityStatus `json:"expect"`
+	// Goarch, when set, limits this case to runtime.GOARCH (e.g. arm64 vs amd64 timing gates).
+	Goarch string `json:"goarch,omitempty"`
+}
+
+func expectationCaseApplies(c ExpectationCase) bool {
+	if c.Goarch == "" {
+		return true
+	}
+	return c.Goarch == runtime.GOARCH
 }
 
 // loadExpectations reads and validates the expectations manifest.
@@ -69,6 +79,9 @@ func validateGate(exp ExpectationsFile, report FullReport) error {
 	seen := map[string]bool{}
 	var diffs []string
 	for _, c := range exp.Cases {
+		if !expectationCaseApplies(c) {
+			continue
+		}
 		key := c.AssetID + "/" + string(c.Check)
 		seen[key] = true
 		r, ok := byKey[key]
@@ -122,6 +135,9 @@ func validateBuildModeTimings(exp ExpectationsFile, report FullReport) error {
 		key := row.AssetID + "/" + row.Check
 		expectSupported := false
 		for _, c := range exp.Cases {
+			if !expectationCaseApplies(c) {
+				continue
+			}
 			if c.AssetID+"/"+string(c.Check) == key && c.Expect == StatusSupported {
 				expectSupported = true
 				break

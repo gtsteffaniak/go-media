@@ -9,9 +9,7 @@ func (sd *sliceDecoder) residualBlockCAVLC(r *bitstream.Reader, nC, maxNumCoeff 
 		panic("residualBlockCAVLC: maxNumCoeff > 16")
 	}
 	coeff := sd.coeffScratch[:maxNumCoeff]
-	for i := range coeff {
-		coeff[i] = 0
-	}
+	clear(coeff)
 	trailingOnes, totalCoeff := decodeCoeffToken(r, nC)
 	if totalCoeff == 0 {
 		return 0
@@ -29,10 +27,12 @@ func (sd *sliceDecoder) residualBlockCAVLC(r *bitstream.Reader, nC, maxNumCoeff 
 
 	runs := sd.runsScratch[:totalCoeff]
 	for i := 0; i < totalCoeff-1; i++ {
+		run := 0
 		if zerosLeft > 0 {
-			runs[i] = decodeRunBefore(r, zerosLeft)
+			run = decodeRunBefore(r, zerosLeft)
+			zerosLeft -= run
 		}
-		zerosLeft -= runs[i]
+		runs[i] = run
 	}
 	if zerosLeft < 0 {
 		zerosLeft = 0

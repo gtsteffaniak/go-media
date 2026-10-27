@@ -17,7 +17,8 @@ func h264DecodeYUVMetrics(videoPath string, seekPercent float64) (psnr float64, 
 	if err != nil {
 		return 0, 0, err
 	}
-	goYUV, w, h, err := media.H264KeyframeYUV420(f, f.Size(), seekPercent, false)
+	// Match thumbnail decode (fast preview / skip deblock), aligned with ffmpeg -skip_loop_filter all on thumbs.
+	goYUV, w, h, err := media.H264KeyframeYUV420(f, f.Size(), seekPercent, true)
 	if err != nil {
 		return 0, 0, err
 	}

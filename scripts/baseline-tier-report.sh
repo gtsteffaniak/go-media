@@ -25,7 +25,7 @@ ff_ms() {
 build_bin() {
   local name="$1" pgo="$2" simd="$3"
   local out="/tmp/thumbmode-baseline-$name"
-  local args=(build -o "$out" -tags purego)
+  local args=(build -o "$out")
   [[ "$pgo" == 1 ]] && args+=(-pgo="$PGO")
   args+=(./thumbmode)
   local env=(CGO_ENABLED=0)

@@ -1,4 +1,4 @@
-//go:build goexperiment.simd && !purego
+//go:build goexperiment.simd
 
 package h264
 

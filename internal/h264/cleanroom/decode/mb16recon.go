@@ -19,28 +19,30 @@ func (sd *sliceDecoder) decodeMB16(addr int, mb MBType) error {
 
 	// ---- Luma ----
 	top, left, corner, availL, availT := sd.lumaNeighbors16(mbX, mbY)
-	pred := sd.predLuma[:]
-	predictIntra16x16(pred, mb.Intra16x16PredMode, top, left, corner, availL, availT)
+	px0, py0 := mbX*16, mbY*16
+	predictIntra16x16At(f.Y, f.StrideY, px0, py0, mb.Intra16x16PredMode, top, left, corner, availL, availT)
 
 	// DC block (16 DC coefficients → inverse Hadamard).
 	_ = sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, 0), 16)
 	dcVals := inverseLumaDC(inverseScan4x4(sd.coeffScratch[:16]), qp)
 
+	var blocks [16][16]int32
+	var nz [16]uint8
 	for blk := 0; blk < 16; blk++ {
 		bx, by := luma4x4BlockX[blk], luma4x4BlockY[blk]
 		gx, gy := mbX*4+bx, mbY*4+by
-		var d [16]int32
 		if mb.CBPLuma != 0 { // CBPLuma=15 → all AC are present
 			tc := sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 15)
 			sd.nzLuma[gy*sd.w4+gx] = uint8(tc)
-			d = dequant4x4(buildAC(sd.coeffScratch[:15]), qp)
+			nz[blk] = uint8(tc)
+			blocks[blk] = dequant4x4(buildAC(sd.coeffScratch[:15]), qp)
 		} else {
 			sd.nzLuma[gy*sd.w4+gx] = 0
+			nz[blk] = 0
 		}
-		d[0] = dcVals[by*4+bx] // DC from Hadamard (already scaled)
-		res := inverseTransform4x4(d)
-		writeBlock(f.Y, f.StrideY, mbX*16+bx*4, mbY*16+by*4, pred, 16, bx*4, by*4, res)
+		blocks[blk][0] = dcVals[by*4+bx] // DC from Hadamard (already scaled)
 	}
+	h264k.IDCTAdd16LumaInPlace(f.Y, f.StrideY, mbX, mbY, &blocks, nz[:])
 
 	// ---- Chroma ----
 	switch f.ChromaArrayType {
@@ -95,25 +97,25 @@ func (sd *sliceDecoder) reconstructChroma420(mbX, mbY, predMode, cbpChroma, qpY 
 	// AC + prediction + write per component.
 	for c := range comps {
 		top, left, corner, availL, availT := sd.chromaNeighbors(comps[c].buf, mbX, mbY)
-		pred := sd.predChroma[:f.MbWidthC*f.MbHeightC]
-		predictIntraChroma8x8(pred, predMode, top, left, corner, availL, availT)
+		cx0, cy0 := mbX*f.MbWidthC, mbY*f.MbHeightC
+		predictIntraChroma8x8At(comps[c].buf, f.StrideC, cx0, cy0, predMode, top, left, corner, availL, availT)
 
+		var blocks [4][16]int32
+		var nz [4]uint8
 		for blk := 0; blk < numBlk; blk++ {
 			bx, by := blk%sd.cbpw, blk/sd.cbpw
 			gx, gy := mbX*sd.cbpw+bx, mbY*(f.MbHeightC/4)+by
-			var d [16]int32
 			if cbpChroma == 2 {
 				tc := sd.residualBlockCAVLC(r, sd.chromaNC(comps[c].nz, mbX, mbY, blk), 15)
 				comps[c].nz[gy*sd.cw4+gx] = uint8(tc)
-				d = dequant4x4(buildAC(sd.coeffScratch[:15]), qpC)
+				nz[blk] = uint8(tc)
+				blocks[blk] = dequant4x4(buildAC(sd.coeffScratch[:15]), qpC)
 			} else {
 				comps[c].nz[gy*sd.cw4+gx] = 0
 			}
-			d[0] = dc[c][blk]
-			res := inverseTransform4x4(d)
-			writeBlock(comps[c].buf, f.StrideC, mbX*f.MbWidthC+bx*4, mbY*f.MbHeightC+by*4,
-				pred, f.MbWidthC, bx*4, by*4, res)
+			blocks[blk][0] = dc[c][blk]
 		}
+		h264k.IDCTAdd4Chroma420InPlace(comps[c].buf, f.StrideC, cx0, cy0, &blocks, nz[:])
 	}
 }
 

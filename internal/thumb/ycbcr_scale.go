@@ -3,6 +3,7 @@ package thumb
 import (
 	"image"
 	"image/color"
+	"image/draw"
 	"runtime"
 	"sync"
 
@@ -22,14 +23,23 @@ func yccSource(img image.Image) (*image.YCbCr, yccRGB) {
 	return nil, nil
 }
 
+type yccAreaMode bool
+
+const (
+	yccAreaAvgMatrix yccAreaMode = false // average Y/Cb/Cr then matrix (mild downscale)
+	yccAreaAvgRGB    yccAreaMode = true  // average RGB per tile (ffmpeg area parity)
+)
+
 // scaleYCbCrArea downscales YCbCr with tile averaging, then converts to RGBA.
-func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB) *image.RGBA {
+func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccAreaMode) *image.RGBA {
 	cur := src
-	for cur.Bounds().Dx() > dstW*2 && cur.Bounds().Dy() > dstH*2 {
-		cur = halveYCbCr(cur)
+	if !rgbTile {
+		for cur.Bounds().Dx() > dstW*2 && cur.Bounds().Dy() > dstH*2 {
+			cur = halveYCbCr(cur)
+		}
 	}
 	if dstW*dstH <= 512*512 {
-		return scaleYCbCrAreaSerial(cur, dstW, dstH, toRGB)
+		return scaleYCbCrAreaSerial(cur, dstW, dstH, toRGB, rgbTile)
 	}
 	sb := cur.Bounds()
 	sw, sh := sb.Dx(), sb.Dy()
@@ -64,26 +74,8 @@ func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB) *image.RGBA 
 					if sx1 <= sx0 {
 						sx1 = sx0 + 1
 					}
-					var ySum, cbSum, crSum, n int
-					for sy := sy0; sy < sy1; sy++ {
-						for sx := sx0; sx < sx1; sx++ {
-							yy := cur.Y[cur.YOffset(sx, sy)]
-							cb, cr := sampleCbCr(cur, sx, sy)
-							ySum += int(yy)
-							cbSum += int(cb)
-							crSum += int(cr)
-							n++
-						}
-					}
-					if n == 0 {
-						n = 1
-					}
-					yy := byte((ySum + n/2) / n)
-					cb := byte((cbSum + n/2) / n)
-					cr := byte((crSum + n/2) / n)
 					di := dy*dst.Stride + dx*4
-					dst.Pix[di+0], dst.Pix[di+1], dst.Pix[di+2] = toRGB(yy, cb, cr)
-					dst.Pix[di+3] = 255
+					writeAreaTilePixel(dst, di, cur, sx0, sx1, sy0, sy1, toRGB, rgbTile)
 				}
 			}
 		}(y0, y1)
@@ -92,7 +84,42 @@ func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB) *image.RGBA 
 	return dst
 }
 
-func scaleYCbCrAreaSerial(src *image.YCbCr, dstW, dstH int, toRGB yccRGB) *image.RGBA {
+func writeAreaTilePixel(dst *image.RGBA, di int, src *image.YCbCr, sx0, sx1, sy0, sy1 int, toRGB yccRGB, rgbTile yccAreaMode) {
+	var ySum, cbSum, crSum, rSum, gSum, bSum, n int
+	for sy := sy0; sy < sy1; sy++ {
+		for sx := sx0; sx < sx1; sx++ {
+			yy := src.Y[src.YOffset(sx, sy)]
+			cb, cr := sampleCbCr(src, sx, sy)
+			if rgbTile {
+				r8, g8, b8 := toRGB(yy, cb, cr)
+				rSum += int(r8)
+				gSum += int(g8)
+				bSum += int(b8)
+			} else {
+				ySum += int(yy)
+				cbSum += int(cb)
+				crSum += int(cr)
+			}
+			n++
+		}
+	}
+	if n == 0 {
+		n = 1
+	}
+	if rgbTile {
+		dst.Pix[di+0] = byte((rSum + n/2) / n)
+		dst.Pix[di+1] = byte((gSum + n/2) / n)
+		dst.Pix[di+2] = byte((bSum + n/2) / n)
+	} else {
+		yy := byte((ySum + n/2) / n)
+		cb := byte((cbSum + n/2) / n)
+		cr := byte((crSum + n/2) / n)
+		dst.Pix[di+0], dst.Pix[di+1], dst.Pix[di+2] = toRGB(yy, cb, cr)
+	}
+	dst.Pix[di+3] = 255
+}
+
+func scaleYCbCrAreaSerial(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccAreaMode) *image.RGBA {
 	sb := src.Bounds()
 	sw, sh := sb.Dx(), sb.Dy()
 	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
@@ -108,26 +135,8 @@ func scaleYCbCrAreaSerial(src *image.YCbCr, dstW, dstH int, toRGB yccRGB) *image
 			if sx1 <= sx0 {
 				sx1 = sx0 + 1
 			}
-			var ySum, cbSum, crSum, n int
-			for sy := sy0; sy < sy1; sy++ {
-				for sx := sx0; sx < sx1; sx++ {
-					yy := src.Y[src.YOffset(sx, sy)]
-					cb, cr := sampleCbCr(src, sx, sy)
-					ySum += int(yy)
-					cbSum += int(cb)
-					crSum += int(cr)
-					n++
-				}
-			}
-			if n == 0 {
-				n = 1
-			}
-			yy := byte((ySum + n/2) / n)
-			cb := byte((cbSum + n/2) / n)
-			cr := byte((crSum + n/2) / n)
 			di := dy*dst.Stride + dx*4
-			dst.Pix[di+0], dst.Pix[di+1], dst.Pix[di+2] = toRGB(yy, cb, cr)
-			dst.Pix[di+3] = 255
+			writeAreaTilePixel(dst, di, src, sx0, sx1, sy0, sy1, toRGB, rgbTile)
 		}
 	}
 	return dst
@@ -201,9 +210,33 @@ func tryScaleYCbCrSource(img image.Image, maxW, maxH int, mode ScalerMode) (imag
 		return img, false
 	}
 	if mode == ScalerArea || mode == ScalerBalanced || mode == ScalerHigh || mode == ScalerFast {
-		return scaleYCbCrArea(ycc, tw, th, toRGB), true
+		sw, sh := ycc.Bounds().Dx(), ycc.Bounds().Dy()
+		rgbTile := yccAreaAvgMatrix
+		if thumbDownscaleUsesRGBArea(sw, sh, tw, th) {
+			rgbTile = yccAreaAvgRGB
+		}
+		return scaleYCbCrArea(ycc, tw, th, toRGB, rgbTile), true
 	}
 	return img, false
+}
+
+// thumbDownscaleUsesRGBArea selects full-frame YCbCr→RGB before area downscale (ffmpeg parity).
+// Mild downscales (e.g. 1080p→large preset) keep scaleYCbCrArea for speed.
+func thumbDownscaleUsesRGBArea(srcW, srcH, dstW, dstH int) bool {
+	if dstW <= 0 || dstH <= 0 || srcW <= 0 || srcH <= 0 {
+		return false
+	}
+	maxOut := dstW
+	if dstH > maxOut {
+		maxOut = dstH
+	}
+	if maxOut <= 320 {
+		return true
+	}
+	const minDestAreaPercent = 35
+	dstArea := dstW * dstH
+	srcArea := srcW * srcH
+	return dstArea*100 < srcArea*minDestAreaPercent
 }
 
 func jpegYCbCrToRGBA(yy, cb, cr byte) (r, g, b byte) {
@@ -222,21 +255,28 @@ func yuv420BT601LimitedToRGBA(yy, cb, cr byte) (r, g, b byte) {
 		clampU8(1.164*y + 2.018*cbf)
 }
 
-// rgbaFromImage uses fast YCbCr path when possible.
+// rgbaFromImage uses matrix-aware YCbCr→RGB when possible.
 func rgbaFromImage(img image.Image) *image.RGBA {
 	if ycc, toRGB := yccSource(img); ycc != nil {
-		b := ycc.Bounds()
-		dst := image.NewRGBA(b)
-		for y := b.Min.Y; y < b.Max.Y; y++ {
-			for x := b.Min.X; x < b.Max.X; x++ {
-				yy := ycc.Y[ycc.YOffset(x, y)]
-				cb := ycc.Cb[ycc.COffset(x, y)]
-				cr := ycc.Cr[ycc.COffset(x, y)]
-				r8, g8, b8 := toRGB(yy, cb, cr)
-				dst.SetRGBA(x, y, color.RGBA{R: r8, G: g8, B: b8, A: 255})
-			}
-		}
-		return dst
+		return rgbaFromYCbCr(ycc, toRGB)
 	}
-	return asRGBA(img)
+	b := img.Bounds()
+	dst := image.NewRGBA(b)
+	draw.Draw(dst, b, img, b.Min, draw.Src)
+	return dst
+}
+
+func rgbaFromYCbCr(ycc *image.YCbCr, toRGB yccRGB) *image.RGBA {
+	b := ycc.Bounds()
+	dst := image.NewRGBA(b)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			yy := ycc.Y[ycc.YOffset(x, y)]
+			cb := ycc.Cb[ycc.COffset(x, y)]
+			cr := ycc.Cr[ycc.COffset(x, y)]
+			r8, g8, b8 := toRGB(yy, cb, cr)
+			dst.SetRGBA(x, y, color.RGBA{R: r8, G: g8, B: b8, A: 255})
+		}
+	}
+	return dst
 }

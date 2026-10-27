@@ -9,15 +9,7 @@ import (
 )
 
 func frameToRGBA(f *frame.Frame) *image.RGBA {
-	// BT.601 limited when VUI is absent (thumbnail default).
-	cs := yuv.BT601
-	rng := yuv.LimitedRange
-	if f.ColorDescriptionValid && f.MatrixCoefficients != 0 {
-		cs = yuv.ColorSpaceFromMatrixCoefficients(f.MatrixCoefficients)
-	}
-	if f.VideoFullRangeFlag {
-		rng = yuv.FullRange
-	}
+	cs, rng := ThumbColorFromFrame(f)
 	nr := yuv.FrameToImageCS(f, cs, rng)
 	img := image.NewRGBA(nr.Bounds())
 	for y := nr.Rect.Min.Y; y < nr.Rect.Max.Y; y++ {

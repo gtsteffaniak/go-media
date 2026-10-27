@@ -18,14 +18,18 @@ func readLevels(r *bitstream.Reader, trailingOnes, totalCoeff int) []int32 {
 }
 
 func readLevelsInto(r *bitstream.Reader, trailingOnes, totalCoeff int, level []int32) []int32 {
-
-	// Signs of trailing ones: bit 1 → -1, 0 → +1 (most significant first).
-	for i := 0; i < trailingOnes; i++ {
-		if r.Flag() {
-			level[i] = -1
-		} else {
-			level[i] = 1
+	if trailingOnes > 0 {
+		bits := r.U(trailingOnes)
+		for i := 0; i < trailingOnes; i++ {
+			if (bits>>uint(trailingOnes-1-i))&1 == 1 {
+				level[i] = -1
+			} else {
+				level[i] = 1
+			}
 		}
+	}
+	if totalCoeff <= trailingOnes {
+		return level
 	}
 
 	i := trailingOnes

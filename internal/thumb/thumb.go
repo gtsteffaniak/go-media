@@ -12,6 +12,7 @@ import (
 	"github.com/gen2brain/vpx/webp"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/format"
+	"github.com/gtsteffaniak/go-media/internal/h264"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
@@ -77,8 +78,14 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 			}
 			return img, "decode", nil
 		}
-		// Intra-only IDR decode: skip deblocking for thumbnail latency (see README fast preview).
-		if yimg, err := isobmff.H264ThumbnailYCbCr(r, size, opt.SeekPercent, true); err != nil {
+		// Intra-only IDR decode (fast preview / skip deblock). YCbCr → matrix-aware area downscale → JPEG.
+		if useH264RGBPipeline(opt) {
+			if rgba, err := isobmff.H264ThumbnailRGBA(r, size, opt.SeekPercent, true); err != nil {
+				return nil, "", err
+			} else if rgba != nil {
+				return rgba, "decode", nil
+			}
+		} else if yimg, err := isobmff.H264ThumbnailYCbCr(r, size, opt.SeekPercent, true); err != nil {
 			return nil, "", err
 		} else if yimg != nil {
 			return yimg, "decode", nil
@@ -130,7 +137,13 @@ func encodeImageRaster(img image.Image, opt Options, src string) (Result, error)
 	mode := scalerFromOptions(opt)
 	jpegOut := opt.Format == "" || opt.Format == "jpeg"
 	if jpegOut {
-		if scaled, ok := tryScaleYCbCrDown(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
+		if _, ok := img.(*h264.ThumbYCbCr); ok {
+			if scaled, ok := tryScaleYCbCrSource(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
+				img = scaled
+			} else {
+				img = rgbaFromImage(img)
+			}
+		} else if scaled, ok := tryScaleYCbCrDown(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
 			img = scaled
 		}
 	}

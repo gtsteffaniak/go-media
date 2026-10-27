@@ -1,6 +1,10 @@
 package decode
 
-import "errors"
+import (
+	"errors"
+
+	h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"
+)
 
 // decodeMBNxN decodes and reconstructs an I_NxN (intra 4x4) macroblock:
 // 16 prediction modes → chroma pred mode → CBP → residual. Each 4x4 block is
@@ -57,22 +61,18 @@ func (sd *sliceDecoder) decodeMBNxN(addr int) error {
 		var pred [16]byte
 		predictIntra4x4(pred[:], int(sd.i4mode[gy*sd.w4+gx]), top, left, corner, availLeft, availTop)
 
-		var res [16]int32
+		var d [16]int32
+		var tc uint8
 		if cbpLuma&(1<<uint(blk/4)) != 0 {
-			tc := sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 16)
-			sd.nzLuma[gy*sd.w4+gx] = uint8(tc)
-			res = inverseTransform4x4(dequant4x4(inverseScan4x4(sd.coeffScratch[:16]), qp))
+			n := sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 16)
+			tc = uint8(n)
+			sd.nzLuma[gy*sd.w4+gx] = tc
+			d = dequant4x4(inverseScan4x4(sd.coeffScratch[:16]), qp)
 		} else {
 			sd.nzLuma[gy*sd.w4+gx] = 0
 		}
-
 		px0, py0 := gx*4, gy*4
-		for yy := 0; yy < 4; yy++ {
-			for xx := 0; xx < 4; xx++ {
-				v := int(pred[yy*4+xx]) + int(res[yy*4+xx])
-				f.Y[(py0+yy)*f.StrideY+px0+xx] = clip1(v)
-			}
-		}
+		h264k.IDCTAdd4x4Luma(f.Y, f.StrideY, px0, py0, pred[:], 4, 0, 0, d, tc)
 		sd.recon4[gy*sd.w4+gx] = true
 	}
 
@@ -165,12 +165,7 @@ func (sd *sliceDecoder) decodeMB8x8Cavlc(addr int) error {
 				sd.recon4[(gy+dy)*sd.w4+gx+dx] = true
 			}
 		}
-		for yy := 0; yy < 8; yy++ {
-			for xx := 0; xx < 8; xx++ {
-				v := int(pred[yy*8+xx]) + int(res[yy*8+xx])
-				f.Y[(py0+yy)*f.StrideY+px0+xx] = clip1(v)
-			}
-		}
+		h264k.IDCT8x8Add(f.Y, f.StrideY, px0, py0, pred[:], res)
 	}
 
 	switch f.ChromaArrayType {

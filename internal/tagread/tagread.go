@@ -26,9 +26,15 @@ type Tags struct {
 
 // ReadTags supports media inspection.
 func ReadTags(r io.ReaderAt, size int64, fmt format.ID) (Tags, error) {
+	t, _, _, err := InspectTags(r, size, fmt)
+	return t, err
+}
+
+// InspectTags reads container metadata once and returns tags plus artwork/lyrics flags.
+func InspectTags(r io.ReaderAt, size int64, fmt format.ID) (Tags, bool, bool, error) {
 	m, err := readMetadata(r, size, fmt)
 	if err != nil {
-		return Tags{}, err
+		return Tags{}, false, false, err
 	}
 	track, _ := m.Track()
 	t := Tags{
@@ -40,10 +46,13 @@ func ReadTags(r io.ReaderAt, size int64, fmt format.ID) (Tags, error) {
 		Track:  track,
 		Raw:    map[string]string{},
 	}
-	if lyrics := strings.TrimSpace(m.Lyrics()); lyrics != "" {
+	lyrics := strings.TrimSpace(m.Lyrics())
+	if lyrics != "" {
 		t.Raw["lyrics"] = lyrics
 	}
-	return t, nil
+	p := m.Picture()
+	hasArt := p != nil && len(p.Data) > 0
+	return t, hasArt, lyrics != "", nil
 }
 
 // HasEmbeddedLyrics supports media inspection.

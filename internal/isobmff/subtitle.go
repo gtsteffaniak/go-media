@@ -20,28 +20,11 @@ func SubtitleTracks(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 }
 
 func subtitleStreams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
-	metas, err := listTrakMeta(r, size)
+	m, err := OpenFileMeta(r, size)
 	if err != nil {
 		return nil, err
 	}
-	var out []detect.Stream
-	for i, m := range metas {
-		if !isSubtitleHandler(m.HandlerType) {
-			continue
-		}
-		codec := subtitleCodecFromFourCC(m.SampleFourCC)
-		if codec == "" {
-			continue
-		}
-		out = append(out, detect.Stream{
-			Index:    i,
-			Type:     detect.StreamSubtitle,
-			Codec:    codec,
-			Language: m.Language,
-			Title:    m.HandlerName,
-		})
-	}
-	return out, nil
+	return m.SubtitleStreams(), nil
 }
 
 // ExtractSubtitleWebVTT returns WebVTT for an embedded MP4 subtitle track index.

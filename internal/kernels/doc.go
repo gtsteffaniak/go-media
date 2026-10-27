@@ -1,9 +1,7 @@
 // Package kernels provides hot numeric paths for thumbnail decode/scale/color.
 //
-// Production builds use architecture-specific Go assembly on amd64 and arm64
-// when CGO_ENABLED=0. Build with -tags purego to force portable Go fallbacks.
-//
-// Production builds use -tags purego with default.pgo. GOEXPERIMENT=simd and amd64 asm are opt-in;
-// enable runtime SIMD only with GOMEDIA_ENABLE_SIMD=1.
-// (see ycbcr_simd.go); those APIs are experimental and not required at runtime.
+// Production builds use CGO_ENABLED=0 with -pgo=default.pgo (see docs/PROFILING.md).
+// On amd64/arm64, YCbCr area
+// downscale uses plan9 assembly; other GOARCHes use portable Go. Optional H.264 SIMD
+// kernels require GOEXPERIMENT=simd at build time (see docs/SIMD.md).
 package kernels
