@@ -156,21 +156,23 @@ func (sd *sliceDecoder) deblockMB(mbX, mbY int) {
 // vertical, =StrideC for horizontal; vertical selects the traversal axis.
 func (sd *sliceDecoder) filterChromaEdge(mbX, mbY, cx, cy, step, bS, qpP, qpQ int, vertical bool) {
 	f := sd.frame
-	qpPc := chromaQP(qpP, int(sd.pps.ChromaQPIndexOffset))
-	qpQc := chromaQP(qpQ, int(sd.pps.ChromaQPIndexOffset))
-	qpav := (qpPc + qpQc + 1) >> 1
 	offA, offB := int(sd.h.AlphaC0Offset), int(sd.h.BetaOffset)
-	alpha := alphaTable[clip3(0, 51, qpav+offA)]
-	beta := betaTable[clip3(0, 51, qpav+offB)]
-	if alpha == 0 {
-		return
-	}
-	tc0 := 0
-	if bS < 4 {
-		tc0 = tc0Table[clip3(0, 51, qpav+offA)][bS-1]
-	}
 	x0, y0 := mbX*f.MbWidthC+cx, mbY*f.MbHeightC+cy
-	for _, plane := range [][]byte{f.Cb, f.Cr} {
+	// Cb and Cr use different QP offsets, so each plane derives its own
+	// qPav, alpha, beta, and tc0 (8.7.2.4).
+	for comp, plane := range [][]byte{f.Cb, f.Cr} {
+		qpPc := chromaQPFor(sd.pps, comp, qpP)
+		qpQc := chromaQPFor(sd.pps, comp, qpQ)
+		qpav := (qpPc + qpQc + 1) >> 1
+		alpha := alphaTable[clip3(0, 51, qpav+offA)]
+		beta := betaTable[clip3(0, 51, qpav+offB)]
+		if alpha == 0 {
+			continue
+		}
+		tc0 := 0
+		if bS < 4 {
+			tc0 = tc0Table[clip3(0, 51, qpav+offA)][bS-1]
+		}
 		for i := 0; i < 8; i++ {
 			var idx int
 			if vertical {

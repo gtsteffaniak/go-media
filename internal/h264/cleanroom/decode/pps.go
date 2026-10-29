@@ -26,9 +26,9 @@ type PPS struct {
 	PicInitQPMinus26    int32 // base frame QP: SliceQP = 26 + this + slice_qp_delta
 	ChromaQPIndexOffset int32
 
-	// SecondChromaQPIndexOffset is second_chroma_qp_index_offset (Cr offset in
-	// High profiles). It equals ChromaQPIndexOffset when absent or when it
-	// follows unparsed scaling lists.
+	// SecondChromaQPIndexOffset is second_chroma_qp_index_offset, the Cr QP offset.
+	// Cb uses ChromaQPIndexOffset. It equals ChromaQPIndexOffset when the PPS
+	// omits it.
 	SecondChromaQPIndexOffset int32
 
 	DeblockingFilterControlPresent bool
@@ -43,6 +43,11 @@ type PPS struct {
 // exceedingly rare in practice; full parsing of the group map is not yet
 // implemented.
 var ErrFMO = errors.New("h264: slice groups (FMO) not supported")
+
+// ErrPicScalingMatrix indicates that the PPS carries picture-level scaling
+// matrices. The lists are not parsed or applied, and second_chroma_qp_index_offset
+// follows them in the bitstream, so the Cr QP offset cannot be read either.
+var ErrPicScalingMatrix = errors.New("h264: picture scaling matrices not supported")
 
 // EntropyName returns the name of the entropy coding mode.
 func (p *PPS) EntropyName() string {
@@ -97,12 +102,12 @@ func ParsePPS(rbsp []byte) (*PPS, error) {
 	if r.MoreRBSPData() {
 		p.Transform8x8Mode = r.Flag()
 		p.PicScalingMatrixPresent = r.Flag()
-		// Custom scaling lists are not applied yet; bailing keeps us honest
-		// rather than silently decoding with a flat matrix.
-		// (Their bits are not consumed here, but Transform8x8Mode is what we need.)
-		// second_chroma_qp_index_offset follows the lists, so it is only
-		// reachable when no scaling matrix is present.
-		if !p.PicScalingMatrixPresent && r.MoreRBSPData() {
+		// Reject rather than decode with flat matrices and a wrong Cr QP: the
+		// lists come before second_chroma_qp_index_offset and are not parsed.
+		if p.PicScalingMatrixPresent {
+			return nil, ErrPicScalingMatrix
+		}
+		if r.MoreRBSPData() {
 			p.SecondChromaQPIndexOffset = r.SE()
 			if r.Err() == nil && (p.SecondChromaQPIndexOffset < -maxChromaQPIndexOffset || p.SecondChromaQPIndexOffset > maxChromaQPIndexOffset) {
 				return nil, fmt.Errorf("h264 pps: second_chroma_qp_index_offset %d out of range [%d, %d]", p.SecondChromaQPIndexOffset, -maxChromaQPIndexOffset, maxChromaQPIndexOffset)

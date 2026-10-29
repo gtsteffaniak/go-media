@@ -188,7 +188,8 @@ func (sd *sliceDecoder) decodeMBNxNCabac(addr int) error {
 
 func (sd *sliceDecoder) reconstructChroma420Cabac(mbX, mbY, predMode, cbpChroma, qpY int) {
 	f := sd.frame
-	qpC := chromaQP(qpY, int(sd.pps.ChromaQPIndexOffset))
+	// Index 0 is Cb, index 1 is Cr. Each has its own offset.
+	qpC := [2]int{chromaQPFor(sd.pps, 0, qpY), chromaQPFor(sd.pps, 1, qpY)}
 	const numBlk = 4
 	comps := []struct {
 		buf   []byte
@@ -209,7 +210,7 @@ func (sd *sliceDecoder) reconstructChroma420Cabac(mbX, mbY, predMode, cbpChroma,
 			comps[c].cbf[mbY*f.MbWidth+mbX] = cnt > 0
 			var cc [4]int32
 			copy(cc[:], dcScan[:numBlk])
-			dc[c] = inverseChromaDC(cc, qpC)
+			dc[c] = inverseChromaDC(cc, qpC[c])
 		}
 	}
 
@@ -228,7 +229,7 @@ func (sd *sliceDecoder) reconstructChroma420Cabac(mbX, mbY, predMode, cbpChroma,
 				tc := uint8(n)
 				comps[c].nz[gy*sd.cw4+gx] = tc
 				nz[blk] = tc
-				blocks[blk] = dequant4x4(buildAC(acScan), qpC)
+				blocks[blk] = dequant4x4(buildAC(acScan), qpC[c])
 			} else {
 				comps[c].nz[gy*sd.cw4+gx] = 0
 			}

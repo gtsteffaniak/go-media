@@ -76,7 +76,8 @@ func writeBlock(plane []byte, stride, px0, py0 int, pred []byte, predStride, lx,
 // Read order: first the DC of both components, then the AC of both.
 func (sd *sliceDecoder) reconstructChroma420(mbX, mbY, predMode, cbpChroma, qpY int) {
 	f, r := sd.frame, sd.r
-	qpC := chromaQP(qpY, int(sd.pps.ChromaQPIndexOffset))
+	// Index 0 is Cb, index 1 is Cr. Each has its own offset.
+	qpC := [2]int{chromaQPFor(sd.pps, 0, qpY), chromaQPFor(sd.pps, 1, qpY)}
 	const numBlk = 4 // 2x2 blocks of 4x4 per component
 	comps := []struct {
 		buf []byte
@@ -90,7 +91,7 @@ func (sd *sliceDecoder) reconstructChroma420(mbX, mbY, predMode, cbpChroma, qpY 
 			_ = sd.residualBlockCAVLC(r, -1, numBlk)
 			var cc [4]int32
 			copy(cc[:], sd.coeffScratch[:numBlk])
-			dc[c] = inverseChromaDC(cc, qpC)
+			dc[c] = inverseChromaDC(cc, qpC[c])
 		}
 	}
 
@@ -109,7 +110,7 @@ func (sd *sliceDecoder) reconstructChroma420(mbX, mbY, predMode, cbpChroma, qpY 
 				tc := sd.residualBlockCAVLC(r, sd.chromaNC(comps[c].nz, mbX, mbY, blk), 15)
 				comps[c].nz[gy*sd.cw4+gx] = uint8(tc)
 				nz[blk] = uint8(tc)
-				blocks[blk] = dequant4x4(buildAC(sd.coeffScratch[:15]), qpC)
+				blocks[blk] = dequant4x4(buildAC(sd.coeffScratch[:15]), qpC[c])
 			} else {
 				comps[c].nz[gy*sd.cw4+gx] = 0
 			}
