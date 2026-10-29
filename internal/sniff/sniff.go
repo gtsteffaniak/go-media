@@ -52,20 +52,53 @@ func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 
 // sniffEBML distinguishes WebM from Matroska.
 func sniffEBML(r io.ReaderAt, size int64) (format.ID, error) {
-	chunk, err := ioat.ReadAll(r, size, 0, min64(size, 256*1024))
-	if err != nil && err != io.EOF {
+	// The DocType ("webm" or "matroska") is in the EBML header element at the file
+	// start. Read only that element. An unusable or oversized header is treated as
+	// Matroska without a further scan, which keeps sniffing to a few bytes. The
+	// thumbnail path then decides from the bounded track header.
+	hdr, ok := ebmlHeaderBytes(r, size)
+	if !ok {
 		return format.MKV, nil
 	}
-	if bytes.Contains(chunk, []byte("webm")) {
+	if bytes.Contains(hdr, []byte("webm")) {
 		return format.WebM, nil
 	}
 	return format.MKV, nil
 }
 
-// min64 returns the smaller of two int64 values.
-func min64(a, b int64) int64 {
-	if a < b {
-		return a
+// ebmlHeaderBytes returns the EBML header element at the start of the file (ID
+// 0x1A45DFA3 plus its size and body). It reports false when the magic does not
+// match, the header is not usable, or the header is larger than 4 KB.
+func ebmlHeaderBytes(r io.ReaderAt, size int64) ([]byte, bool) {
+	probe := make([]byte, 12)
+	n, _ := ioat.ReadRange(r, size, 0, probe)
+	if n < 5 || !bytes.Equal(probe[:4], []byte{0x1A, 0x45, 0xDF, 0xA3}) {
+		return nil, false
 	}
-	return b
+	// Size vint starts at offset 4. Its length is the position of the first set bit.
+	first := probe[4]
+	sizeLen := 0
+	for i := 1; i <= 8; i++ {
+		if first&(0x80>>(i-1)) != 0 {
+			sizeLen = i
+			break
+		}
+	}
+	if sizeLen == 0 || 4+sizeLen > n {
+		return nil, false
+	}
+	dataSize := uint64(first) & (0xFF >> sizeLen)
+	for _, b := range probe[5 : 4+sizeLen] {
+		dataSize = dataSize<<8 | uint64(b)
+	}
+	total := 4 + int64(sizeLen) + int64(dataSize)
+	if total <= 0 || total > 4096 || total > size {
+		return nil, false
+	}
+	buf := make([]byte, total)
+	m, _ := ioat.ReadRange(r, size, 0, buf)
+	if int64(m) != total {
+		return nil, false
+	}
+	return buf, true
 }
