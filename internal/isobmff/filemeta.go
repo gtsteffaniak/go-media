@@ -118,6 +118,8 @@ func (m FileMeta) SubtitleStreams() []detect.Stream {
 	return out
 }
 
+// streamForTrackMeta builds the stream for one trak, adding the tkhd rotation
+// to video streams. ok is false for traks that are not reported.
 func streamForTrackMeta(index int, tr *mp4.Track, meta trakMeta) (detect.Stream, bool) {
 	s, ok := baseStreamForTrackMeta(index, tr, meta)
 	if !ok {
@@ -130,6 +132,8 @@ func streamForTrackMeta(index int, tr *mp4.Track, meta trakMeta) (detect.Stream,
 	return s, true
 }
 
+// baseStreamForTrackMeta maps a trak's go-mp4 codec, or for undecoded sample
+// entries its FourCC, to a stream without rotation.
 func baseStreamForTrackMeta(index int, tr *mp4.Track, meta trakMeta) (detect.Stream, bool) {
 	s := detect.Stream{Index: index}
 	switch tr.Codec {
@@ -176,6 +180,14 @@ func namedStreamForTrackMeta(index int, meta trakMeta) (detect.Stream, bool) {
 		}
 		return detect.Stream{Index: index, Type: detect.StreamVideo, Codec: name, Width: meta.Width, Height: meta.Height}, true
 	case "soun":
+		if detect.IsMP4PCMFourCC(meta.SampleFourCC) {
+			name, ok := detect.MP4PCMCodecName(meta.SampleFourCC, meta.PCMBits, meta.PCMFlags)
+			if !ok {
+				// Unknown layout: keep the FourCC rather than guess a bit depth.
+				name = strings.TrimSpace(meta.SampleFourCC)
+			}
+			return detect.Stream{Index: index, Type: detect.StreamAudio, Codec: name}, true
+		}
 		name, ok := detect.MP4AudioCodecName(meta.SampleFourCC)
 		if !ok {
 			return detect.Stream{}, false
@@ -193,7 +205,7 @@ func isMotionMJPEGTrak(meta trakMeta) bool {
 		return false
 	}
 	switch strings.TrimSpace(meta.SampleFourCC) {
-	case "mp4v", "jpeg", "jpg ":
+	case "mp4v", "jpeg", "jpg":
 		return true
 	default:
 		return false
@@ -208,7 +220,7 @@ func VideoRotation(r io.ReaderAt, size int64) (int, bool) {
 		return 0, false
 	}
 	for _, m := range metas {
-		if m.HandlerType == "vide" {
+		if m.HandlerType == "vide" && !m.AttachedCover {
 			return m.Rotation, true
 		}
 	}

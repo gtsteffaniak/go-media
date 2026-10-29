@@ -32,9 +32,9 @@ func fragmentDurationSeconds(r io.ReaderAt, size int64, movieTimescale uint32, m
 			if !ok {
 				continue
 			}
-			units := mh.FragmentDurationV0
+			units := uint64(mh.FragmentDurationV0)
 			if mh.GetVersion() == 1 {
-				units = uint32(mh.FragmentDurationV1)
+				units = mh.FragmentDurationV1
 			}
 			if units > 0 {
 				return float64(units) / float64(movieTimescale), true

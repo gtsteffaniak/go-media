@@ -57,6 +57,7 @@ type trackEntry struct {
 	Audio *struct {
 		SamplingFrequency float64 `ebml:"SamplingFrequency"`
 		Channels          uint64  `ebml:"Channels"`
+		BitDepth          uint64  `ebml:"BitDepth"`
 	} `ebml:"Audio"`
 }
 
@@ -101,7 +102,11 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 				s.SampleRate = int(t.Audio.SamplingFrequency)
 				s.Channels = int(t.Audio.Channels)
 			}
-			s.Codec = normalizeCodec(t.CodecID)
+			bitDepth := 0
+			if t.Audio != nil && t.Audio.BitDepth <= 64 {
+				bitDepth = int(t.Audio.BitDepth)
+			}
+			s.Codec = detect.MatroskaAudioCodecName(t.CodecID, bitDepth)
 		case 17:
 			s.Type = detect.StreamSubtitle
 			s.Codec = normalizeCodec(t.CodecID)

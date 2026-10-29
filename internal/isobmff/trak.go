@@ -1,6 +1,7 @@
 package isobmff
 
 import (
+	"encoding/binary"
 	"io"
 	"math"
 	"strings"
@@ -26,6 +27,11 @@ type trakMeta struct {
 	// Rotation is the display rotation in degrees from the tkhd matrix, using
 	// ffprobe's "rotation" sign convention: -90 means rotate 90 degrees clockwise.
 	Rotation int
+	// PCMBits and PCMFlags describe a PCM sample entry (lpcm, sowt, twos):
+	// the sample size in bits and, for a version 2 lpcm entry, its
+	// formatSpecificFlags. Both are 0 when unread.
+	PCMBits  int
+	PCMFlags uint32
 }
 
 // listTrakMeta returns one entry per trak in moov order.
@@ -110,12 +116,19 @@ func readTrakMeta(rs io.ReadSeeker, trak *mp4.BoxInfo) (trakMeta, error) {
 	if meta.SampleFourCC == "" {
 		// Sample entries without a payload decoder (AV1, ProRes, PCM, ...) are
 		// found with plain box lookups, which do not decode their contents.
-		for _, fc := range sampleEntryCandidates(meta.HandlerType) {
-			if boxes, err := mp4.ExtractBox(rs, trak, mp4.BoxPath{
+		// One traversal returns matches in stsd order, so the first entry wins
+		// regardless of candidate order.
+		candidates := sampleEntryCandidates(meta.HandlerType)
+		paths := make([]mp4.BoxPath, 0, len(candidates))
+		for _, fc := range candidates {
+			paths = append(paths, mp4.BoxPath{
 				mp4.BoxTypeMdia(), mp4.BoxTypeMinf(), mp4.BoxTypeStbl(), mp4.BoxTypeStsd(), mp4.StrToBoxType(fc),
-			}); err == nil && len(boxes) > 0 {
-				meta.SampleFourCC = fc
-				break
+			})
+		}
+		if boxes, err := mp4.ExtractBoxes(rs, trak, paths); err == nil && len(boxes) > 0 {
+			meta.SampleFourCC = boxes[0].Type.String()
+			if detect.IsMP4PCMFourCC(meta.SampleFourCC) {
+				meta.PCMBits, meta.PCMFlags = readPCMSampleEntry(rs, boxes[0])
 			}
 		}
 	}
@@ -123,18 +136,52 @@ func readTrakMeta(rs io.ReadSeeker, trak *mp4.BoxInfo) (trakMeta, error) {
 	return meta, nil
 }
 
+// readPCMSampleEntry reads the sample size and LPCM flags from a sound sample
+// entry box. Version 0/1 entries give the 16-bit samplesize field; version 2
+// entries give constBitsPerChannel and formatSpecificFlags. It returns zeros
+// when the entry is too short or unreadable.
+func readPCMSampleEntry(r io.ReadSeeker, box *mp4.BoxInfo) (int, uint32) {
+	const v2Len = 56 // SampleEntry + v0 sound fields + v2 extension
+	payload := box.Size - box.HeaderSize
+	if payload < 28 {
+		return 0, 0
+	}
+	n := int64(v2Len)
+	if uint64(n) > payload {
+		n = int64(payload)
+	}
+	var buf [v2Len]byte
+	if _, err := r.Seek(int64(box.Offset+box.HeaderSize), io.SeekStart); err != nil {
+		return 0, 0
+	}
+	if _, err := io.ReadFull(r, buf[:n]); err != nil {
+		return 0, 0
+	}
+	version := binary.BigEndian.Uint16(buf[8:])
+	if version == 2 {
+		if n < v2Len {
+			return 0, 0
+		}
+		return int(binary.BigEndian.Uint32(buf[48:])), binary.BigEndian.Uint32(buf[52:])
+	}
+	return int(binary.BigEndian.Uint16(buf[18:])), 0
+}
+
+// isAttachedCoverSampleEntry reports whether a vide or pict trak holds a still
+// image (cover art) rather than motion video. FourCCs are compared trimmed.
 func isAttachedCoverSampleEntry(fourCC, handler string) bool {
 	if handler != "vide" && handler != "pict" {
 		return false
 	}
 	switch strings.TrimSpace(fourCC) {
-	case "jpeg", "jpg ", "png ", "bmp ":
+	case "jpeg", "jpg", "png", "bmp":
 		return true
 	default:
 		return false
 	}
 }
 
+// iso639ToString decodes the packed ISO 639-2/T language code from mdhd.
 func iso639ToString(lang [3]byte) string {
 	var b []byte
 	for i := 0; i < 3; i++ {
@@ -197,7 +244,7 @@ func sampleEntryCandidates(handler string) []string {
 		if _, ok := detect.MP4VideoCodecName(fc); ok && handler == "vide" {
 			out = append(out, fc)
 		}
-		if _, ok := detect.MP4AudioCodecName(fc); ok && handler == "soun" {
+		if _, ok := detect.MP4AudioCodecName(fc); (ok || detect.IsMP4PCMFourCC(fc)) && handler == "soun" {
 			out = append(out, fc)
 		}
 	}
