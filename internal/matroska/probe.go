@@ -3,26 +3,42 @@
 package matroska
 
 import (
+	"bytes"
 	"io"
 	"time"
 
 	"github.com/at-wat/ebml-go"
 	"github.com/gtsteffaniak/go-media/internal/detect"
 	"github.com/gtsteffaniak/go-media/internal/errs"
-	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
+
+// segmentInfo holds the Segment Info element fields go-media uses.
+type segmentInfo struct {
+	TimecodeScale uint64  `ebml:"TimecodeScale"`
+	Duration      float64 `ebml:"Duration"`
+}
+
+// segmentTracks holds the Segment Tracks element.
+type segmentTracks struct {
+	TrackEntry []trackEntry `ebml:"TrackEntry"`
+}
 
 // segmentHead is a data type used by this package.
 type segmentHead struct {
 	Segment struct {
-		Info struct {
-			TimecodeScale uint64  `ebml:"TimecodeScale"`
-			Duration      float64 `ebml:"Duration"`
-		} `ebml:"Info"`
-		Tracks struct {
-			TrackEntry []trackEntry `ebml:"TrackEntry"`
-		} `ebml:"Tracks"`
+		Info   segmentInfo   `ebml:"Info"`
+		Tracks segmentTracks `ebml:"Tracks"`
 	}
+}
+
+// infoElement and tracksElement decode one Segment child each, so readHead can
+// unmarshal Info and Tracks separately without walking the rest of the Segment.
+type infoElement struct {
+	Info segmentInfo `ebml:"Info"`
+}
+
+type tracksElement struct {
+	Tracks segmentTracks `ebml:"Tracks"`
 }
 
 // trackEntry is a data type used by this package.
@@ -97,14 +113,197 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	return out, nil
 }
 
-// readHead unmarshals the Segment info and track headers.
+// EBML element IDs used by the header walker (IDs include their length marker).
+const (
+	idEBMLHeader = 0x1A45DFA3
+	idSegment    = 0x18538067
+	idInfo       = 0x1549A966
+	idTracks     = 0x1654AE6B
+	idCluster    = 0x1F43B675
+
+	// maxHeaderElement bounds how much of Info or Tracks is read. Real headers
+	// are a few KB; the cap stops a corrupt size from allocating gigabytes.
+	maxHeaderElement = 16 << 20
+)
+
+// readHead returns the Segment Info and Tracks headers.
+//
+// It reads only the Info and Tracks element bodies, plus the small header of
+// each top-level Segment child. Cluster bodies are skipped by size, so the cost
+// is a few reads per cluster instead of a walk over the whole file. The walk
+// stops as soon as both Info and Tracks are found.
 func readHead(r io.ReaderAt, size int64) (*segmentHead, error) {
-	reader := io.NewSectionReader(ioat.New(r, size), 0, size)
 	var head segmentHead
-	if err := ebml.Unmarshal(reader, &head); err != nil && err != ebml.ErrReadStopped {
+	segStart, segEnd, found, err := findSegment(r, size)
+	if err != nil {
 		return nil, err
 	}
+	if !found {
+		return &head, nil
+	}
+
+	var gotInfo, gotTracks bool
+	off := segStart
+	for off < segEnd {
+		id, hdrLen, dataSize, err := readElementHeader(r, off, segEnd)
+		if err != nil {
+			// A truncated header keeps whatever was already parsed.
+			break
+		}
+		if dataSize < 0 {
+			// Unknown-size element (live streams). Its end cannot be found without
+			// walking its children, so stop here.
+			break
+		}
+		elemEnd := off + hdrLen + dataSize
+		if elemEnd > segEnd {
+			elemEnd = segEnd
+		}
+		switch id {
+		case idInfo:
+			if !gotInfo {
+				var el infoElement
+				if err := decodeElement(r, off, elemEnd, &el); err != nil {
+					return nil, err
+				}
+				head.Segment.Info = el.Info
+				gotInfo = true
+			}
+		case idTracks:
+			if !gotTracks {
+				var el tracksElement
+				if err := decodeElement(r, off, elemEnd, &el); err != nil {
+					return nil, err
+				}
+				head.Segment.Tracks = el.Tracks
+				gotTracks = true
+			}
+		}
+		if gotInfo && gotTracks {
+			break
+		}
+		off = elemEnd
+	}
 	return &head, nil
+}
+
+// findSegment returns the byte range of the first Segment element. Elements
+// before it (the EBML header) are skipped by size.
+func findSegment(r io.ReaderAt, size int64) (start, end int64, found bool, err error) {
+	off := int64(0)
+	for off < size {
+		id, hdrLen, dataSize, err := readElementHeader(r, off, size)
+		if err != nil {
+			return 0, 0, false, err
+		}
+		if id == idSegment {
+			end := size
+			if dataSize >= 0 && off+hdrLen+dataSize < size {
+				end = off + hdrLen + dataSize
+			}
+			return off + hdrLen, end, true, nil
+		}
+		if dataSize < 0 || off+hdrLen+dataSize > size {
+			return 0, 0, false, errs.Corrupt
+		}
+		off += hdrLen + dataSize
+	}
+	return 0, 0, false, nil
+}
+
+// decodeElement reads the raw bytes of the element at [off, end) and unmarshals
+// them into v. Only that element is read, not the rest of the file.
+func decodeElement(r io.ReaderAt, off, end int64, v any) error {
+	n := end - off
+	if n <= 0 || n > maxHeaderElement {
+		return errs.Corrupt
+	}
+	buf := make([]byte, n)
+	if _, err := r.ReadAt(buf, off); err != nil && !(err == io.EOF && int64(len(buf)) == n) {
+		return err
+	}
+	if err := ebml.Unmarshal(bytes.NewReader(buf), v); err != nil && err != ebml.ErrReadStopped {
+		return err
+	}
+	return nil
+}
+
+// readElementHeader reads one EBML element ID and size at off. It returns the
+// header length and the data size, or -1 for an unknown size. The read stays
+// inside limit.
+func readElementHeader(r io.ReaderAt, off, limit int64) (id uint32, hdrLen, dataSize int64, err error) {
+	var first [1]byte
+	if _, err = r.ReadAt(first[:], off); err != nil {
+		return 0, 0, 0, err
+	}
+	idLen := vintLength(first[0])
+	if idLen == 0 || idLen > 4 {
+		return 0, 0, 0, errs.Corrupt
+	}
+	idBuf := make([]byte, idLen)
+	if _, err = r.ReadAt(idBuf, off); err != nil {
+		return 0, 0, 0, err
+	}
+	for _, b := range idBuf {
+		id = id<<8 | uint32(b)
+	}
+
+	sizePos := off + int64(idLen)
+	if sizePos >= limit {
+		return 0, 0, 0, errs.Corrupt
+	}
+	if _, err = r.ReadAt(first[:], sizePos); err != nil {
+		return 0, 0, 0, err
+	}
+	sizeLen := vintLength(first[0])
+	if sizeLen == 0 || sizeLen > 8 {
+		return 0, 0, 0, errs.Corrupt
+	}
+	sizeBuf := make([]byte, sizeLen)
+	if _, err = r.ReadAt(sizeBuf, sizePos); err != nil {
+		return 0, 0, 0, err
+	}
+	val := uint64(sizeBuf[0]) & (0xFF >> sizeLen)
+	allOnes := val == uint64(0xFF>>sizeLen)
+	for _, b := range sizeBuf[1:] {
+		val = val<<8 | uint64(b)
+		allOnes = allOnes && b == 0xFF
+	}
+	hdrLen = int64(idLen + sizeLen)
+	if allOnes {
+		return id, hdrLen, -1, nil
+	}
+	if val > uint64(limit) {
+		return 0, 0, 0, errs.Corrupt
+	}
+	return id, hdrLen, int64(val), nil
+}
+
+// vintLength returns the byte length of an EBML variable-length integer from its
+// first byte, or 0 when the byte is invalid.
+func vintLength(b byte) int {
+	for i := 1; i <= 8; i++ {
+		if b&(0x80>>(i-1)) != 0 {
+			return i
+		}
+	}
+	return 0
+}
+
+// VideoCodecIDs returns the Matroska CodecID of every video track, read from the
+// bounded header only.
+func VideoCodecIDs(r io.ReaderAt, size int64) ([]string, error) {
+	head, err := readHead(r, size)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, t := range head.Segment.Tracks.TrackEntry {
+		if t.TrackType == 1 {
+			ids = append(ids, t.CodecID)
+		}
+	}
+	return ids, nil
 }
 
 // HasH264Video reports whether the file has an H.264 video track (thumbnail unsupported).

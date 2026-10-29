@@ -8,6 +8,8 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"slices"
+	"strings"
 
 	"github.com/gen2brain/vpx/webp"
 	"github.com/gtsteffaniak/go-media/internal/errs"
@@ -91,6 +93,15 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 			return yimg, "decode", nil
 		}
 	case format.MKV, format.WebM:
+		// Codec gate: decide from the bounded track header before any demux pass.
+		// Demuxing a multi-GB file only to find no VP8/MJPEG track costs several
+		// full-file reads.
+		if ids, err := matroska.VideoCodecIDs(r, size); err == nil && !hasThumbCodec(ids) {
+			if slices.Contains(ids, "V_MPEG4/ISO/AVC") {
+				return nil, "", errs.UnsupProfile("thumbnail", "h264 in matroska")
+			}
+			return nil, "", errs.Unsup("thumbnail", "matroska video codec "+strings.Join(ids, ","))
+		}
 		jpegOut := opt.Format == "" || opt.Format == "jpeg"
 		if jpegOut {
 			if pic, ok := matroska.VP8PictureAtSeek(r, size, opt.SeekPercent); ok {
@@ -120,6 +131,17 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 		}
 	}
 	return nil, "", errs.Unsup("thumbnail", string(fmtID))
+}
+
+// hasThumbCodec reports whether any Matroska video codec is one the thumbnail
+// path decodes (VP8 or MJPEG).
+func hasThumbCodec(ids []string) bool {
+	for _, id := range ids {
+		if id == "V_VP8" || id == "V_MJPEG" {
+			return true
+		}
+	}
+	return false
 }
 
 func decodeBytes(data []byte, mime string, maxW, maxH int, fast bool) (image.Image, error) {

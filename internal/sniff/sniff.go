@@ -52,6 +52,15 @@ func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 
 // sniffEBML distinguishes WebM from Matroska.
 func sniffEBML(r io.ReaderAt, size int64) (format.ID, error) {
+	// The DocType ("webm" or "matroska") is in the EBML header element at the file
+	// start. Read only that element. Fall back to a 256 KB prefix if the header
+	// size is not usable.
+	if hdr, ok := ebmlHeaderBytes(r, size); ok {
+		if bytes.Contains(hdr, []byte("webm")) {
+			return format.WebM, nil
+		}
+		return format.MKV, nil
+	}
 	chunk, err := ioat.ReadAll(r, size, 0, min64(size, 256*1024))
 	if err != nil && err != io.EOF {
 		return format.MKV, nil
@@ -60,6 +69,43 @@ func sniffEBML(r io.ReaderAt, size int64) (format.ID, error) {
 		return format.WebM, nil
 	}
 	return format.MKV, nil
+}
+
+// ebmlHeaderBytes returns the EBML header element at the start of the file (ID
+// 0x1A45DFA3 plus its size and body). It reports false when the header is not
+// usable or is larger than 4 KB.
+func ebmlHeaderBytes(r io.ReaderAt, size int64) ([]byte, bool) {
+	probe := make([]byte, 12)
+	n, _ := ioat.ReadRange(r, size, 0, probe)
+	if n < 5 {
+		return nil, false
+	}
+	// Size vint starts at offset 4. Its length is the position of the first set bit.
+	first := probe[4]
+	sizeLen := 0
+	for i := 1; i <= 8; i++ {
+		if first&(0x80>>(i-1)) != 0 {
+			sizeLen = i
+			break
+		}
+	}
+	if sizeLen == 0 || 4+sizeLen > n {
+		return nil, false
+	}
+	dataSize := uint64(first) & (0xFF >> sizeLen)
+	for _, b := range probe[5 : 4+sizeLen] {
+		dataSize = dataSize<<8 | uint64(b)
+	}
+	total := 4 + int64(sizeLen) + int64(dataSize)
+	if total <= 0 || total > 4096 || total > size {
+		return nil, false
+	}
+	buf := make([]byte, total)
+	m, _ := ioat.ReadRange(r, size, 0, buf)
+	if int64(m) != total {
+		return nil, false
+	}
+	return buf, true
 }
 
 // min64 returns the smaller of two int64 values.
