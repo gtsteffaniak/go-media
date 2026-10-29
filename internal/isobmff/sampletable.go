@@ -3,9 +3,7 @@ package isobmff
 import (
 	"io"
 
-	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/errs"
-	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
 // SampleRef is a media sample byte range in the host file.
@@ -18,183 +16,129 @@ type SampleRef struct {
 // SyncSampleNumbers returns 1-based sync sample indices from stss when present.
 // When stss is absent (all-intra tracks), every sample index is returned.
 func SyncSampleNumbers(r io.ReaderAt, size int64, trackIndex int) ([]uint32, error) {
-	refs, err := SampleRefs(r, size, trackIndex)
+	st, err := openSampleTable(r, size, trackIndex)
 	if err != nil {
 		return nil, err
 	}
-	sync, err := readStss(r, size, trackIndex)
-	if err != nil {
-		return nil, err
-	}
-	if len(sync) > 0 {
-		return sync, nil
-	}
-	out := make([]uint32, len(refs))
-	for i := range refs {
-		out[i] = uint32(i + 1)
-	}
-	return out, nil
+	return st.syncNumbers()
 }
 
 // KeyframeSamples returns file offsets and sizes for sync samples (stss).
+// Only sync samples are located; per-sample state is never expanded.
 func KeyframeSamples(r io.ReaderAt, size int64, trackIndex int) ([]SampleRef, error) {
-	info, err := mp4.Probe(ioat.New(r, size))
+	st, err := openSampleTable(r, size, trackIndex)
 	if err != nil {
 		return nil, err
 	}
-	return keyframeSamplesFromInfo(r, size, trackIndex, info)
-}
-
-func keyframeSamplesFromInfo(r io.ReaderAt, size int64, trackIndex int, info *mp4.ProbeInfo) ([]SampleRef, error) {
-	refs, err := sampleRefsFromInfo(r, size, trackIndex, info)
+	if !st.hasStss {
+		return st.allRefs()
+	}
+	sync, err := st.syncNumbers()
 	if err != nil {
 		return nil, err
 	}
-	sync, err := SyncSampleNumbers(r, size, trackIndex)
-	if err != nil {
-		return nil, err
-	}
-	var out []SampleRef
+	out := make([]SampleRef, 0, len(sync))
 	for _, n := range sync {
-		idx := int(n) - 1
-		if idx < 0 || idx >= len(refs) {
+		i := int(n) - 1
+		if i < 0 || uint32(i) >= st.sampleCount {
 			continue
 		}
-		out = append(out, refs[idx])
+		off, sz, err := st.locate(i)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, SampleRef{Index: i, Offset: off, Size: sz})
 	}
 	return out, nil
 }
 
 // SampleRefs builds absolute offsets for each sample using stco/co64, stsc, and stsz.
 func SampleRefs(r io.ReaderAt, size int64, trackIndex int) ([]SampleRef, error) {
-	info, err := mp4.Probe(ioat.New(r, size))
+	st, err := openSampleTable(r, size, trackIndex)
 	if err != nil {
 		return nil, err
 	}
-	return sampleRefsFromInfo(r, size, trackIndex, info)
+	return st.allRefs()
 }
 
-// pickSampleByTimeFromInfo selects the sample whose PTS is closest to seekPercent of track duration.
-func pickSampleByTimeFromInfo(info *mp4.ProbeInfo, trackIndex int, refs []SampleRef, seekPercent float64) (SampleRef, bool) {
-	if trackIndex < 0 || trackIndex >= len(info.Tracks) || len(refs) == 0 {
-		return SampleRef{}, false
+// openSampleTable indexes moov and returns a usable table for trackIndex.
+func openSampleTable(r io.ReaderAt, size int64, trackIndex int) (*sampleTable, error) {
+	idx, err := openMovieIndex(r, size)
+	if err != nil {
+		return nil, err
 	}
-	if seekPercent <= 0 {
-		seekPercent = 10
+	tr, err := idx.track(trackIndex)
+	if err != nil {
+		return nil, err
 	}
-	if seekPercent > 100 {
-		seekPercent = 100
-	}
-	tr := info.Tracks[trackIndex]
-	if tr.Timescale == 0 || len(tr.Samples) == 0 {
-		return refs[0], true
-	}
-	durTicks := tr.Duration
-	if durTicks == 0 {
-		var sum uint64
-		for _, s := range tr.Samples {
-			sum += uint64(s.TimeDelta)
-		}
-		durTicks = sum
-	}
-	target := uint64(float64(durTicks) * seekPercent / 100.0)
-	best := refs[0]
-	bestDelta := uint64(1 << 62)
-	for _, ref := range refs {
-		pts := samplePTS(tr.Samples, ref.Index)
-		var delta uint64
-		if pts >= target {
-			delta = pts - target
-		} else {
-			delta = target - pts
-		}
-		if delta < bestDelta {
-			bestDelta = delta
-			best = ref
-		}
-	}
-	return best, true
-}
-
-func sampleRefsFromInfo(r io.ReaderAt, size int64, trackIndex int, info *mp4.ProbeInfo) ([]SampleRef, error) {
-	if trackIndex < 0 || trackIndex >= len(info.Tracks) {
-		return nil, errs.Unsup("sample table", "track index out of range")
-	}
-	tr := info.Tracks[trackIndex]
-	if len(tr.Samples) == 0 || len(tr.Chunks) == 0 {
+	if !tr.st.usable() {
 		return nil, errs.Unsup("sample table", "missing chunk or sample tables")
 	}
-	defaultSize, err := stszDefaultSampleSize(r, size, trackIndex)
+	return &tr.st, nil
+}
+
+// syncNumbers reads stss, or returns 1..N when stss is absent.
+func (st *sampleTable) syncNumbers() ([]uint32, error) {
+	if !st.hasStss {
+		out := make([]uint32, st.sampleCount)
+		for i := range out {
+			out[i] = uint32(i + 1)
+		}
+		return out, nil
+	}
+	b, err := readPayload(st.r, st.stssOff, st.stssOff+4*int64(st.stssCount), 4*int64(st.sampleCount)+4)
 	if err != nil {
 		return nil, err
 	}
-	var out []SampleRef
+	out := make([]uint32, st.stssCount)
+	for i := range out {
+		out[i] = uint32(b[4*i])<<24 | uint32(b[4*i+1])<<16 | uint32(b[4*i+2])<<8 | uint32(b[4*i+3])
+	}
+	return out, nil
+}
+
+// allRefs walks every chunk once and returns one SampleRef per sample.
+func (st *sampleTable) allRefs() ([]SampleRef, error) {
+	sizes, err := st.sampleSizes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SampleRef, 0, len(sizes))
 	si := 0
-	for _, chunk := range tr.Chunks {
-		off := chunk.DataOffset
-		end := si + int(chunk.SamplesPerChunk)
-		for ; si < end && si < len(tr.Samples); si++ {
-			sz := tr.Samples[si].Size
-			if sz == 0 {
-				sz = defaultSize
+	for k := 0; k+2 < len(st.stsc) && si < len(sizes); k += 3 {
+		fc, spc := st.stsc[k], int(st.stsc[k+1])
+		next := st.chunkCount + 1
+		if k+5 < len(st.stsc) && st.stsc[k+3] > fc && st.stsc[k+3] <= st.chunkCount+1 {
+			next = st.stsc[k+3]
+		}
+		for c := fc; c < next && si < len(sizes); c++ {
+			first, err := st.chunkStart(c - 1)
+			if err != nil {
+				return nil, err
 			}
-			out = append(out, SampleRef{
-				Index:  si,
-				Offset: int64(off),
-				Size:   int64(sz),
-			})
-			off += uint64(sz)
+			off := first
+			for j := 0; j < spc && si < len(sizes); j, si = j+1, si+1 {
+				out = append(out, SampleRef{Index: si, Offset: int64(off), Size: int64(sizes[si])})
+				off += uint64(sizes[si])
+			}
 		}
 	}
 	return out, nil
 }
 
-func stszDefaultSampleSize(r io.ReaderAt, size int64, trackIndex int) (uint32, error) {
-	rs := ioat.New(r, size)
-	if _, err := rs.Seek(0, io.SeekStart); err != nil {
-		return 0, err
+// chunkStart reads the file offset of 0-based chunk c.
+func (st *sampleTable) chunkStart(c uint32) (uint64, error) {
+	if c >= st.chunkCount {
+		return 0, errs.Unsup("sample table", "chunk out of range")
 	}
-	traks, err := mp4.ExtractBox(rs, nil, mp4.BoxPath{mp4.BoxTypeMoov(), mp4.BoxTypeTrak()})
-	if err != nil || trackIndex < 0 || trackIndex >= len(traks) {
-		return 0, err
+	if st.co64 {
+		b := st.buf(8)
+		if _, err := st.r.ReadAt(b, st.chunkOff+8*int64(c)); err != nil {
+			return 0, errs.Unsup("sample table", "short co64 read")
+		}
+		return uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
+			uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7]), nil
 	}
-	if _, err := rs.Seek(0, io.SeekStart); err != nil {
-		return 0, err
-	}
-	bips, err := mp4.ExtractBoxesWithPayload(rs, traks[trackIndex], []mp4.BoxPath{
-		{mp4.BoxTypeMdia(), mp4.BoxTypeMinf(), mp4.BoxTypeStbl(), mp4.BoxTypeStsz()},
-	})
-	if err != nil || len(bips) == 0 {
-		return 0, err
-	}
-	stsz := bips[0].Payload.(*mp4.Stsz)
-	if stsz.SampleSize != 0 {
-		return stsz.SampleSize, nil
-	}
-	return 0, nil
-}
-
-func readStss(r io.ReaderAt, size int64, trackIndex int) ([]uint32, error) {
-	rs := ioat.New(r, size)
-	if _, err := rs.Seek(0, io.SeekStart); err != nil {
-		return nil, err
-	}
-	traks, err := mp4.ExtractBox(rs, nil, mp4.BoxPath{mp4.BoxTypeMoov(), mp4.BoxTypeTrak()})
-	if err != nil || trackIndex < 0 || trackIndex >= len(traks) {
-		return nil, err
-	}
-	if _, err := rs.Seek(0, io.SeekStart); err != nil {
-		return nil, err
-	}
-	bips, err := mp4.ExtractBoxesWithPayload(rs, traks[trackIndex], []mp4.BoxPath{
-		{mp4.BoxTypeMdia(), mp4.BoxTypeMinf(), mp4.BoxTypeStbl(), mp4.BoxTypeStss()},
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(bips) == 0 {
-		return nil, nil
-	}
-	stss := bips[0].Payload.(*mp4.Stss)
-	return stss.SampleNumber, nil
+	v, err := st.u32At(st.chunkOff + 4*int64(c))
+	return uint64(v), err
 }
