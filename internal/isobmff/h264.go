@@ -30,10 +30,13 @@ func FirstAVCTrackIndex(r io.ReaderAt, size int64) (int, bool) {
 }
 
 // H264SyncSample returns one stss sync sample payload (AVCC length-prefixed NALs).
-// seekPercent (default 10, clamped to 100) selects the latest sync sample at or
-// before that fraction of the video track duration, matching ffmpeg's fast
-// input seek (-ss before -i): only the moov tables a seek needs and the one
-// sample's bytes are read, so cost does not grow with file duration.
+// seekPercent (default 10, clamped to 100) selects the sync sample nearest in
+// time to that fraction of the video track duration. A keyframe that is tiny
+// next to the following few (a black or flat first frame) is skipped in favour
+// of the next real one, so a default or 0% request does not return a black
+// image. Only the moov tables a seek needs, a few table entries for the size
+// check, and the one sample's bytes are read, so cost does not grow with file
+// duration.
 func H264SyncSample(r io.ReaderAt, size int64, trackIndex int, seekPercent float64) ([]byte, bool) {
 	idx, err := openMovieIndex(r, size)
 	if err != nil {
