@@ -71,24 +71,46 @@ var vfwFourCCNames = map[string]string{
 	"H264": "h264",
 	"X264": "h264",
 	"AVC1": "h264",
+	"FFV1": "ffv1",
+	"WMV3": "wmv3",
+	// BI_RGB: uncompressed frames carry a zero biCompression.
+	"\x00\x00\x00\x00": "rawvideo",
 }
 
-// vfwCodecID is the Matroska CodecID for VFW tracks, whose codec is named by
+// VFWCodecID is the Matroska CodecID for VFW tracks, whose codec is named by
 // the FourCC in CodecPrivate.
-const vfwCodecID = "V_MS/VFW/FOURCC"
+const VFWCodecID = "V_MS/VFW/FOURCC"
 
 // VFWCodecName returns the ffprobe codec name for a V_MS/VFW/FOURCC track.
 // CodecPrivate holds a BITMAPINFOHEADER. Bytes 16 to 19 are biCompression, the
 // FourCC, which ffmpeg also reads from there. Unknown FourCCs return the raw
-// FourCC string, matching ffprobe.
+// FourCC string, matching ffprobe. Like ffmpeg's riff tag lookup, an exact
+// match is tried first and then an ASCII case-insensitive one, so "avc1" and
+// "xvid" resolve too.
 func VFWCodecName(codecPrivate []byte) string {
 	if len(codecPrivate) < 20 {
-		return vfwCodecID
+		return VFWCodecID
 	}
-	if name, ok := vfwFourCCNames[string(codecPrivate[16:20])]; ok {
+	fourCC := string(codecPrivate[16:20])
+	if name, ok := vfwFourCCNames[fourCC]; ok {
 		return name
 	}
-	return string(codecPrivate[16:20])
+	if name, ok := vfwFourCCNames[upperASCII4(fourCC)]; ok {
+		return name
+	}
+	return fourCC
+}
+
+// upperASCII4 upper-cases the ASCII letters of a FourCC and leaves other
+// bytes untouched (strings.ToUpper would rewrite invalid UTF-8).
+func upperASCII4(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if 'a' <= c && c <= 'z' {
+			b[i] = c - ('a' - 'A')
+		}
+	}
+	return string(b)
 }
 
 // MatroskaAudioCodecName is MatroskaCodecName for an audio track whose

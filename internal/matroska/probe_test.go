@@ -67,10 +67,11 @@ const (
 	idCodecIDTest  = 0x86
 	idTrackTypeTst = 0x83
 	idTrackNumTst  = 0xD7
-	idVideoTest      = 0xE0
-	idCodecPrivate   = 0x63A2
+	idVideoTest    = 0xE0
+	idCodecPrivate = 0x63A2
 )
 
+// ebmlHeaderTest builds a minimal EBML header with DocType "webm".
 func ebmlHeaderTest() []byte {
 	return ebmlElem(idEBMLHeader, ebmlElem(0x4282, []byte("webm")))
 }
@@ -117,6 +118,7 @@ func videoTrackVFWTest(fourCC string) []byte {
 	return ebmlElem(idTracksTest, entry)
 }
 
+// TestStreamsVFWCodec checks that VFW tracks are named from CodecPrivate.
 func TestStreamsVFWCodec(t *testing.T) {
 	cases := []struct {
 		fourCC string
@@ -124,6 +126,7 @@ func TestStreamsVFWCodec(t *testing.T) {
 	}{
 		{"MP42", "msmpeg4v2"},
 		{"ZZZZ", "ZZZZ"},
+		{"xvid", "mpeg4"},
 	}
 	for _, tc := range cases {
 		tc := tc

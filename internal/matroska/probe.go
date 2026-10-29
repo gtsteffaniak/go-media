@@ -50,8 +50,8 @@ type trackEntry struct {
 	CodecID      string `ebml:"CodecID"`
 	CodecPrivate []byte `ebml:"CodecPrivate"`
 	Language     string `ebml:"Language"`
-	Name        string `ebml:"Name"`
-	Video       *struct {
+	Name         string `ebml:"Name"`
+	Video        *struct {
 		PixelWidth  uint64 `ebml:"PixelWidth"`
 		PixelHeight uint64 `ebml:"PixelHeight"`
 	} `ebml:"Video"`
@@ -96,7 +96,7 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 				s.Width = int(t.Video.PixelWidth)
 				s.Height = int(t.Video.PixelHeight)
 			}
-			if t.CodecID == "V_MS/VFW/FOURCC" {
+			if t.CodecID == detect.VFWCodecID {
 				s.Codec = detect.VFWCodecName(t.CodecPrivate)
 			} else {
 				s.Codec = normalizeCodec(t.CodecID)
