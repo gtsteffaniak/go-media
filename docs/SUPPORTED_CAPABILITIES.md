@@ -235,6 +235,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns
 | `Probe` | Format, duration, streams, tags flags, subtitle tracks |
 | `Duration` | Duration + source |
 | `ReadTags` | Title, artist, album, … |
+| `InspectAudio` | Tags, embedded lyrics flag, and optional cover bytes from one parse (use this instead of `ReadTags` + `HasLyrics` + `EmbeddedArtwork`) |
 | `HasArtwork`, `EmbeddedArtwork` | Cover image bytes |
 | `HasLyrics`, `LyricsFromReader`, `LyricsSidecar` | Lyrics |
 | `ListSubtitleTracks`, `ExtractEmbeddedSubtitle`, `SubtitleToWebVTT`, `ExternalSubtitleTracks` | Subtitles |
