@@ -57,6 +57,62 @@ func MatroskaCodecName(id string) string {
 	return id
 }
 
+// vfwFourCCNames maps the FourCC of a Video for Windows track to an ffprobe
+// codec name. The FourCC is the biCompression field of the BITMAPINFOHEADER.
+var vfwFourCCNames = map[string]string{
+	"MP41": "msmpeg4v1",
+	"MPG4": "msmpeg4v1",
+	"MP42": "msmpeg4v2",
+	"MP43": "msmpeg4v3",
+	"DIV3": "msmpeg4v3",
+	"DIVX": "mpeg4",
+	"XVID": "mpeg4",
+	"MJPG": "mjpeg",
+	"H264": "h264",
+	"X264": "h264",
+	"AVC1": "h264",
+	"FFV1": "ffv1",
+	"WMV3": "wmv3",
+	// BI_RGB: uncompressed frames carry a zero biCompression.
+	"\x00\x00\x00\x00": "rawvideo",
+}
+
+// VFWCodecID is the Matroska CodecID for VFW tracks, whose codec is named by
+// the FourCC in CodecPrivate.
+const VFWCodecID = "V_MS/VFW/FOURCC"
+
+// VFWCodecName returns the ffprobe codec name for a V_MS/VFW/FOURCC track.
+// CodecPrivate holds a BITMAPINFOHEADER. Bytes 16 to 19 are biCompression, the
+// FourCC, which ffmpeg also reads from there. Unknown FourCCs return the raw
+// FourCC string, matching ffprobe. Like ffmpeg's riff tag lookup, an exact
+// match is tried first and then an ASCII case-insensitive one, so "avc1" and
+// "xvid" resolve too.
+func VFWCodecName(codecPrivate []byte) string {
+	if len(codecPrivate) < 20 {
+		return VFWCodecID
+	}
+	fourCC := string(codecPrivate[16:20])
+	if name, ok := vfwFourCCNames[fourCC]; ok {
+		return name
+	}
+	if name, ok := vfwFourCCNames[upperASCII4(fourCC)]; ok {
+		return name
+	}
+	return fourCC
+}
+
+// upperASCII4 upper-cases the ASCII letters of a FourCC and leaves other
+// bytes untouched (strings.ToUpper would rewrite invalid UTF-8).
+func upperASCII4(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if 'a' <= c && c <= 'z' {
+			b[i] = c - ('a' - 'A')
+		}
+	}
+	return string(b)
+}
+
 // MatroskaAudioCodecName is MatroskaCodecName for an audio track whose
 // Audio.BitDepth is bitDepth (0 when absent). The A_PCM CodecIDs take their
 // sample format from BitDepth, as ffmpeg's matroska demuxer does; when the

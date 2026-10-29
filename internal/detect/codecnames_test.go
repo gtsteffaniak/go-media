@@ -25,6 +25,31 @@ func TestMatroskaCodecName(t *testing.T) {
 	}
 }
 
+// TestVFWCodecName checks the BITMAPINFOHEADER FourCC to ffprobe name mapping.
+func TestVFWCodecName(t *testing.T) {
+	priv := make([]byte, 40)
+	copy(priv[16:20], []byte("MP42"))
+	if got := VFWCodecName(priv); got != "msmpeg4v2" {
+		t.Errorf("MP42 = %q, want msmpeg4v2", got)
+	}
+	copy(priv[16:20], []byte("NOPE"))
+	if got := VFWCodecName(priv); got != "NOPE" {
+		t.Errorf("unknown FourCC = %q, want NOPE", got)
+	}
+	if got := VFWCodecName(nil); got != VFWCodecID {
+		t.Errorf("short private = %q, want %q", got, VFWCodecID)
+	}
+	for fc, want := range map[string]string{
+		"avc1": "h264", "xvid": "mpeg4", "DivX": "mpeg4", "FFV1": "ffv1",
+		"WMV3": "wmv3", "\x00\x00\x00\x00": "rawvideo", "nope": "nope",
+	} {
+		copy(priv[16:20], fc)
+		if got := VFWCodecName(priv); got != want {
+			t.Errorf("%q = %q, want %q", fc, got, want)
+		}
+	}
+}
+
 // TestMP4CodecNames checks sample entry FourCC to ffprobe name mapping.
 func TestMP4CodecNames(t *testing.T) {
 	if name, ok := MP4VideoCodecName("av01"); !ok || name != "av1" {
