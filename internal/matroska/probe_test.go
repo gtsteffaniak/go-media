@@ -67,7 +67,8 @@ const (
 	idCodecIDTest  = 0x86
 	idTrackTypeTst = 0x83
 	idTrackNumTst  = 0xD7
-	idVideoTest    = 0xE0
+	idVideoTest      = 0xE0
+	idCodecPrivate   = 0x63A2
 )
 
 func ebmlHeaderTest() []byte {
@@ -95,6 +96,54 @@ func videoTrackTest(codec string) []byte {
 		ebmlElem(idVideoTest, u64Elem(0xB0, 320), u64Elem(0xBA, 240)),
 	)
 	return ebmlElem(idTracksTest, entry)
+}
+
+// vfwCodecPrivate builds a minimal BITMAPINFOHEADER with fourCC at bytes 16-19.
+func vfwCodecPrivate(fourCC string) []byte {
+	b := make([]byte, 40)
+	copy(b[16:20], fourCC)
+	return b
+}
+
+// videoTrackVFWTest builds a V_MS/VFW/FOURCC video track.
+func videoTrackVFWTest(fourCC string) []byte {
+	entry := ebmlElem(idTrackEntry,
+		u64Elem(idTrackNumTst, 1),
+		u64Elem(idTrackTypeTst, 1),
+		ebmlElem(idCodecIDTest, []byte("V_MS/VFW/FOURCC")),
+		ebmlElem(idCodecPrivate, vfwCodecPrivate(fourCC)),
+		ebmlElem(idVideoTest, u64Elem(0xB0, 320), u64Elem(0xBA, 240)),
+	)
+	return ebmlElem(idTracksTest, entry)
+}
+
+func TestStreamsVFWCodec(t *testing.T) {
+	cases := []struct {
+		fourCC string
+		want   string
+	}{
+		{"MP42", "msmpeg4v2"},
+		{"ZZZZ", "ZZZZ"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.fourCC, func(t *testing.T) {
+			data := bytes.Join([][]byte{
+				ebmlHeaderTest(),
+				ebmlElem(idSegmentTest, infoTest(1_000_000, 4000), videoTrackVFWTest(tc.fourCC)),
+			}, nil)
+			streams, err := Streams(bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(streams) != 1 {
+				t.Fatalf("len(streams) = %d, want 1", len(streams))
+			}
+			if streams[0].Codec != tc.want {
+				t.Fatalf("codec = %q, want %q", streams[0].Codec, tc.want)
+			}
+		})
+	}
 }
 
 // countingReader records bytes and calls, like the thumbnail budget tests.

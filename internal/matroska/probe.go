@@ -45,10 +45,11 @@ type tracksElement struct {
 
 // trackEntry is a data type used by this package.
 type trackEntry struct {
-	TrackNumber uint64 `ebml:"TrackNumber"`
-	TrackType   uint64 `ebml:"TrackType"`
-	CodecID     string `ebml:"CodecID"`
-	Language    string `ebml:"Language"`
+	TrackNumber  uint64 `ebml:"TrackNumber"`
+	TrackType    uint64 `ebml:"TrackType"`
+	CodecID      string `ebml:"CodecID"`
+	CodecPrivate []byte `ebml:"CodecPrivate"`
+	Language     string `ebml:"Language"`
 	Name        string `ebml:"Name"`
 	Video       *struct {
 		PixelWidth  uint64 `ebml:"PixelWidth"`
@@ -95,7 +96,11 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 				s.Width = int(t.Video.PixelWidth)
 				s.Height = int(t.Video.PixelHeight)
 			}
-			s.Codec = normalizeCodec(t.CodecID)
+			if t.CodecID == "V_MS/VFW/FOURCC" {
+				s.Codec = detect.VFWCodecName(t.CodecPrivate)
+			} else {
+				s.Codec = normalizeCodec(t.CodecID)
+			}
 		case 2:
 			s.Type = detect.StreamAudio
 			if t.Audio != nil {

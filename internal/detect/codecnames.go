@@ -57,6 +57,40 @@ func MatroskaCodecName(id string) string {
 	return id
 }
 
+// vfwFourCCNames maps the FourCC of a Video for Windows track to an ffprobe
+// codec name. The FourCC is the biCompression field of the BITMAPINFOHEADER.
+var vfwFourCCNames = map[string]string{
+	"MP41": "msmpeg4v1",
+	"MPG4": "msmpeg4v1",
+	"MP42": "msmpeg4v2",
+	"MP43": "msmpeg4v3",
+	"DIV3": "msmpeg4v3",
+	"DIVX": "mpeg4",
+	"XVID": "mpeg4",
+	"MJPG": "mjpeg",
+	"H264": "h264",
+	"X264": "h264",
+	"AVC1": "h264",
+}
+
+// vfwCodecID is the Matroska CodecID for VFW tracks, whose codec is named by
+// the FourCC in CodecPrivate.
+const vfwCodecID = "V_MS/VFW/FOURCC"
+
+// VFWCodecName returns the ffprobe codec name for a V_MS/VFW/FOURCC track.
+// CodecPrivate holds a BITMAPINFOHEADER. Bytes 16 to 19 are biCompression, the
+// FourCC, which ffmpeg also reads from there. Unknown FourCCs return the raw
+// FourCC string, matching ffprobe.
+func VFWCodecName(codecPrivate []byte) string {
+	if len(codecPrivate) < 20 {
+		return vfwCodecID
+	}
+	if name, ok := vfwFourCCNames[string(codecPrivate[16:20])]; ok {
+		return name
+	}
+	return string(codecPrivate[16:20])
+}
+
 // MatroskaAudioCodecName is MatroskaCodecName for an audio track whose
 // Audio.BitDepth is bitDepth (0 when absent). The A_PCM CodecIDs take their
 // sample format from BitDepth, as ffmpeg's matroska demuxer does; when the
