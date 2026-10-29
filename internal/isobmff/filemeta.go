@@ -119,6 +119,18 @@ func (m FileMeta) SubtitleStreams() []detect.Stream {
 }
 
 func streamForTrackMeta(index int, tr *mp4.Track, meta trakMeta) (detect.Stream, bool) {
+	s, ok := baseStreamForTrackMeta(index, tr, meta)
+	if !ok {
+		return detect.Stream{}, false
+	}
+	if s.Type == detect.StreamVideo {
+		// Width and Height stay coded values, as ffprobe reports them.
+		s.Rotation = meta.Rotation
+	}
+	return s, true
+}
+
+func baseStreamForTrackMeta(index int, tr *mp4.Track, meta trakMeta) (detect.Stream, bool) {
 	s := detect.Stream{Index: index}
 	switch tr.Codec {
 	case mp4.CodecAVC1:
@@ -137,17 +149,40 @@ func streamForTrackMeta(index int, tr *mp4.Track, meta trakMeta) (detect.Stream,
 		}
 		return s, true
 	case mp4.CodecUnknown:
-		if !isMotionMJPEGTrak(meta) {
-			return detect.Stream{}, false
+		if isMotionMJPEGTrak(meta) {
+			s.Type = detect.StreamVideo
+			s.Codec = "mjpeg"
+			s.Width = meta.Width
+			s.Height = meta.Height
+			return s, true
 		}
-		s.Type = detect.StreamVideo
-		s.Codec = "mjpeg"
-		s.Width = meta.Width
-		s.Height = meta.Height
-		return s, true
+		return namedStreamForTrackMeta(index, meta)
 	default:
 		return detect.Stream{}, false
 	}
+}
+
+// namedStreamForTrackMeta reports sample entries that go-mp4 does not decode
+// (AV1, ProRes, PCM, ...) using their ffprobe codec name instead of dropping them.
+func namedStreamForTrackMeta(index int, meta trakMeta) (detect.Stream, bool) {
+	if meta.AttachedCover {
+		return detect.Stream{}, false
+	}
+	switch meta.HandlerType {
+	case "vide":
+		name, ok := detect.MP4VideoCodecName(meta.SampleFourCC)
+		if !ok {
+			return detect.Stream{}, false
+		}
+		return detect.Stream{Index: index, Type: detect.StreamVideo, Codec: name, Width: meta.Width, Height: meta.Height}, true
+	case "soun":
+		name, ok := detect.MP4AudioCodecName(meta.SampleFourCC)
+		if !ok {
+			return detect.Stream{}, false
+		}
+		return detect.Stream{Index: index, Type: detect.StreamAudio, Codec: name}, true
+	}
+	return detect.Stream{}, false
 }
 
 func isMotionMJPEGTrak(meta trakMeta) bool {
@@ -163,4 +198,19 @@ func isMotionMJPEGTrak(meta trakMeta) bool {
 	default:
 		return false
 	}
+}
+
+// VideoRotation returns the display rotation in degrees of the first video
+// track (ffprobe sign convention). ok is false when there is no video track.
+func VideoRotation(r io.ReaderAt, size int64) (int, bool) {
+	metas, err := listTrakMeta(r, size)
+	if err != nil {
+		return 0, false
+	}
+	for _, m := range metas {
+		if m.HandlerType == "vide" {
+			return m.Rotation, true
+		}
+	}
+	return 0, false
 }

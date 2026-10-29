@@ -105,8 +105,14 @@ func ExternalSubtitleTracks(videoPath string, siblingNames []string) []SubtitleT
 		if fileBase != videoStem && fileBase2 != videoStem {
 			continue
 		}
+		// "video.en.srt" carries a 2 or 3 letter language suffix.
+		language := ""
+		if l := strings.TrimPrefix(langExt, "."); len(l) == 2 || len(l) == 3 {
+			language = l
+		}
 		out = append(out, SubtitleTrack{
 			Name:     name,
+			Language: language,
 			Embedded: false,
 			Codec:    strings.TrimPrefix(low, "."),
 		})

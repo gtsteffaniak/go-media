@@ -355,20 +355,7 @@ func (h *Header) durationMs() int64 {
 	return ms
 }
 
-// normalizeCodec maps Matroska CodecID values to short names.
+// normalizeCodec maps Matroska CodecID values to ffprobe-style codec names.
 func normalizeCodec(id string) string {
-	switch id {
-	case "V_VP8":
-		return "vp8"
-	case "V_VP9":
-		return "vp9"
-	case "V_MPEG4/ISO/AVC":
-		return "h264"
-	case "A_VORBIS":
-		return "vorbis"
-	case "A_OPUS":
-		return "opus"
-	default:
-		return id
-	}
+	return detect.MatroskaCodecName(id)
 }

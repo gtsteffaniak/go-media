@@ -44,6 +44,14 @@ func readMovieHeader(r io.ReaderAt, size int64) (movieHeader, error) {
 	if h.Timescale == 0 {
 		return movieHeader{}, errs.Unsup("duration", "mp4 missing mvhd")
 	}
+	if h.Duration == 0 {
+		// Fragmented MP4: mvhd carries no length, so derive it from mehd or moof.
+		if metas, err := listTrakMeta(r, size); err == nil {
+			if sec, ok := fragmentDurationSeconds(r, size, h.Timescale, metas); ok {
+				h.Duration = uint64(sec * float64(h.Timescale))
+			}
+		}
+	}
 	return h, nil
 }
 

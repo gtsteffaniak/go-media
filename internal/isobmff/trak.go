@@ -2,9 +2,11 @@ package isobmff
 
 import (
 	"io"
+	"math"
 	"strings"
 
 	"github.com/abema/go-mp4"
+	"github.com/gtsteffaniak/go-media/internal/detect"
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
@@ -17,6 +19,13 @@ type trakMeta struct {
 	Width         int
 	Height        int
 	AttachedCover bool
+	// TrackID and Timescale come from tkhd and mdhd. Timescale is the media
+	// timescale used by fragment sample durations.
+	TrackID   uint32
+	Timescale uint32
+	// Rotation is the display rotation in degrees from the tkhd matrix, using
+	// ffprobe's "rotation" sign convention: -90 means rotate 90 degrees clockwise.
+	Rotation int
 }
 
 // listTrakMeta returns one entry per trak in moov order.
@@ -70,8 +79,11 @@ func readTrakMeta(rs io.ReadSeeker, trak *mp4.BoxInfo) (trakMeta, error) {
 		case mp4.BoxTypeMdhd():
 			m := bip.Payload.(*mp4.Mdhd)
 			meta.Language = iso639ToString(m.Language)
+			meta.Timescale = m.Timescale
 		case mp4.BoxTypeTkhd():
 			tk := bip.Payload.(*mp4.Tkhd)
+			meta.TrackID = tk.TrackID
+			meta.Rotation = rotationFromMatrix(tk.Matrix)
 			if meta.Width == 0 {
 				meta.Width = int(tk.Width >> 16)
 			}
@@ -93,6 +105,18 @@ func readTrakMeta(rs io.ReadSeeker, trak *mp4.BoxInfo) (trakMeta, error) {
 			mp4.BoxTypeMdia(), mp4.BoxTypeMinf(), mp4.BoxTypeStbl(), mp4.BoxTypeStsd(), mp4.StrToBoxType("tx3g"),
 		}); err == nil && len(boxes) > 0 {
 			meta.SampleFourCC = "tx3g"
+		}
+	}
+	if meta.SampleFourCC == "" {
+		// Sample entries without a payload decoder (AV1, ProRes, PCM, ...) are
+		// found with plain box lookups, which do not decode their contents.
+		for _, fc := range sampleEntryCandidates(meta.HandlerType) {
+			if boxes, err := mp4.ExtractBox(rs, trak, mp4.BoxPath{
+				mp4.BoxTypeMdia(), mp4.BoxTypeMinf(), mp4.BoxTypeStbl(), mp4.BoxTypeStsd(), mp4.StrToBoxType(fc),
+			}); err == nil && len(boxes) > 0 {
+				meta.SampleFourCC = fc
+				break
+			}
 		}
 	}
 	meta.AttachedCover = isAttachedCoverSampleEntry(meta.SampleFourCC, meta.HandlerType)
@@ -144,4 +168,38 @@ func subtitleCodecFromFourCC(fourCC string) string {
 	default:
 		return strings.TrimSpace(fourCC)
 	}
+}
+
+// rotationFromMatrix derives the display rotation from a tkhd transformation
+// matrix (16.16 fixed point, a=m[0], b=m[1]). It matches ffmpeg's
+// av_display_rotation_get: the result is -atan2(b, a) rounded to a multiple of 90
+// and normalized to (-180, 180].
+func rotationFromMatrix(m [9]int32) int {
+	a := float64(m[0]) / 65536
+	b := float64(m[1]) / 65536
+	if a == 0 && b == 0 {
+		return 0
+	}
+	deg := -math.Atan2(b, a) * 180 / math.Pi
+	r := int(math.Round(deg/90)) * 90
+	r = ((r % 360) + 360) % 360
+	if r > 180 {
+		r -= 360
+	}
+	return r
+}
+
+// sampleEntryCandidates lists the named sample entry types to look for, given the
+// track handler.
+func sampleEntryCandidates(handler string) []string {
+	var out []string
+	for _, fc := range detect.MP4SampleEntryFourCCs() {
+		if _, ok := detect.MP4VideoCodecName(fc); ok && handler == "vide" {
+			out = append(out, fc)
+		}
+		if _, ok := detect.MP4AudioCodecName(fc); ok && handler == "soun" {
+			out = append(out, fc)
+		}
+	}
+	return out
 }
