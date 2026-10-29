@@ -35,6 +35,9 @@ type synthMP4Opts struct {
 	Co64            bool // use co64 instead of stco
 	MoovAfterMdat   bool // place moov after mdat (non-faststart)
 	FixedSize       bool // stsz default sample size instead of a table
+	BadVideoStts    bool // video stts claims more entries than it holds
+	// ExtraTraks are complete trak boxes placed before the video trak.
+	ExtraTraks [][]byte
 }
 
 const synthSampleSize = 12
@@ -98,6 +101,9 @@ func buildSynthMP4(o synthMP4Opts) []byte {
 			stsz = synthBox("stsz", u32s(0, 0, uint32(n)), u32s(sz...))
 		}
 		stts := synthBox("stts", u32s(0, 1, uint32(n), synthDelta))
+		if o.BadVideoStts {
+			stts = synthBox("stts", u32s(0, 1000, uint32(n), synthDelta))
+		}
 		parts := [][]byte{stts}
 		if o.GOP > 0 {
 			var sync []uint32
@@ -139,7 +145,10 @@ func buildSynthMP4(o synthMP4Opts) []byte {
 		binary.BigEndian.PutUint32(mvhdP[20:], 0x00010000)
 		binary.BigEndian.PutUint16(mvhdP[24:], 0x0100)
 		binary.BigEndian.PutUint32(mvhdP[96:], 2)
-		return synthBox("moov", synthBox("mvhd", mvhdP), trak)
+		moovParts := [][]byte{synthBox("mvhd", mvhdP)}
+		moovParts = append(moovParts, o.ExtraTraks...)
+		moovParts = append(moovParts, trak)
+		return synthBox("moov", moovParts...)
 	}
 	if o.MoovAfterMdat {
 		moov := build(len(ftyp))
@@ -156,4 +165,15 @@ func synthSampleIndex(p []byte) int {
 		return -1
 	}
 	return int(binary.BigEndian.Uint32(p[8:]))
+}
+
+// synthSideTrak builds a non-video trak with the given handler and sample
+// entry. stbl holds the raw sample-table boxes (stts, stsc, stsz, stco).
+func synthSideTrak(handler, entry string, stbl ...[]byte) []byte {
+	stsd := synthBox("stsd", u32s(0, 1), synthBox(entry, make([]byte, 28)))
+	st := synthBox("stbl", append([][]byte{stsd}, stbl...)...)
+	minf := synthBox("minf", synthBox("smhd", u32s(0, 0)), st)
+	mdhd := synthBox("mdhd", u32s(0, 0, 0, 48000, 0), []byte{0x55, 0xC4, 0, 0})
+	hdlr := synthBox("hdlr", u32s(0, 0), []byte(handler), u32s(0, 0, 0), []byte("Side\x00"))
+	return synthBox("trak", synthBox("mdia", mdhd, hdlr, minf))
 }

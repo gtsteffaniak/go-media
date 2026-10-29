@@ -26,7 +26,11 @@ func OpenH264MP4Thumb(r io.ReaderAt, size int64) (H264MP4Thumb, bool) {
 	if !ok {
 		return H264MP4Thumb{}, false
 	}
-	avcc, ok := idx.tracks[track].avcConfig()
+	tr, err := idx.track(track)
+	if err != nil {
+		return H264MP4Thumb{}, false
+	}
+	avcc, ok := tr.avcConfig()
 	if !ok {
 		return H264MP4Thumb{}, false
 	}

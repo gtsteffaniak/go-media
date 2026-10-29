@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"sync"
 
 	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/errs"
@@ -24,10 +25,12 @@ const (
 	maxStsdBytes = 1 << 20
 	// maxChunkSamples caps stsz entries read to locate one sample in a chunk.
 	maxChunkSamples = 1 << 20
-	// maxSamples caps sample and sync-sample counts. Callers such as
-	// sampleSizes and SampleRefs materialize per-sample slices, so a crafted
-	// stsz with a tiny fixed size could otherwise force gigabytes of memory.
-	// 1<<23 is about 39 hours at 60 fps.
+	// maxSamples caps sample and sync-sample counts where per-sample slices are
+	// materialized (sampleSizes, syncNumbers, SampleRefs), so a crafted stsz
+	// with a tiny fixed size cannot force gigabytes of memory. It is not
+	// checked at index time: uncompressed PCM audio stores one sample per
+	// audio frame (8M samples is about 175 s at 48 kHz) and seeking a video
+	// track never expands its tables. 1<<23 is about 39 hours at 60 fps.
 	maxSamples = 1 << 23
 	// maxTrakContainerDepth caps mdia/minf/stbl nesting inside a trak. A valid
 	// trak needs three levels; deeper nesting is rejected to bound recursion.
@@ -44,8 +47,37 @@ type movieIndex struct {
 	tracks []trackIndex
 }
 
+// deferredTable is one stts or stsc box left unparsed until first use.
+type deferredTable struct {
+	typ  [4]byte
+	s, e int64
+}
+
+// deferTablesFor reports whether a trak with this hdlr handler type can skip
+// reading stts/stsc while indexing. Video, cover-art and subtitle handlers are
+// parsed eagerly because thumbnail, seek and subtitle paths read them.
+func deferTablesFor(handler [4]byte) bool {
+	switch string(handler[:]) {
+	case "soun", "tmcd", "hint", "meta":
+		return true
+	}
+	return false
+}
+
 // trackIndex holds one trak's headers and sample table locations.
+//
+// err is set when the trak failed to index. The entry keeps its position so
+// track indexes still match trak order, and keeps whatever headers (handler,
+// sample entry) were read before the failure, so a corrupt video trak is still
+// found and reported as unsupported instead of silently picking another.
 type trackIndex struct {
+	err error
+	// deferred holds stts/stsc box bounds for traks whose handler says no
+	// seek path reads them (audio, timecode, hint, metadata). They are
+	// parsed on first track() access instead of on every moov index.
+	deferred []deferredTable
+	once     *sync.Once
+
 	handler   [4]byte
 	entry     [4]byte // first stsd sample entry type, e.g. "avc1"
 	avcC      []byte  // avcC payload for avc1/encv entries
@@ -172,10 +204,11 @@ func indexMoov(r io.ReaderAt, size, start, end int64) (*movieIndex, error) {
 		if typ != [4]byte{'t', 'r', 'a', 'k'} {
 			return nil
 		}
+		// A bad trak (corrupt timecode/subtitle tables, oversized audio
+		// tables) only makes that trak unusable; the file fails only when
+		// the caller selects it.
 		tr, err := indexTrak(r, size, ps, pe)
-		if err != nil {
-			return err
-		}
+		tr.err = err
 		idx.tracks = append(idx.tracks, tr)
 		return nil
 	})
@@ -217,6 +250,12 @@ func indexTrak(r io.ReaderAt, size, start, end int64) (trackIndex, error) {
 					return err
 				}
 				tr.parseStsd(b)
+			case "stts", "stsc":
+				if deferTablesFor(tr.handler) {
+					tr.deferred = append(tr.deferred, deferredTable{typ, s, e})
+					return nil
+				}
+				return tr.st.indexTable(typ, s, e)
 			default:
 				return tr.st.indexTable(typ, s, e)
 			}
@@ -224,9 +263,28 @@ func indexTrak(r io.ReaderAt, size, start, end int64) (trackIndex, error) {
 		})
 	}
 	if err := visit(start, end, 0); err != nil {
-		return trackIndex{}, err
+		return tr, err
+	}
+	if len(tr.deferred) > 0 {
+		tr.once = new(sync.Once)
 	}
 	return tr, nil
+}
+
+// load parses deferred stts/stsc boxes once; concurrent callers share the result.
+func (tr *trackIndex) load() error {
+	if tr.once == nil {
+		return tr.err
+	}
+	tr.once.Do(func() {
+		for _, d := range tr.deferred {
+			if err := tr.st.indexTable(d.typ, d.s, d.e); err != nil {
+				tr.err = err
+				return
+			}
+		}
+	})
+	return tr.err
 }
 
 func (tr *trackIndex) parseMdhd(b []byte) error {
@@ -307,9 +365,6 @@ func (st *sampleTable) indexTable(typ [4]byte, s, e int64) error {
 		st.sampleCount = binary.BigEndian.Uint32(h[8:12])
 		st.stszOff = s + 12
 		st.hasStsz = true
-		if st.sampleCount > maxSamples {
-			return errs.Unsup("mp4 index", "sample count exceeds limit")
-		}
 		if st.defaultSize == 0 && int64(st.sampleCount)*4 > e-st.stszOff {
 			return errs.Unsup("mp4 index", "stsz table truncated")
 		}
@@ -326,9 +381,6 @@ func (st *sampleTable) indexTable(typ [4]byte, s, e int64) error {
 		st.stssCount = binary.BigEndian.Uint32(h[4:8])
 		st.stssOff = s + 8
 		st.hasStss = true
-		if st.stssCount > maxSamples {
-			return errs.Unsup("mp4 index", "sync sample count exceeds limit")
-		}
 		if int64(st.stssCount)*4 > e-st.stssOff {
 			return errs.Unsup("mp4 index", "stss table truncated")
 		}
@@ -676,6 +728,9 @@ func (st *sampleTable) locate(i int) (int64, int64, error) {
 
 // sampleSizes reads the full stsz table (used only by whole-track iteration).
 func (st *sampleTable) sampleSizes() ([]uint32, error) {
+	if st.sampleCount > maxSamples {
+		return nil, errs.Unsup("sample table", "sample count exceeds limit")
+	}
 	out := make([]uint32, st.sampleCount)
 	if st.defaultSize != 0 {
 		for i := range out {
@@ -693,15 +748,21 @@ func (st *sampleTable) sampleSizes() ([]uint32, error) {
 	return out, nil
 }
 
-// track returns track i or an unsupported error.
+// track returns track i, or an unsupported error when it is out of range or
+// failed to index.
 func (m *movieIndex) track(i int) (*trackIndex, error) {
 	if i < 0 || i >= len(m.tracks) {
 		return nil, errs.Unsup("sample table", "track index out of range")
+	}
+	if err := m.tracks[i].load(); err != nil {
+		return nil, err
 	}
 	return &m.tracks[i], nil
 }
 
 // firstAVC returns the first avc1/encv track (mp4.Probe CodecAVC1 parity).
+// A trak that failed to index is still returned when its sample entry was
+// read, so track() then reports it as unsupported.
 func (m *movieIndex) firstAVC() (int, bool) {
 	for i := range m.tracks {
 		if t := string(m.tracks[i].entry[:]); t == "avc1" || t == "encv" {

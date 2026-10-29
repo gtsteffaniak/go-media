@@ -84,7 +84,11 @@ func TestDeepTrakNestingUnsupported(t *testing.T) {
 	// A valid trak needs mdia > minf > stbl. Six nested mdia boxes exceed
 	// maxTrakContainerDepth and must be rejected instead of recursing further.
 	data := synthBox("moov", synthBox("trak", nestedMdia(6)))
-	if _, err := openMovieIndex(bytes.NewReader(data), int64(len(data))); err == nil {
+	idx, err := openMovieIndex(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := idx.track(0); err == nil {
 		t.Fatal("expected error for deeply nested trak")
 	}
 }
@@ -95,8 +99,20 @@ func TestSampleCountOverLimitUnsupported(t *testing.T) {
 	stsz := synthBox("stsz", u32s(0, 1, maxSamples+1))
 	stbl := synthBox("stbl", stsz)
 	data := synthBox("moov", synthBox("trak", synthBox("mdia", synthBox("minf", stbl))))
-	if _, err := openMovieIndex(bytes.NewReader(data), int64(len(data))); err == nil {
+	idx, err := openMovieIndex(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := idx.track(0); err == nil {
 		t.Fatal("expected error for stsz sample count over limit")
+	}
+	// The cap itself applies where per-sample slices are built.
+	st := sampleTable{sampleCount: maxSamples + 1, defaultSize: 1, hasStsz: true}
+	if _, err := st.sampleSizes(); err == nil {
+		t.Fatal("expected sampleSizes to reject count over limit")
+	}
+	if _, err := st.syncNumbers(); err == nil {
+		t.Fatal("expected syncNumbers to reject count over limit")
 	}
 }
 
