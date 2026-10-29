@@ -5,13 +5,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/at-wat/ebml-go/mkvcore"
 	"github.com/gtsteffaniak/go-media/internal/errs"
-	"github.com/gtsteffaniak/go-media/internal/ioat"
 	"github.com/gtsteffaniak/go-media/internal/subtitle"
 )
 
-// ExtractSubtitleWebVTT supports media inspection.
+// ExtractSubtitleWebVTT converts the Matroska subtitle track at streamIndex to
+// WebVTT. Blocks are read synchronously by the bounded cluster walker; blocks
+// for other or undeclared tracks are skipped.
 func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, error) {
 	head, err := readHead(r, size)
 	if err != nil {
@@ -24,42 +24,50 @@ func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, 
 	if te.TrackType != 17 {
 		return "", errs.Unsup("subtitle", "not a subtitle track")
 	}
-	reader := io.NewSectionReader(ioat.New(r, size), 0, size)
-	readers, err := mkvcore.NewSimpleBlockReader(reader)
-	if err != nil {
-		return "", err
-	}
 	var target uint64 = te.TrackNumber
 	if target == 0 {
 		target = uint64(streamIndex + 1)
 	}
-// block is a data type used by this package.
+	ix, err := indexSegment(r, size)
+	if err != nil {
+		return "", err
+	}
+	if ix.firstCluster < 0 {
+		return "", errs.Unsup("subtitle", "no subtitle blocks")
+	}
+	scale := head.Segment.Info.TimecodeScale
+	// block is one subtitle cue: start time in ms and its text.
 	type block struct {
 		ts   int64
 		text string
 	}
 	var blocks []block
-	for _, br := range readers {
-		entry := br.TrackEntry()
-		if entry.TrackNumber != target {
-			br.Close()
+	var total int64
+	w := clusterWalker{r: r, segEnd: ix.segEnd, off: ix.firstCluster}
+	for {
+		bi, err := w.next()
+		if err != nil {
+			// io.EOF or a corrupt tail: keep the cues read so far.
+			break
+		}
+		if bi.track != target || bi.payloadLen <= 0 {
 			continue
 		}
-		for {
-			b, _, ts, err := br.Read()
-			if err == io.EOF {
-				break
+		frames, err := readFrames(r, bi)
+		if err != nil {
+			break
+		}
+		for _, fb := range frames {
+			total += int64(len(fb))
+			if total > maxCollectBytes {
+				return "", errs.Unsup("subtitle", "subtitle track too large")
 			}
-			if err != nil {
-				break
-			}
-			text := strings.TrimSpace(string(b))
+			text := strings.TrimSpace(string(fb))
 			if text == "" {
 				continue
 			}
-			blocks = append(blocks, block{ts: ts, text: text})
+			blocks = append(blocks, block{ts: timecodeTicksToMs(bi.timecode, scaleOrDefault(scale)), text: text})
 		}
-		br.Close()
 	}
 	if len(blocks) == 0 {
 		return "", errs.Unsup("subtitle", "no subtitle blocks")
@@ -87,6 +95,14 @@ func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, 
 		}
 	}
 	return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
+}
+
+// scaleOrDefault applies the 1 ms Matroska default to an unset TimecodeScale.
+func scaleOrDefault(s uint64) uint64 {
+	if s == 0 {
+		return 1_000_000
+	}
+	return s
 }
 
 // msToVTT formats milliseconds as a WebVTT timestamp.

@@ -14,6 +14,10 @@ func MJPEGFrame(r io.ReaderAt, size int64, seekPercent float64) ([]byte, bool) {
 	}
 	videoTrack := -1
 	for i := range idx.tracks {
+		if idx.tracks[i].err != nil {
+			// Skip traks that failed to index (e.g. corrupt timecode tracks).
+			continue
+		}
 		switch string(idx.tracks[i].entry[:]) {
 		case "avc1", "encv":
 			return nil, false

@@ -5,6 +5,7 @@ package matroska
 import (
 	"bytes"
 	"io"
+	"math/bits"
 	"time"
 
 	"github.com/at-wat/ebml-go"
@@ -295,12 +296,10 @@ func readElementHeader(r io.ReaderAt, off, limit int64) (id uint32, hdrLen, data
 // vintLength returns the byte length of an EBML variable-length integer from its
 // first byte, or 0 when the byte is invalid.
 func vintLength(b byte) int {
-	for i := 1; i <= 8; i++ {
-		if b&(0x80>>(i-1)) != 0 {
-			return i
-		}
+	if b == 0 {
+		return 0
 	}
-	return 0
+	return bits.LeadingZeros8(b) + 1
 }
 
 // Header is the bounded view of a Matroska file used for thumbnail decisions.

@@ -79,6 +79,9 @@ func openSampleTable(r io.ReaderAt, size int64, trackIndex int) (*sampleTable, e
 
 // syncNumbers reads stss, or returns 1..N when stss is absent.
 func (st *sampleTable) syncNumbers() ([]uint32, error) {
+	if st.sampleCount > maxSamples || st.stssCount > maxSamples {
+		return nil, errs.Unsup("sample table", "sample count exceeds limit")
+	}
 	if !st.hasStss {
 		out := make([]uint32, st.sampleCount)
 		for i := range out {
