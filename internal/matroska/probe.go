@@ -57,6 +57,7 @@ type trackEntry struct {
 	Audio *struct {
 		SamplingFrequency float64 `ebml:"SamplingFrequency"`
 		Channels          uint64  `ebml:"Channels"`
+		BitDepth          uint64  `ebml:"BitDepth"`
 	} `ebml:"Audio"`
 }
 
@@ -101,7 +102,11 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 				s.SampleRate = int(t.Audio.SamplingFrequency)
 				s.Channels = int(t.Audio.Channels)
 			}
-			s.Codec = normalizeCodec(t.CodecID)
+			bitDepth := 0
+			if t.Audio != nil && t.Audio.BitDepth <= 64 {
+				bitDepth = int(t.Audio.BitDepth)
+			}
+			s.Codec = detect.MatroskaAudioCodecName(t.CodecID, bitDepth)
 		case 17:
 			s.Type = detect.StreamSubtitle
 			s.Codec = normalizeCodec(t.CodecID)
@@ -355,20 +360,7 @@ func (h *Header) durationMs() int64 {
 	return ms
 }
 
-// normalizeCodec maps Matroska CodecID values to short names.
+// normalizeCodec maps Matroska CodecID values to ffprobe-style codec names.
 func normalizeCodec(id string) string {
-	switch id {
-	case "V_VP8":
-		return "vp8"
-	case "V_VP9":
-		return "vp9"
-	case "V_MPEG4/ISO/AVC":
-		return "h264"
-	case "A_VORBIS":
-		return "vorbis"
-	case "A_OPUS":
-		return "opus"
-	default:
-		return id
-	}
+	return detect.MatroskaCodecName(id)
 }

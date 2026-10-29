@@ -33,6 +33,7 @@ func mapStreams(in []detect.Stream) []Stream {
 			Codec:      s.Codec,
 			Width:      s.Width,
 			Height:     s.Height,
+			Rotation:   s.Rotation,
 			FrameRate:  s.FrameRate,
 			SampleRate: s.SampleRate,
 			Channels:   s.Channels,

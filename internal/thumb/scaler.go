@@ -2,6 +2,7 @@ package thumb
 
 import (
 	"image"
+	"math"
 )
 
 // ScalerMode selects the downscale algorithm.
@@ -118,19 +119,16 @@ func fitThumbSize(w, h, maxW, maxH int) (int, int) {
 	if sh < s {
 		s = sh
 	}
-	tw := int(float64(w) * s)
-	th := int(float64(h) * s)
+	// Round to nearest, as ffmpeg's force_original_aspect_ratio=decrease does
+	// (1698x828 into 256 wide gives 125 high, not 124). Still-image outputs
+	// do not need even dimensions.
+	tw := int(math.Round(float64(w) * s))
+	th := int(math.Round(float64(h) * s))
 	if tw < 1 {
 		tw = 1
 	}
 	if th < 1 {
 		th = 1
-	}
-	if tw%2 != 0 {
-		tw++
-	}
-	if th%2 != 0 {
-		th++
 	}
 	return tw, th
 }

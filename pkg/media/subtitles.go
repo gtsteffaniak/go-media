@@ -105,11 +105,34 @@ func ExternalSubtitleTracks(videoPath string, siblingNames []string) []SubtitleT
 		if fileBase != videoStem && fileBase2 != videoStem {
 			continue
 		}
+		// "video.en.srt" carries a 2 or 3 letter language suffix.
+		language := ""
+		// Only a suffix added after the video stem counts, and it must be letters.
+		if fileBase2 == videoStem {
+			if l := strings.TrimPrefix(langExt, "."); (len(l) == 2 || len(l) == 3) && isASCIILetters(l) {
+				language = l
+			}
+		}
 		out = append(out, SubtitleTrack{
 			Name:     name,
+			Language: language,
 			Embedded: false,
 			Codec:    strings.TrimPrefix(low, "."),
 		})
 	}
 	return out
+}
+
+// isASCIILetters reports whether s is non-empty and only ASCII letters.
+func isASCIILetters(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i] | 0x20
+		if c < 'a' || c > 'z' {
+			return false
+		}
+	}
+	return true
 }

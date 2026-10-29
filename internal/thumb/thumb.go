@@ -73,6 +73,12 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 
 	switch fmtID {
 	case format.MP4:
+		// Rotated sources (phone portrait video) need the display matrix applied.
+		// The decoder does not rotate frames, so report unsupported and let the
+		// caller fall back to ffmpeg, which autorotates.
+		if rot, ok := isobmff.VideoRotation(r, size); ok && rot != 0 {
+			return nil, "", errs.Unsup("thumbnail", "mp4 display rotation not applied by go-media")
+		}
 		if b, ok := isobmff.MJPEGFrame(r, size, opt.SeekPercent); ok {
 			img, err := decodeBytes(b, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
 			if err != nil {

@@ -20,6 +20,7 @@ type FFProbeFormat struct {
 // FFProbeStream is a simplified stream entry from ffprobe JSON.
 type FFProbeStream struct {
 	Index        int
+	Tags         map[string]string
 	CodecType    string
 	CodecName    string
 	Width        int
@@ -43,8 +44,8 @@ func probeFFprobe(path string) (FFProbeResult, error) {
 	}
 	out, err := exec.Command(ffprobe,
 		"-v", "error",
-		"-show_entries", "format=format_name,duration:stream=index,codec_type,codec_name,width,height,sample_rate,channels:stream_disposition=attached_pic",
-		"-show_entries", "format_tags=title,artist,album,date,genre",
+		// All format and stream tags are needed for the metadata, lyrics and subtitle diff gate.
+		"-show_entries", "format=format_name,duration:format_tags:stream=index,codec_type,codec_name,width,height,sample_rate,channels:stream_tags:stream_disposition=attached_pic",
 		"-of", "json",
 		path,
 	).Output()
@@ -58,8 +59,9 @@ func probeFFprobe(path string) (FFProbeResult, error) {
 			Tags       map[string]string `json:"tags"`
 		} `json:"format"`
 		Streams []struct {
-			Index      int    `json:"index"`
-			CodecType  string `json:"codec_type"`
+			Index      int               `json:"index"`
+			Tags       map[string]string `json:"tags"`
+			CodecType  string            `json:"codec_type"`
 			CodecName  string `json:"codec_name"`
 			Width      int    `json:"width"`
 			Height     int    `json:"height"`
@@ -81,9 +83,21 @@ func probeFFprobe(path string) (FFProbeResult, error) {
 			Tags:       raw.Format.Tags,
 		},
 	}
+	// Containers such as Ogg store Vorbis comments on the stream, so merge the
+	// first value found for each key. Format tags win.
+	for _, s := range raw.Streams {
+		for k, v := range s.Tags {
+			if _, ok := res.Format.Tags[k]; !ok {
+				if res.Format.Tags == nil {
+					res.Format.Tags = map[string]string{}
+				}
+				res.Format.Tags[k] = v
+			}
+		}
+	}
 	for _, s := range raw.Streams {
 		res.Streams = append(res.Streams, FFProbeStream{
-			Index: s.Index, CodecType: s.CodecType, CodecName: s.CodecName,
+			Index: s.Index, Tags: s.Tags, CodecType: s.CodecType, CodecName: s.CodecName,
 			Width: s.Width, Height: s.Height, SampleRate: s.SampleRate, Channels: s.Channels,
 			AttachedPic: s.Disposition.AttachedPic,
 		})

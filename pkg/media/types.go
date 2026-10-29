@@ -21,18 +21,21 @@ const (
 type StreamType string
 
 const (
-	StreamAudio StreamType = "audio"
-	StreamVideo StreamType = "video"
+	StreamAudio    StreamType = "audio"
+	StreamVideo    StreamType = "video"
 	StreamSubtitle StreamType = "subtitle"
 )
 
 // Stream describes one elementary stream.
 type Stream struct {
-	Index      int
-	Type       StreamType
-	Codec      string
-	Width      int
-	Height     int
+	Index  int
+	Type   StreamType
+	Codec  string
+	Width  int
+	Height int
+	// Rotation is the display rotation in degrees (ffprobe sign convention).
+	// Width and Height are coded dimensions; apply Rotation for display.
+	Rotation   int
 	FrameRate  float64
 	SampleRate int
 	Channels   int
@@ -55,14 +58,14 @@ type Tags struct {
 
 // ProbeInfo is the result of Probe.
 type ProbeInfo struct {
-	Format       Format
-	FormatName   string
-	Duration     time.Duration
-	DurationSrc  Source
-	Streams      []Stream
-	Tags         Tags
-	HasLyrics    bool
-	HasArtwork   bool
+	Format         Format
+	FormatName     string
+	Duration       time.Duration
+	DurationSrc    Source
+	Streams        []Stream
+	Tags           Tags
+	HasLyrics      bool
+	HasArtwork     bool
 	SubtitleTracks []SubtitleTrack
 }
 

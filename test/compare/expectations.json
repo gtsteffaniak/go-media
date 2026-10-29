@@ -595,7 +595,7 @@
     {
       "assetId": "wav_pcm",
       "check": "tags",
-      "expect": "typed_unsupported"
+      "expect": "skipped"
     },
     {
       "assetId": "wav_pcm",
