@@ -30,24 +30,16 @@ type ThumbnailParams struct {
 }
 
 // VP8PictureAtSeek demuxes and decodes the VP8 frame at seekPercent without RGB conversion.
-func VP8PictureAtSeek(r io.ReaderAt, size int64, seekPercent float64) (*gvp8.Picture, bool) {
-	head, err := readHead(r, size)
-	if err != nil || head.Segment.Info.Duration <= 0 {
+// h must come from ProbeHeader on the same reader.
+func VP8PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64) (*gvp8.Picture, bool) {
+	if h == nil || !h.HasDuration() {
 		return nil, false
-	}
-	scale := head.Segment.Info.TimecodeScale
-	if scale == 0 {
-		scale = 1_000_000
-	}
-	durationMs := int64(head.Segment.Info.Duration * float64(scale) / 1e6)
-	if durationMs <= 0 {
-		durationMs = 1
 	}
 	if seekPercent <= 0 {
 		seekPercent = 10
 	}
-	targetMs := int64(float64(durationMs) * seekPercent / 100.0)
-	frames, err := collectVP8FramesForSeek(r, size, targetMs)
+	targetMs := int64(float64(h.durationMs()) * seekPercent / 100.0)
+	frames, err := collectVP8FramesForSeek(r, size, h.timecodeScale(), targetMs)
 	if err != nil || len(frames) == 0 {
 		return nil, false
 	}
@@ -58,15 +50,7 @@ func VP8PictureAtSeek(r io.ReaderAt, size int64, seekPercent float64) (*gvp8.Pic
 	return pic, true
 }
 
-func collectVP8FramesForSeek(r io.ReaderAt, size int64, targetMs int64) ([]videoFrame, error) {
-	head, err := readHead(r, size)
-	if err != nil {
-		return nil, err
-	}
-	scale := head.Segment.Info.TimecodeScale
-	if scale == 0 {
-		scale = 1_000_000
-	}
+func collectVP8FramesForSeek(r io.ReaderAt, size int64, scale uint64, targetMs int64) ([]videoFrame, error) {
 	reader := io.NewSectionReader(ioat.New(r, size), 0, size)
 	var demuxFatal error
 	var demuxMu sync.Mutex
@@ -119,24 +103,17 @@ func collectVP8FramesForSeek(r io.ReaderAt, size int64, targetMs int64) ([]video
 
 // ThumbnailRGBA seeks to seekPercent of the file timeline and decodes a VP8 or MJPEG frame.
 // H.264 and other codecs return (nil, false).
-func ThumbnailRGBA(r io.ReaderAt, size int64, p ThumbnailParams) (*image.RGBA, bool) {
-	seekPercent := p.SeekPercent
-	head, err := readHead(r, size)
-	if err != nil || head.Segment.Info.Duration <= 0 {
+// h must come from ProbeHeader on the same reader.
+func ThumbnailRGBA(r io.ReaderAt, size int64, h *Header, p ThumbnailParams) (*image.RGBA, bool) {
+	if h == nil || !h.HasDuration() {
 		return nil, false
 	}
-	scale := head.Segment.Info.TimecodeScale
-	if scale == 0 {
-		scale = 1_000_000
-	}
-	durationMs := int64(head.Segment.Info.Duration * float64(scale) / 1e6)
-	if durationMs <= 0 {
-		durationMs = 1
-	}
+	scale := h.timecodeScale()
+	seekPercent := p.SeekPercent
 	if seekPercent <= 0 {
 		seekPercent = 10
 	}
-	targetMs := int64(float64(durationMs) * seekPercent / 100.0)
+	targetMs := int64(float64(h.durationMs()) * seekPercent / 100.0)
 
 	reader := io.NewSectionReader(ioat.New(r, size), 0, size)
 	var demuxFatal error

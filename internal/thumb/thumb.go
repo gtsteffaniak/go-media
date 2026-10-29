@@ -93,18 +93,29 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 			return yimg, "decode", nil
 		}
 	case format.MKV, format.WebM:
-		// Codec gate: decide from the bounded track header before any demux pass.
-		// Demuxing a multi-GB file only to find no VP8/MJPEG track costs several
-		// full-file reads.
-		if ids, err := matroska.VideoCodecIDs(r, size); err == nil && !hasThumbCodec(ids) {
-			if slices.Contains(ids, "V_MPEG4/ISO/AVC") {
+		// Probe the bounded header once and decide from it before any demux pass.
+		// Demuxing a multi-GB file only to find no usable track costs several
+		// full-file reads. The header is passed down so the decoders do not re-read it.
+		hdr, err := matroska.ProbeHeader(r, size)
+		if err != nil {
+			return nil, "", errs.Unsup("thumbnail", "matroska header unreadable")
+		}
+		if len(hdr.VideoCodecIDs) == 0 {
+			return nil, "", errs.Unsup("thumbnail", "matroska: no video track in bounded header (unknown-size cluster, truncated, or no Segment)")
+		}
+		if !hasThumbCodec(hdr.VideoCodecIDs) {
+			if slices.Contains(hdr.VideoCodecIDs, "V_MPEG4/ISO/AVC") {
 				return nil, "", errs.UnsupProfile("thumbnail", "h264 in matroska")
 			}
-			return nil, "", errs.Unsup("thumbnail", "matroska video codec "+strings.Join(ids, ","))
+			return nil, "", errs.Unsup("thumbnail", "matroska video codec "+strings.Join(hdr.VideoCodecIDs, ","))
+		}
+		// VP8 and MJPEG seeking both map a percentage to time, so they need a Duration.
+		if !hdr.HasDuration() {
+			return nil, "", errs.Unsup("thumbnail", "matroska: no duration, seek impossible")
 		}
 		jpegOut := opt.Format == "" || opt.Format == "jpeg"
 		if jpegOut {
-			if pic, ok := matroska.VP8PictureAtSeek(r, size, opt.SeekPercent); ok {
+			if pic, ok := matroska.VP8PictureAtSeek(r, size, hdr, opt.SeekPercent); ok {
 				if ycc := vp8decode.PictureYCbCr(pic); ycc != nil {
 					return ycc, "decode", nil
 				}
@@ -116,10 +127,11 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 			MaxHeight:   opt.MaxHeight,
 			Scaler:      int(scalerFromOptions(opt)),
 		}
-		if img, ok := matroska.ThumbnailRGBA(r, size, tp); ok {
+		if img, ok := matroska.ThumbnailRGBA(r, size, hdr, tp); ok {
 			return img, "decode", nil
 		}
-		if matroska.HasH264Video(r, size) {
+		// H.264 is decided from the IDs already parsed; no extra header read.
+		if slices.Contains(hdr.VideoCodecIDs, "V_MPEG4/ISO/AVC") {
 			return nil, "", errs.UnsupProfile("thumbnail", "h264 in matroska")
 		}
 	case format.MP3, format.FLAC, format.OGG:

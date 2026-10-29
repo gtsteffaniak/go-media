@@ -31,12 +31,13 @@ type segmentHead struct {
 	}
 }
 
-// infoElement and tracksElement decode one Segment child each, so readHead can
-// unmarshal Info and Tracks separately without walking the rest of the Segment.
+// infoElement decodes a single Segment Info element, so readHead can unmarshal
+// it without walking the rest of the Segment.
 type infoElement struct {
 	Info segmentInfo `ebml:"Info"`
 }
 
+// tracksElement decodes a single Segment Tracks element.
 type tracksElement struct {
 	Tracks segmentTracks `ebml:"Tracks"`
 }
@@ -122,8 +123,9 @@ const (
 	idCluster    = 0x1F43B675
 
 	// maxHeaderElement bounds how much of Info or Tracks is read. Real headers
-	// are a few KB; the cap stops a corrupt size from allocating gigabytes.
-	maxHeaderElement = 16 << 20
+	// are a few KB, and CodecPrivate fits well inside 1 MiB. The cap stops a
+	// corrupt size from forcing a large allocation and read before it fails.
+	maxHeaderElement = 1 << 20
 )
 
 // readHead returns the Segment Info and Tracks headers.
@@ -219,7 +221,12 @@ func decodeElement(r io.ReaderAt, off, end int64, v any) error {
 		return errs.Corrupt
 	}
 	buf := make([]byte, n)
-	if _, err := r.ReadAt(buf, off); err != nil && !(err == io.EOF && int64(len(buf)) == n) {
+	// io.ReaderAt may return io.EOF together with a full read, so the byte
+	// count decides. A short read is an error even when err is nil.
+	if m, err := r.ReadAt(buf, off); int64(m) != n {
+		if err == nil {
+			err = io.ErrUnexpectedEOF
+		}
 		return err
 	}
 	if err := ebml.Unmarshal(bytes.NewReader(buf), v); err != nil && err != ebml.ErrReadStopped {
@@ -232,37 +239,40 @@ func decodeElement(r io.ReaderAt, off, end int64, v any) error {
 // header length and the data size, or -1 for an unknown size. The read stays
 // inside limit.
 func readElementHeader(r io.ReaderAt, off, limit int64) (id uint32, hdrLen, dataSize int64, err error) {
-	var first [1]byte
-	if _, err = r.ReadAt(first[:], off); err != nil {
-		return 0, 0, 0, err
+	avail := limit - off
+	if avail < 2 {
+		return 0, 0, 0, errs.Corrupt
 	}
-	idLen := vintLength(first[0])
+	// One read covers the longest ID (4 bytes) plus the longest size (8 bytes).
+	// The buffer lives on the stack, so a header costs one ReadAt and no allocations.
+	var hdr [12]byte
+	m, rerr := r.ReadAt(hdr[:min(int64(len(hdr)), avail)], off)
+	buf := hdr[:m]
+	if len(buf) == 0 {
+		if rerr == nil {
+			rerr = io.ErrUnexpectedEOF
+		}
+		return 0, 0, 0, rerr
+	}
+	idLen := vintLength(buf[0])
 	if idLen == 0 || idLen > 4 {
 		return 0, 0, 0, errs.Corrupt
 	}
-	idBuf := make([]byte, idLen)
-	if _, err = r.ReadAt(idBuf, off); err != nil {
-		return 0, 0, 0, err
+	if len(buf) < idLen+1 {
+		return 0, 0, 0, io.ErrUnexpectedEOF
 	}
-	for _, b := range idBuf {
+	for _, b := range buf[:idLen] {
 		id = id<<8 | uint32(b)
 	}
 
-	sizePos := off + int64(idLen)
-	if sizePos >= limit {
-		return 0, 0, 0, errs.Corrupt
-	}
-	if _, err = r.ReadAt(first[:], sizePos); err != nil {
-		return 0, 0, 0, err
-	}
-	sizeLen := vintLength(first[0])
+	sizeLen := vintLength(buf[idLen])
 	if sizeLen == 0 || sizeLen > 8 {
 		return 0, 0, 0, errs.Corrupt
 	}
-	sizeBuf := make([]byte, sizeLen)
-	if _, err = r.ReadAt(sizeBuf, sizePos); err != nil {
-		return 0, 0, 0, err
+	if len(buf) < idLen+sizeLen {
+		return 0, 0, 0, io.ErrUnexpectedEOF
 	}
+	sizeBuf := buf[idLen : idLen+sizeLen]
 	val := uint64(sizeBuf[0]) & (0xFF >> sizeLen)
 	allOnes := val == uint64(0xFF>>sizeLen)
 	for _, b := range sizeBuf[1:] {
@@ -273,7 +283,10 @@ func readElementHeader(r io.ReaderAt, off, limit int64) (id uint32, hdrLen, data
 	if allOnes {
 		return id, hdrLen, -1, nil
 	}
-	if val > uint64(limit) {
+	// The data must fit in the bytes left after this header, not just in the
+	// absolute limit. Callers then never see a silently clamped element.
+	remain := avail - hdrLen
+	if val > uint64(remain) {
 		return 0, 0, 0, errs.Corrupt
 	}
 	return id, hdrLen, int64(val), nil
@@ -290,34 +303,57 @@ func vintLength(b byte) int {
 	return 0
 }
 
-// VideoCodecIDs returns the Matroska CodecID of every video track, read from the
-// bounded header only.
-func VideoCodecIDs(r io.ReaderAt, size int64) ([]string, error) {
+// Header is the bounded view of a Matroska file used for thumbnail decisions.
+// ProbeHeader fills it with one header read, so callers can pass it down
+// instead of walking the headers again for each decision.
+type Header struct {
+	// VideoCodecIDs holds the CodecID of every video track, in track order.
+	VideoCodecIDs []string
+	// Duration is the raw Segment Info Duration in timecode units, or 0 when absent.
+	Duration float64
+	// TimecodeScale is nanoseconds per timecode unit; 0 means the 1 ms default.
+	TimecodeScale uint64
+}
+
+// ProbeHeader reads the bounded Segment header once and returns its video
+// tracks, duration, and timecode scale. It does not read cluster data.
+func ProbeHeader(r io.ReaderAt, size int64) (*Header, error) {
 	head, err := readHead(r, size)
 	if err != nil {
 		return nil, err
 	}
-	var ids []string
+	h := &Header{
+		Duration:      head.Segment.Info.Duration,
+		TimecodeScale: head.Segment.Info.TimecodeScale,
+	}
 	for _, t := range head.Segment.Tracks.TrackEntry {
 		if t.TrackType == 1 {
-			ids = append(ids, t.CodecID)
+			h.VideoCodecIDs = append(h.VideoCodecIDs, t.CodecID)
 		}
 	}
-	return ids, nil
+	return h, nil
 }
 
-// HasH264Video reports whether the file has an H.264 video track (thumbnail unsupported).
-func HasH264Video(r io.ReaderAt, size int64) bool {
-	head, err := readHead(r, size)
-	if err != nil {
-		return false
+// HasDuration reports whether seek percentages can be mapped to time.
+func (h *Header) HasDuration() bool {
+	return h.Duration > 0
+}
+
+// timecodeScale returns TimecodeScale, applying the 1 ms default when it is unset.
+func (h *Header) timecodeScale() uint64 {
+	if h.TimecodeScale == 0 {
+		return 1_000_000
 	}
-	for _, t := range head.Segment.Tracks.TrackEntry {
-		if t.TrackType == 1 && t.CodecID == "V_MPEG4/ISO/AVC" {
-			return true
-		}
+	return h.TimecodeScale
+}
+
+// durationMs returns the file length in milliseconds, at least 1.
+func (h *Header) durationMs() int64 {
+	ms := int64(h.Duration * float64(h.timecodeScale()) / 1e6)
+	if ms <= 0 {
+		return 1
 	}
-	return false
+	return ms
 }
 
 // normalizeCodec maps Matroska CodecID values to short names.

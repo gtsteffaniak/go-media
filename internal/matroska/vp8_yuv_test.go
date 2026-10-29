@@ -41,7 +41,11 @@ func TestVP8YPlaneMatchesFFmpeg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pic, ok := VP8PictureAtSeek(f, st.Size(), 10)
+	hdr, err := ProbeHeader(f, st.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pic, ok := VP8PictureAtSeek(f, st.Size(), hdr, 10)
 	if !ok || pic == nil {
 		t.Fatal("vp8 picture")
 	}
