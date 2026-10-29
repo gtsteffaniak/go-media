@@ -19,6 +19,8 @@ type Decoder struct {
 	SkipDeblock bool
 	pic         *decode.Frame // reused coded buffer when resolution unchanged
 	rbspScratch []byte        // grown per NAL for zero-alloc EBSP→RBSP
+	mbCovered   []bool        // per-MB coverage of the picture being decoded
+	mbCount     int           // number of true entries in mbCovered
 }
 
 // New creates a decoder with empty parameter-set maps.
@@ -32,12 +34,22 @@ func New() *Decoder {
 // ErrNoPicture means no decodable picture was found.
 var ErrNoPicture = errors.New("h264 cleanroom: no decodable picture")
 
+// ErrIncompletePicture means the slices of the IDR picture did not cover every
+// macroblock, so the picture would contain undecoded (stale or blank) samples.
+var ErrIncompletePicture = errors.New("h264 cleanroom: picture is missing macroblocks")
+
 // DecodeIDRAVC decodes the first IDR picture from AVC length-prefixed NALs.
+// A picture is returned only when every macroblock was decoded; on any error
+// (including a recovered panic) the pooled picture buffer is dropped so stale
+// samples can never surface in a later decode.
 func (d *Decoder) DecodeIDRAVC(data []byte) (frames []*decode.Frame, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			frames = nil
 			err = fmt.Errorf("h264 cleanroom: internal error: %v", p)
+		}
+		if err != nil {
+			d.pic = nil
 		}
 	}()
 	nalus, err := extractAVCNalus(data)
@@ -89,12 +101,29 @@ func (d *Decoder) decodeNALUs(nalus [][]byte, idrOnly bool) (*decode.Frame, erro
 			}
 			fr, hdr, err := d.decodeSliceUnit(u, frame, lastHdr)
 			if err != nil {
-				return frame, err
+				return nil, err
 			}
 			frame, lastHdr = fr, hdr
 		}
 	}
+	if frame != nil && d.mbCount != frame.MbWidth*frame.MbHeight {
+		return nil, fmt.Errorf("%w: decoded %d of %d", ErrIncompletePicture, d.mbCount, frame.MbWidth*frame.MbHeight)
+	}
 	return frame, nil
+}
+
+// markCovered records macroblocks [first, first+n) as decoded for the current picture.
+func (d *Decoder) markCovered(first uint32, n int) {
+	end := int(first) + n
+	if end > len(d.mbCovered) {
+		end = len(d.mbCovered)
+	}
+	for i := int(first); i < end; i++ {
+		if !d.mbCovered[i] {
+			d.mbCovered[i] = true
+			d.mbCount++
+		}
+	}
 }
 
 func (d *Decoder) decodeSliceUnit(u nal.Unit, frame *decode.Frame, lastHdr *decode.SliceHeader) (*decode.Frame, *decode.SliceHeader, error) {
@@ -115,14 +144,24 @@ func (d *Decoder) decodeSliceUnit(u nal.Unit, frame *decode.Frame, lastHdr *deco
 		if allocErr != nil {
 			return nil, lastHdr, allocErr
 		}
+		total := frame.MbWidth * frame.MbHeight
+		if cap(d.mbCovered) < total {
+			d.mbCovered = make([]bool, total)
+		} else {
+			d.mbCovered = d.mbCovered[:total]
+			clear(d.mbCovered)
+		}
+		d.mbCount = 0
+	} else if !pictureDimsMatch(frame, sps) {
+		return nil, lastHdr, errors.New("h264 cleanroom: slice parameter sets change picture geometry mid-picture")
 	}
 	h, err := decode.DecodeSlice(u.RBSP, u.Type, u.RefIDC, sps, pps, frame, d.SkipDeblock)
 	if err != nil {
-		if lastHdr == nil {
-			return nil, h, err
-		}
-		return frame, lastHdr, nil
+		// Any failing slice invalidates the whole picture: returning a partial
+		// frame would expose undecoded (stale) samples as a success.
+		return nil, h, err
 	}
+	d.markCovered(h.FirstMB, h.DecodedMBs)
 	return frame, h, nil
 }
 
@@ -150,10 +189,19 @@ func (d *Decoder) pictureForSPS(sps *decode.SPS) (*decode.Frame, error) {
 }
 
 // Reset clears per-stream parameter sets so a pooled decoder cannot reuse SPS/PPS
-// from a previous access unit. The coded picture buffer is kept for allocation reuse.
+// from a previous access unit. The coded picture buffer is kept for allocation
+// reuse; this is safe because DecodeIDRAVC only returns a picture after every
+// macroblock has been rewritten and drops the buffer on any error.
 func (d *Decoder) Reset() {
 	clear(d.sps)
 	clear(d.pps)
+	d.mbCount = 0
+}
+
+// DropPicture discards the pooled coded picture buffer so its samples cannot
+// be reused by a later decode.
+func (d *Decoder) DropPicture() {
+	d.pic = nil
 }
 
 func pictureDimsMatch(f *decode.Frame, s *decode.SPS) bool {

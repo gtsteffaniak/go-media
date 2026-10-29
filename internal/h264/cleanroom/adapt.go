@@ -8,6 +8,9 @@ import (
 // ToFrame converts a clean-room picture to the shared frame buffer type.
 // When dec is non-nil and src is dec's pooled picture with no crop offset,
 // plane memory is transferred to the returned frame (zero-copy) and dec.pic is cleared.
+// Cropped pictures are copied and dec keeps its buffer for reuse; that is safe
+// because DecodeIDRAVC rewrites every macroblock before returning a picture and
+// drops the buffer on any decode error.
 func ToFrame(dec *Decoder, src *decode.Frame) *frame.Frame {
 	if src == nil {
 		return nil

@@ -50,6 +50,7 @@ func (sd *sliceDecoder) runCabac() error {
 			return err
 		}
 		sd.mbDecoded[addr] = true
+		sd.decodedMBs++
 		if sd.cb.decodeTerminate() == 1 { // end_of_slice_flag
 			break
 		}

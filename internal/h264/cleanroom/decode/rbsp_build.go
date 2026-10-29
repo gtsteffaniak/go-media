@@ -150,6 +150,38 @@ func BuildIPCMSliceRBSP(sps *SPS, ppsID uint32) []byte {
 	return w.bytes()
 }
 
+// BuildIPCMSliceRBSPRange builds an IDR I-slice RBSP starting at firstMB with
+// numMBs I_PCM macroblocks whose samples are all fill. When corrupt is true the
+// slice data instead holds an invalid mb_type so DecodeSlice fails. qpDelta is
+// written as slice_qp_delta. It is intended for tests and fuzz seeds.
+func BuildIPCMSliceRBSPRange(sps *SPS, ppsID, firstMB uint32, numMBs int, fill byte, corrupt bool, qpDelta int32) []byte {
+	w := &bitWriter{}
+	w.ue(firstMB)
+	w.ue(uint32(SliceI))
+	w.ue(ppsID)
+	w.u(sps.Log2MaxFrameNum, 0)
+	w.ue(0)
+	w.u(sps.Log2MaxPocLsb, 0)
+	w.flag(false)
+	w.flag(false)
+	w.se(qpDelta)
+	if corrupt {
+		w.ue(200) // invalid I-slice mb_type
+		w.u(8, 0x80)
+		return w.bytes()
+	}
+	for m := 0; m < numMBs; m++ {
+		w.ue(25)
+		w.align()
+		for i := 0; i < 384; i++ {
+			w.u(8, uint32(fill))
+		}
+	}
+	w.u(8, 0x80)
+	return w.bytes()
+}
+
+// BaselinePPSRBSP builds a minimal CAVLC (or CABAC) PPS RBSP for tests.
 func BaselinePPSRBSP(ppsID, spsID uint32, cabac bool) []byte {
 	w := &bitWriter{}
 	w.ue(ppsID)

@@ -47,12 +47,13 @@ type sliceDecoder struct {
 	nzLuma     []uint8 // nonzero coefficients per luma 4x4 block
 	nzCb, nzCr []uint8
 	mbDecoded  []bool
+	decodedMBs int    // macroblocks successfully decoded by run
 	recon4     []bool // whether the luma 4x4 block is reconstructed (for intra 4x4)
 	i4mode     []int8 // Intra4x4PredMode per 4x4 block (-1 = not 4x4)
 	mbQP       []int  // QP_Y of each MB (for deblocking; I_PCM → 0)
 
-	cb                 *cabacEngine
-	cabacScratch       cabacEngine
+	cb           *cabacEngine
+	cabacScratch cabacEngine
 
 	// Reused MB / residual scratch (avoid per-MB heap traffic).
 	predLuma     [256]byte
@@ -122,6 +123,7 @@ func (sd *sliceDecoder) run() error {
 			return sd.r.Err()
 		}
 		sd.mbDecoded[addr] = true
+		sd.decodedMBs++
 		addr++
 		if !sd.r.MoreRBSPData() {
 			break

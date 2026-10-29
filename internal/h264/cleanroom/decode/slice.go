@@ -2,6 +2,7 @@ package decode
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/bitstream"
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/nal"
@@ -58,6 +59,10 @@ type SliceHeader struct {
 	DisableDeblock uint32 // disable_deblocking_filter_idc (0/1/2)
 	AlphaC0Offset  int32
 	BetaOffset     int32
+
+	// DecodedMBs is the number of macroblocks DecodeSlice decoded for this
+	// slice (FirstMB .. FirstMB+DecodedMBs-1). It is zero after header-only parsing.
+	DecodedMBs int
 }
 
 // ErrParamSetMismatch means the slice references a PPS/SPS that is not in the context.
@@ -154,6 +159,12 @@ func readSliceHeader(r *bitstream.Reader, nalType nal.Type, nalRefIDC uint8, sps
 
 	sliceQPDelta := r.SE()
 	h.SliceQP = 26 + pps.PicInitQPMinus26 + sliceQPDelta
+	// The decoder reconstructs 8-bit samples only (QpBdOffsetY = 0), so
+	// SliceQPY must lie in [0, 51] (ISO/IEC 14496-10 7.4.3).
+	if r.Err() == nil && (h.SliceQP < minSliceQP || h.SliceQP > maxSliceQP) {
+		return nil, fmt.Errorf("h264 slice: SliceQPY %d (pic_init_qp_minus26=%d slice_qp_delta=%d) out of range [%d, %d]",
+			h.SliceQP, pps.PicInitQPMinus26, sliceQPDelta, minSliceQP, maxSliceQP)
+	}
 
 	if base == SliceSP || base == SliceSI {
 		if base == SliceSP {
