@@ -56,7 +56,7 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 
 | Container / extension | Status | Method / notes |
 |----------------------|:------:|----------------|
-| MP4, M4V, M4A, MOV, 3GP | ✅ | `mvhd` / movie header |
+| MP4, M4V, M4A, MOV, 3GP | ✅ | `mvhd` / movie header; fragmented MP4 (`mvhd` duration 0) uses `mehd`, or the `moof`/`trun` sample durations when `mehd` is absent |
 | MKV, WebM | 🟡 | Matroska `Duration` when present; missing on some streamed WebM |
 | WAV | ✅ | `data` size ÷ byte rate |
 | FLAC | ✅ | `STREAMINFO` total samples ÷ sample rate |
@@ -78,7 +78,7 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 | Extension | Status | Typical fields |
 |-----------|:------:|----------------|
 | `.mp4`, `.m4v`, `.mov`, `.3gp` | ✅ | H.264, MJPEG, … via `stsd` / `tkhd` |
-| `.mkv`, `.webm` | ✅ | Codecs via `Tracks` |
+| `.mkv`, `.webm` | ✅ | Codecs via `Tracks`, named with ffprobe codec names |
 | TS, AVI, FLV, WMV | ❌ | |
 
 ### Audio containers
@@ -88,6 +88,8 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 | `.wav`, `.flac`, `.ogg`, `.mp3`, `.m4a` | ✅ | Sample rate, channels, codec name |
 | `.aiff`, `.au` | 🟡 | |
 | AAC ADTS | ❌ | |
+
+MP4 sample entries (AV1, ProRes, PCM, AC-3, E-AC-3, Opus, FLAC) and MKV codec IDs map to ffprobe codec names. `Stream.Rotation` reports the `tkhd` display rotation in degrees; `Width` and `Height` stay the coded size, as in ffprobe.
 
 ---
 
@@ -102,8 +104,8 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 | ID3v1 / ID3v2 | `.mp3` | ✅ | |
 | MP4 `ilst` | `.m4a`, `.mp4`, `.m4v`, `.mov` | ✅ | |
 | Vorbis comments | `.flac`, `.ogg` | ✅ | |
-| Matroska `Tags` | `.mkv`, `.webm` | 📋 | Partial via tag readers where possible |
-| WAV INFO | `.wav` | 🟡 | Limited |
+| Matroska `Tags` | `.mkv`, `.webm` | 📋 | Not implemented; no MKV/WebM tag fixtures in the compare gate yet |
+| WAV INFO | `.wav` | 🟡 | Limited (gate fixture has no tags, so it is skipped) |
 
 ---
 
@@ -132,8 +134,8 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 
 | Source | Applies to | Status | Notes |
 |--------|------------|:------:|-------|
-| Embedded (ID3 USLT, etc.) | Audio containers | 🟡 | Format-dependent |
-| Sidecar `.lrc` | Any path with sibling `.lrc` | ✅ | |
+| Embedded (ID3 USLT, etc.) | Audio containers | 🟡 | Format-dependent. FLAC lyrics match ffprobe in the gate; ffmpeg-written MP3 `USLT` is not surfaced yet |
+| Sidecar `.lrc` | Any path with sibling `.lrc` | ✅ | Text matches the file in the gate |
 
 ---
 
@@ -149,14 +151,14 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 |-----------|:-------------------------------------:|:-------------------:|:-------------------:|
 | `.mkv` | ✅ extract to WebVTT | — | ❌ |
 | `.webm` | ✅ | — | ❌ |
-| `.mp4`, `.mov` | 🟡 list / partial | 📋 | ❌ |
+| `.mp4`, `.mov` | 🟡 list / partial | ✅ `tx3g` (cue count matches ffmpeg in the gate); 📋 `wvtt` | ❌ |
 
 ### Sidecar (not a container)
 
 | File types | API | Status |
 |------------|-----|:------:|
 | `.srt`, `.vtt`, `.ass` | `SubtitleToWebVTT()` | ✅ parse + convert to WebVTT |
-| Sibling discovery | `ExternalSubtitleTracks()` | ✅ |
+| Sibling discovery | `ExternalSubtitleTracks()` | ✅ Language is taken from a 2- or 3-letter suffix such as `movie.en.srt` |
 
 ---
 
@@ -166,7 +168,7 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 
 **ffmpeg equivalent (compare harness):** `ffmpeg -ss <seek> -i file -frames:v 1 -vf scale=… -q:v … out.jpg` (H.264: keyframe seek + skip loop filter; see [`test/compare/README.md`](../test/compare/README.md))
 
-Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream.
+Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream, including MP4 files with a non-zero display rotation (callers fall back to ffmpeg, which autorotates). Scaled outputs round to the nearest pixel, so their size can differ from the ffmpeg preset by 1 px.
 
 ### By video codec
 
