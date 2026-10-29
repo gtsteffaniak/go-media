@@ -491,9 +491,12 @@ func (st *sampleTable) syncSampleAt(pos int) (int, error) {
 }
 
 // syncPosNearest returns the stss position of the sync sample closest in
-// decode time to sample i, looking at the sync sample before and after it. A
-// tie goes to the earlier one. It requires stss.
-func (st *sampleTable) syncPosNearest(i int) (int, error) {
+// decode time to the requested tick target, looking at the sync sample at or
+// before sample i (the sample whose interval holds target) and the one after
+// it. Comparing against target rather than sample i's start time keeps a seek
+// that lands mid-sample from favouring the earlier keyframe. A tie goes to the
+// earlier one. It requires stss.
+func (st *sampleTable) syncPosNearest(i int, target uint64) (int, error) {
 	pos, err := st.syncPosAtOrBefore(i)
 	if err != nil {
 		return 0, err
@@ -509,7 +512,6 @@ func (st *sampleTable) syncPosNearest(i int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	target := st.sampleTime(i)
 	tp, tn := st.sampleTime(prev), st.sampleTime(next)
 	if tp > target { // i precedes the first sync sample
 		return pos, nil
@@ -548,12 +550,14 @@ const (
 // then moves forward past keyframes whose encoded size is tiny next to their
 // neighbours: those are black, fade, or flat frames that make a useless
 // thumbnail. It reads only table entries, never sample data, so it adds no
-// decode work. Without stss every sample is a sync sample and i is returned.
-func (st *sampleTable) pickThumbnailKeyframe(i int) (int, error) {
+// decode work. target is the requested decode tick and i the sample whose
+// interval holds it. Without stss every sample is a sync sample and i is
+// returned.
+func (st *sampleTable) pickThumbnailKeyframe(i int, target uint64) (int, error) {
 	if !st.hasStss {
 		return i, nil
 	}
-	pos, err := st.syncPosNearest(i)
+	pos, err := st.syncPosNearest(i, target)
 	if err != nil {
 		return 0, err
 	}
@@ -741,10 +745,14 @@ func normalizeSeekPercent(p float64) float64 {
 	return p
 }
 
+// targetTick maps seekPercent of the track duration to a decode tick.
+func (tr *trackIndex) targetTick(seekPercent float64) uint64 {
+	return uint64(float64(tr.durationTicks()) * normalizeSeekPercent(seekPercent) / 100.0)
+}
+
 // targetSample maps seekPercent of the track duration to a sample index.
 func (tr *trackIndex) targetSample(seekPercent float64) int {
-	target := uint64(float64(tr.durationTicks()) * normalizeSeekPercent(seekPercent) / 100.0)
-	return tr.st.sampleAtTime(target)
+	return tr.st.sampleAtTime(tr.targetTick(seekPercent))
 }
 
 // keyframeAt returns the sync sample to decode for a thumbnail at seekPercent
@@ -754,5 +762,6 @@ func (tr *trackIndex) keyframeAt(seekPercent float64) (int, error) {
 	if !tr.st.usable() {
 		return 0, errs.Unsup("mp4 seek", "no usable moov sample tables (fragmented or empty)")
 	}
-	return tr.st.pickThumbnailKeyframe(tr.targetSample(seekPercent))
+	target := tr.targetTick(seekPercent)
+	return tr.st.pickThumbnailKeyframe(tr.st.sampleAtTime(target), target)
 }
