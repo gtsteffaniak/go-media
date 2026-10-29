@@ -95,10 +95,16 @@ func TestSyntheticLayouts(t *testing.T) {
 			}
 			want := target
 			if o.GOP > 0 {
-				want = target - target%o.GOP
+				// Nearest sync sample; a tie goes to the earlier one. All synthetic
+				// samples have the same size, so no keyframe is skipped as empty.
+				prev := target - target%o.GOP
+				want = prev
+				if next := prev + o.GOP; next < o.Samples && next-target < target-prev {
+					want = next
+				}
 			}
 			if got := synthSampleIndex(p); got != want {
-				t.Errorf("%+v pct %v: sample %d, want %d (at-or-before %d)", o, pct, got, want, target)
+				t.Errorf("%+v pct %v: sample %d, want %d (nearest to %d)", o, pct, got, want, target)
 			}
 			sec, ok := H264SyncTimeSec(r, size, track, pct)
 			if !ok || sec != float64(want*synthDelta)/synthTimescale {
