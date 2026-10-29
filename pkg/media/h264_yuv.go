@@ -36,7 +36,10 @@ func H264KeyframeYUV420(r io.ReaderAt, size int64, seekPercent float64, fast boo
 	return out, planes.Width, planes.Height, nil
 }
 
-// H264KeyframeTimeSec returns the presentation time of the selected sync sample.
+// H264KeyframeTimeSec returns the decode time (DTS, in seconds) of the selected
+// sync sample. It ignores ctts offsets, so for streams with B-frames it is not
+// the presentation time. Use it as the ffmpeg -ss value for the sample's decode
+// position, and check the compare gate on any new B-frame sample.
 func H264KeyframeTimeSec(r io.ReaderAt, size int64, seekPercent float64) (float64, error) {
 	track, ok := isobmff.FirstAVCTrackIndex(r, size)
 	if !ok {

@@ -132,8 +132,8 @@ func (st *sampleTable) chunkStart(c uint32) (uint64, error) {
 		return 0, errs.Unsup("sample table", "chunk out of range")
 	}
 	if st.co64 {
-		b := st.buf(8)
-		if _, err := st.r.ReadAt(b, st.chunkOff+8*int64(c)); err != nil {
+		var b [8]byte
+		if !readFullAt(st.r, b[:], st.chunkOff+8*int64(c)) {
 			return 0, errs.Unsup("sample table", "short co64 read")
 		}
 		return uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |

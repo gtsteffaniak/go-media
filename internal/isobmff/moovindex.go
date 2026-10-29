@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"math"
 	"sort"
 
 	"github.com/abema/go-mp4"
@@ -23,6 +24,14 @@ const (
 	maxStsdBytes = 1 << 20
 	// maxChunkSamples caps stsz entries read to locate one sample in a chunk.
 	maxChunkSamples = 1 << 20
+	// maxSamples caps sample and sync-sample counts. Callers such as
+	// sampleSizes and SampleRefs materialize per-sample slices, so a crafted
+	// stsz with a tiny fixed size could otherwise force gigabytes of memory.
+	// 1<<23 is about 39 hours at 60 fps.
+	maxSamples = 1 << 23
+	// maxTrakContainerDepth caps mdia/minf/stbl nesting inside a trak. A valid
+	// trak needs three levels; deeper nesting is rejected to bound recursion.
+	maxTrakContainerDepth = 4
 )
 
 // movieIndex is a lazily-read view of moov: per-track headers plus file
@@ -62,7 +71,14 @@ type sampleTable struct {
 	hasChunks   bool
 	stts        []uint32 // (sample_count, sample_delta) pairs
 	stsc        []uint32 // (first_chunk, samples_per_chunk, desc_index) triples
-	scratch     []byte
+}
+
+// readFullAt reads len(b) bytes at off. Per the io.ReaderAt contract, a read
+// that fills b may still return io.EOF, which is accepted here. It reports
+// whether b was fully filled. Callers must not share buffers across goroutines.
+func readFullAt(r io.ReaderAt, b []byte, off int64) bool {
+	n, err := r.ReadAt(b, off)
+	return n == len(b) && (err == nil || err == io.EOF)
 }
 
 // openMovieIndex finds moov with bounded top-level header reads and indexes its traks.
@@ -93,7 +109,7 @@ func readBoxHeader(r io.ReaderAt, size, off, end int64, buf []byte) (typ [4]byte
 	if end-off < 8 {
 		return typ, 0, 0, errs.Unsup("mp4 index", "truncated box header")
 	}
-	if _, err := r.ReadAt(buf[:8], off); err != nil {
+	if !readFullAt(r, buf[:8], off) {
 		return typ, 0, 0, errs.Unsup("mp4 index", "short box header read")
 	}
 	copy(typ[:], buf[4:8])
@@ -106,7 +122,7 @@ func readBoxHeader(r io.ReaderAt, size, off, end int64, buf []byte) (typ [4]byte
 		if end-off < 16 {
 			return typ, 0, 0, errs.Unsup("mp4 index", "truncated largesize")
 		}
-		if _, err := r.ReadAt(buf[8:16], off+8); err != nil {
+		if !readFullAt(r, buf[8:16], off+8) {
 			return typ, 0, 0, errs.Unsup("mp4 index", "short largesize read")
 		}
 		ls := binary.BigEndian.Uint64(buf[8:16])
@@ -144,7 +160,7 @@ func readPayload(r io.ReaderAt, start, end int64, limit int64) ([]byte, error) {
 		return nil, errs.Unsup("mp4 index", "box payload too large")
 	}
 	b := make([]byte, n)
-	if _, err := r.ReadAt(b, start); err != nil && !(err == io.EOF && n == 0) {
+	if n > 0 && !readFullAt(r, b, start) {
 		return nil, errs.Unsup("mp4 index", "short box payload read")
 	}
 	return b, nil
@@ -171,12 +187,16 @@ func indexMoov(r io.ReaderAt, size, start, end int64) (*movieIndex, error) {
 
 func indexTrak(r io.ReaderAt, size, start, end int64) (trackIndex, error) {
 	tr := trackIndex{st: sampleTable{r: r, size: size}}
-	var visit func(ps, pe int64) error
-	visit = func(ps, pe int64) error {
+	var visit func(ps, pe int64, depth int) error
+	visit = func(ps, pe int64, depth int) error {
 		return walkBoxes(r, size, ps, pe, func(typ [4]byte, s, e int64) error {
 			switch string(typ[:]) {
 			case "mdia", "minf", "stbl":
-				return visit(s, e)
+				// Bound nesting so a crafted moov cannot overflow the goroutine stack.
+				if depth+1 > maxTrakContainerDepth {
+					return errs.Unsup("mp4 index", "trak nesting too deep")
+				}
+				return visit(s, e, depth+1)
 			case "mdhd":
 				b, err := readPayload(r, s, e, 64)
 				if err != nil {
@@ -203,7 +223,7 @@ func indexTrak(r io.ReaderAt, size, start, end int64) (trackIndex, error) {
 			return nil
 		})
 	}
-	if err := visit(start, end); err != nil {
+	if err := visit(start, end, 0); err != nil {
 		return trackIndex{}, err
 	}
 	return tr, nil
@@ -287,6 +307,9 @@ func (st *sampleTable) indexTable(typ [4]byte, s, e int64) error {
 		st.sampleCount = binary.BigEndian.Uint32(h[8:12])
 		st.stszOff = s + 12
 		st.hasStsz = true
+		if st.sampleCount > maxSamples {
+			return errs.Unsup("mp4 index", "sample count exceeds limit")
+		}
 		if st.defaultSize == 0 && int64(st.sampleCount)*4 > e-st.stszOff {
 			return errs.Unsup("mp4 index", "stsz table truncated")
 		}
@@ -303,6 +326,9 @@ func (st *sampleTable) indexTable(typ [4]byte, s, e int64) error {
 		st.stssCount = binary.BigEndian.Uint32(h[4:8])
 		st.stssOff = s + 8
 		st.hasStss = true
+		if st.stssCount > maxSamples {
+			return errs.Unsup("mp4 index", "sync sample count exceeds limit")
+		}
 		if int64(st.stssCount)*4 > e-st.stssOff {
 			return errs.Unsup("mp4 index", "stss table truncated")
 		}
@@ -330,8 +356,8 @@ func (st *sampleTable) readFullBoxHeader(s, e int64, n int) ([]byte, error) {
 	if e-s < int64(n) {
 		return nil, errs.Unsup("mp4 index", "short table header")
 	}
-	b := st.buf(n)
-	if _, err := st.r.ReadAt(b, s); err != nil {
+	b := make([]byte, n)
+	if !readFullAt(st.r, b, s) {
 		return nil, errs.Unsup("mp4 index", "short table header read")
 	}
 	return b, nil
@@ -353,19 +379,14 @@ func parseRunTable(b []byte, width int) ([]uint32, error) {
 	return out, nil
 }
 
-func (st *sampleTable) buf(n int) []byte {
-	if cap(st.scratch) < n {
-		st.scratch = make([]byte, max(n, 16))
-	}
-	return st.scratch[:n]
-}
-
+// u32At reads one big-endian uint32. It allocates its own buffer so a cached
+// index can serve concurrent thumbnail calls.
 func (st *sampleTable) u32At(off int64) (uint32, error) {
-	b := st.buf(4)
-	if _, err := st.r.ReadAt(b, off); err != nil {
+	var b [4]byte
+	if !readFullAt(st.r, b[:], off) {
 		return 0, errs.Unsup("mp4 seek", "short table read")
 	}
-	return binary.BigEndian.Uint32(b), nil
+	return binary.BigEndian.Uint32(b[:]), nil
 }
 
 // usable reports whether the table can locate samples (non-fragmented moov).
@@ -493,11 +514,11 @@ func (st *sampleTable) locate(i int) (int64, int64, error) {
 	}
 	var off uint64
 	if st.co64 {
-		b := st.buf(8)
-		if _, err := st.r.ReadAt(b, st.chunkOff+8*int64(chunk)); err != nil {
+		var b [8]byte
+		if !readFullAt(st.r, b[:], st.chunkOff+8*int64(chunk)) {
 			return 0, 0, errs.Unsup("mp4 seek", "short co64 read")
 		}
-		off = binary.BigEndian.Uint64(b)
+		off = binary.BigEndian.Uint64(b[:])
 	} else {
 		v, err := st.u32At(st.chunkOff + 4*int64(chunk))
 		if err != nil {
@@ -514,8 +535,8 @@ func (st *sampleTable) locate(i int) (int64, int64, error) {
 		if n > maxChunkSamples {
 			return 0, 0, errs.Unsup("mp4 seek", "chunk too large")
 		}
-		b := st.buf(4 * n)
-		if _, err := st.r.ReadAt(b, st.stszOff+4*int64(first)); err != nil {
+		b := make([]byte, 4*n) // at most 4 MiB, bounded by maxChunkSamples
+		if !readFullAt(st.r, b, st.stszOff+4*int64(first)) {
 			return 0, 0, errs.Unsup("mp4 seek", "short stsz read")
 		}
 		for j := 0; j < n-1; j++ {
@@ -539,7 +560,7 @@ func (st *sampleTable) sampleSizes() ([]uint32, error) {
 		return out, nil
 	}
 	b := make([]byte, 4*int64(st.sampleCount))
-	if _, err := st.r.ReadAt(b, st.stszOff); err != nil {
+	if !readFullAt(st.r, b, st.stszOff) {
 		return nil, errs.Unsup("sample table", "short stsz read")
 	}
 	for i := range out {
@@ -589,7 +610,9 @@ func (tr *trackIndex) durationTicks() uint64 {
 
 // normalizeSeekPercent applies the thumbnail default (10%) and clamps to 100.
 func normalizeSeekPercent(p float64) float64 {
-	if p <= 0 {
+	// NaN fails both comparisons below and would reach uint64(NaN), which is
+	// platform-dependent, so it takes the default explicitly.
+	if math.IsNaN(p) || p <= 0 {
 		return 10
 	}
 	if p > 100 {

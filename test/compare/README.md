@@ -31,7 +31,7 @@ make compare-gate
 | Even dimensions | `fitThumbSize` rounds **both** W and H up to even | `scale=trunc(iw/2)*2:trunc(ih/2)*2` |
 | Small quality | JPEG quality **76** | `-q:v` **9** (`31 - (76×29)/100`) |
 | Large quality | JPEG quality **90** | `-q:v` **5** |
-| H.264 seek | `SeekPercent` **10** (sync sample nearest 10% of **video track**) | `-ss` = `H264KeyframeTimeSec(10)`; `-skip_frame nokey` + `-skip_loop_filter all` |
+| H.264 seek | `SeekPercent` **10** (latest sync sample at or before 10% of **video track**) | `-ss` = `H264KeyframeTimeSec(10)`; `-skip_frame nokey` + `-skip_loop_filter all` |
 | Other video seek | `SeekPercent` = `10%` of **format** duration | `-ss` = `format.duration × 10%` |
 | H.264 decode | intra IDR, deblock off (`fast=true`) | matches skip flags above |
 | Threads | n/a | `-threads 1` (timing fairness) |
