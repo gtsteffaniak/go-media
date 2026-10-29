@@ -126,3 +126,47 @@ func readMetadata(r io.ReaderAt, size int64, fmt format.ID) (tag.Metadata, error
 		return nil, errs.Unsup("tags", string(fmt))
 	}
 }
+
+// Audio is everything FileBrowser-style callers need from one container parse.
+type Audio struct {
+	Tags              Tags
+	HasEmbeddedLyrics bool
+	HasArtwork        bool
+	Artwork           []byte
+	ArtworkMIME       string
+}
+
+// Inspect reads tags, embedded lyrics presence, and optionally cover art from a
+// single readMetadata call. Artwork bytes are copied only when withArt is true.
+func Inspect(r io.ReaderAt, size int64, fmt format.ID, withArt bool) (Audio, error) {
+	m, err := readMetadata(r, size, fmt)
+	if err != nil {
+		return Audio{}, err
+	}
+	track, _ := m.Track()
+	t := Tags{
+		Title:  m.Title(),
+		Artist: m.Artist(),
+		Album:  m.Album(),
+		Year:   m.Year(),
+		Genre:  m.Genre(),
+		Track:  track,
+		Raw:    map[string]string{},
+	}
+	lyrics := strings.TrimSpace(m.Lyrics())
+	if lyrics != "" {
+		t.Raw["lyrics"] = lyrics
+	}
+	out := Audio{Tags: t, HasEmbeddedLyrics: lyrics != ""}
+	if p := m.Picture(); p != nil && len(p.Data) > 0 {
+		out.HasArtwork = true
+		if withArt {
+			out.Artwork = p.Data
+			out.ArtworkMIME = p.MIMEType
+			if out.ArtworkMIME == "" {
+				out.ArtworkMIME = "image/jpeg"
+			}
+		}
+	}
+	return out, nil
+}
