@@ -188,7 +188,7 @@ func thumbnailSeekSeconds(videoPath string, seekPercent float64, keyframeOnly bo
 }
 
 // ffmpegThumbnailPreset extracts one JPEG frame aligned with a media thumbnail preset.
-// seekSec is presentation time in seconds (use stss sync time for H.264 intra thumbnails).
+// seekSec is decode time in seconds (use stss sync time for H.264 intra thumbnails; ctts is not applied).
 // When keyframeOnly is true, ffmpeg decodes only IDR/I frames (matches go-media H.264 intra path).
 func ffmpegThumbScaleFlags(preset thumbnailPresetConfig, keyframeOnly bool) string {
 	// go-media H.264 intra thumbnails use area downscale in YCbCr (ThumbnailFilterArea).

@@ -5,44 +5,45 @@ import (
 
 	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/h264"
-	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
-// H264MP4Thumb caches one mp4.Probe and avcC per file for repeated thumbnails (same ReaderAt).
+// H264MP4Thumb caches one moov index and avcC per file for repeated thumbnails (same ReaderAt).
 type H264MP4Thumb struct {
 	R     io.ReaderAt
 	Size  int64
 	Track int
-	Probe *mp4.ProbeInfo
 	AVCC  *mp4.AVCDecoderConfiguration
+	index *movieIndex
 }
 
-// OpenH264MP4Thumb probes the file once and reads avcC for the first H.264 track.
+// OpenH264MP4Thumb indexes moov once and reads avcC for the first H.264 track.
 func OpenH264MP4Thumb(r io.ReaderAt, size int64) (H264MP4Thumb, bool) {
-	info, err := mp4.Probe(ioat.New(r, size))
+	idx, err := openMovieIndex(r, size)
 	if err != nil {
 		return H264MP4Thumb{}, false
 	}
-	track := -1
-	for i, tr := range info.Tracks {
-		if tr.Codec == mp4.CodecAVC1 {
-			track = i
-			break
-		}
-	}
-	if track < 0 {
-		return H264MP4Thumb{}, false
-	}
-	avcc, ok := AVCDecoderConfig(r, size, track)
+	track, ok := idx.firstAVC()
 	if !ok {
 		return H264MP4Thumb{}, false
 	}
-	return H264MP4Thumb{R: r, Size: size, Track: track, Probe: info, AVCC: avcc}, true
+	avcc, ok := idx.tracks[track].avcConfig()
+	if !ok {
+		return H264MP4Thumb{}, false
+	}
+	return H264MP4Thumb{R: r, Size: size, Track: track, AVCC: avcc, index: idx}, true
 }
 
-// ThumbnailYCbCr decodes an IDR at seekPercent using cached probe state.
+// syncSample returns the keyframe payload at seekPercent using the cached index.
+func (t H264MP4Thumb) syncSample(seekPercent float64) ([]byte, bool) {
+	if t.index == nil {
+		return H264SyncSample(t.R, t.Size, t.Track, seekPercent)
+	}
+	return t.index.h264SyncSample(t.Track, seekPercent)
+}
+
+// ThumbnailYCbCr decodes an IDR at seekPercent using cached index state.
 func (t H264MP4Thumb) ThumbnailYCbCr(seekPercent float64, fast bool) (*h264.ThumbYCbCr, error) {
-	sample, ok := h264SyncSampleFromInfo(t.R, t.Size, t.Track, seekPercent, t.Probe)
+	sample, ok := t.syncSample(seekPercent)
 	if !ok {
 		return nil, nil
 	}

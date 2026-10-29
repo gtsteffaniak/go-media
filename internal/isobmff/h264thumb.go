@@ -19,7 +19,7 @@ func loadH264Thumb(r io.ReaderAt, size int64, seekPercent float64) (h264ThumbCtx
 	if !ok {
 		return h264ThumbCtx{}, false
 	}
-	sample, ok := h264SyncSampleFromInfo(r, size, t.Track, seekPercent, t.Probe)
+	sample, ok := t.syncSample(seekPercent)
 	if !ok {
 		return h264ThumbCtx{}, false
 	}

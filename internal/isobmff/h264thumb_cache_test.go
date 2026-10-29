@@ -21,8 +21,8 @@ func TestOpenH264MP4ThumbThumbnailYCbCr(t *testing.T) {
 	if !ok {
 		t.Fatal("OpenH264MP4Thumb")
 	}
-	if tb.Probe == nil || tb.AVCC == nil {
-		t.Fatal("missing cached probe or avcC")
+	if tb.index == nil || tb.AVCC == nil {
+		t.Fatal("missing cached moov index or avcC")
 	}
 	yc, err := tb.ThumbnailYCbCr(10, true)
 	if err != nil {

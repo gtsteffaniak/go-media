@@ -3,43 +3,42 @@ package isobmff
 import (
 	"io"
 
-	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
 // MJPEGFrame returns a JPEG sample from an MJPEG-in-MP4 track at seekPercent of duration.
 func MJPEGFrame(r io.ReaderAt, size int64, seekPercent float64) ([]byte, bool) {
-	info, err := mp4.Probe(ioat.New(r, size))
+	idx, err := openMovieIndex(r, size)
 	if err != nil {
 		return nil, false
 	}
 	videoTrack := -1
-	for i, tr := range info.Tracks {
-		if tr.Codec == mp4.CodecAVC1 {
+	for i := range idx.tracks {
+		switch string(idx.tracks[i].entry[:]) {
+		case "avc1", "encv":
 			return nil, false
-		}
-		if tr.Codec == mp4.CodecUnknown {
+		case "mp4v":
 			if _, ok := visualMJPEGSampleEntry(r, size, i); ok {
 				videoTrack = i
-				break
 			}
+		}
+		if videoTrack >= 0 {
+			break
 		}
 	}
 	if videoTrack < 0 {
 		return nil, false
 	}
-	refs, err := SampleRefs(r, size, videoTrack)
-	if err != nil || len(refs) == 0 {
+	tr := &idx.tracks[videoTrack]
+	if !tr.st.usable() {
 		return nil, false
 	}
-	ref, ok := pickSampleByTimeFromInfo(info, videoTrack, refs, seekPercent)
-	if !ok {
-		ref = refs[0]
-	}
-	if ref.Size <= 0 {
+	sample := tr.nearestSample(seekPercent)
+	off, n, err := tr.st.locate(sample)
+	if err != nil || n <= 0 {
 		return nil, false
 	}
-	payload, err := ioat.ReadAll(r, size, ref.Offset, ref.Size)
+	payload, err := ioat.ReadAll(r, size, off, n)
 	if err != nil || len(payload) < 4 {
 		return nil, false
 	}
@@ -47,6 +46,19 @@ func MJPEGFrame(r io.ReaderAt, size int64, seekPercent float64) ([]byte, bool) {
 		return b, true
 	}
 	return nil, false
+}
+
+// nearestSample returns the sample whose decode time is closest to seekPercent
+// of the track duration (every MJPEG sample is a keyframe).
+func (tr *trackIndex) nearestSample(seekPercent float64) int {
+	target := uint64(float64(tr.durationTicks()) * normalizeSeekPercent(seekPercent) / 100.0)
+	i := tr.st.sampleAtTime(target)
+	if uint32(i+1) < tr.st.sampleCount {
+		if next := tr.st.sampleTime(i + 1); next-target < target-tr.st.sampleTime(i) {
+			return i + 1
+		}
+	}
+	return i
 }
 
 func extractJPEG(payload []byte) ([]byte, bool) {
