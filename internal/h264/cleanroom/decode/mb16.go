@@ -18,6 +18,18 @@ var luma4x4BlockY = [16]int{0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3}
 // qpcMap — mapping qPi→QPc for qPi in the range 30..51.
 var qpcMap = [22]int{29, 30, 31, 32, 32, 33, 34, 34, 35, 35, 36, 36, 37, 37, 37, 38, 38, 38, 39, 39, 39, 39}
 
+// chromaQPFor returns QPc for chroma component comp at luma QP qpY. comp 0 is
+// Cb and uses chroma_qp_index_offset. comp 1 is Cr and uses
+// second_chroma_qp_index_offset, which equals the first when the PPS omits it.
+func chromaQPFor(pps *PPS, comp, qpY int) int {
+	off := pps.ChromaQPIndexOffset
+	if comp == 1 {
+		off = pps.SecondChromaQPIndexOffset
+	}
+	return chromaQP(qpY, int(off))
+}
+
+// chromaQP maps luma QP and a chroma QP offset to QPc (Table 8-15).
 func chromaQP(qpY, offset int) int {
 	qpi := qpY + offset
 	if qpi < 0 {
@@ -47,12 +59,13 @@ type sliceDecoder struct {
 	nzLuma     []uint8 // nonzero coefficients per luma 4x4 block
 	nzCb, nzCr []uint8
 	mbDecoded  []bool
+	decodedMBs int    // macroblocks successfully decoded by run
 	recon4     []bool // whether the luma 4x4 block is reconstructed (for intra 4x4)
 	i4mode     []int8 // Intra4x4PredMode per 4x4 block (-1 = not 4x4)
 	mbQP       []int  // QP_Y of each MB (for deblocking; I_PCM → 0)
 
-	cb                 *cabacEngine
-	cabacScratch       cabacEngine
+	cb           *cabacEngine
+	cabacScratch cabacEngine
 
 	// Reused MB / residual scratch (avoid per-MB heap traffic).
 	predLuma     [256]byte
@@ -122,6 +135,7 @@ func (sd *sliceDecoder) run() error {
 			return sd.r.Err()
 		}
 		sd.mbDecoded[addr] = true
+		sd.decodedMBs++
 		addr++
 		if !sd.r.MoreRBSPData() {
 			break

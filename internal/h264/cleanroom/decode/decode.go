@@ -15,7 +15,8 @@ var (
 
 // DecodeSlice parses and decodes one slice into frame. I-slices (CAVLC or CABAC)
 // with I_PCM, I_16x16 and I_NxN macroblocks are supported. When skipDeblock is true,
-// in-loop deblocking is omitted (thumbnail fast preview).
+// in-loop deblocking is omitted (thumbnail fast preview). On success the
+// returned header's DecodedMBs reports how many macroblocks the slice covered.
 func DecodeSlice(rbsp []byte, nalType nal.Type, nalRefIDC uint8, sps *SPS, pps *PPS, frame *Frame, skipDeblock bool) (*SliceHeader, error) {
 	r := bitstream.NewReader(rbsp)
 	h, err := readSliceHeader(r, nalType, nalRefIDC, sps, pps)
@@ -30,6 +31,7 @@ func DecodeSlice(rbsp []byte, nalType nal.Type, nalRefIDC uint8, sps *SPS, pps *
 		releaseSliceDecoder(sd)
 		return h, err
 	}
+	h.DecodedMBs = sd.decodedMBs
 	if !skipDeblock {
 		sd.deblock() // assumes one slice per frame
 	}

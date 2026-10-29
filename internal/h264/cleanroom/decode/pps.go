@@ -26,6 +26,11 @@ type PPS struct {
 	PicInitQPMinus26    int32 // base frame QP: SliceQP = 26 + this + slice_qp_delta
 	ChromaQPIndexOffset int32
 
+	// SecondChromaQPIndexOffset is second_chroma_qp_index_offset, the Cr QP offset.
+	// Cb uses ChromaQPIndexOffset. It equals ChromaQPIndexOffset when the PPS
+	// omits it.
+	SecondChromaQPIndexOffset int32
+
 	DeblockingFilterControlPresent bool
 	ConstrainedIntraPred           bool
 	RedundantPicCntPresent         bool
@@ -38,6 +43,11 @@ type PPS struct {
 // exceedingly rare in practice; full parsing of the group map is not yet
 // implemented.
 var ErrFMO = errors.New("h264: slice groups (FMO) not supported")
+
+// ErrPicScalingMatrix indicates that the PPS carries picture-level scaling
+// matrices. The lists are not parsed or applied, and second_chroma_qp_index_offset
+// follows them in the bitstream, so the Cr QP offset cannot be read either.
+var ErrPicScalingMatrix = errors.New("h264: picture scaling matrices not supported")
 
 // EntropyName returns the name of the entropy coding mode.
 func (p *PPS) EntropyName() string {
@@ -73,6 +83,18 @@ func ParsePPS(rbsp []byte) (*PPS, error) {
 	p.PicInitQPMinus26 = r.SE()
 	r.SE() // pic_init_qs_minus26
 	p.ChromaQPIndexOffset = r.SE()
+	if err := r.Err(); err != nil {
+		return nil, fmt.Errorf("h264 pps: %w", err)
+	}
+	// Ranges per ISO/IEC 14496-10 7.4.2.2 for 8-bit luma (QpBdOffsetY = 0),
+	// the only bit depth this decoder reconstructs.
+	if p.PicInitQPMinus26 < minPicInitQPMinus26 || p.PicInitQPMinus26 > maxPicInitQPMinus26 {
+		return nil, fmt.Errorf("h264 pps: pic_init_qp_minus26 %d out of range [%d, %d]", p.PicInitQPMinus26, minPicInitQPMinus26, maxPicInitQPMinus26)
+	}
+	if p.ChromaQPIndexOffset < -maxChromaQPIndexOffset || p.ChromaQPIndexOffset > maxChromaQPIndexOffset {
+		return nil, fmt.Errorf("h264 pps: chroma_qp_index_offset %d out of range [%d, %d]", p.ChromaQPIndexOffset, -maxChromaQPIndexOffset, maxChromaQPIndexOffset)
+	}
+	p.SecondChromaQPIndexOffset = p.ChromaQPIndexOffset
 	p.DeblockingFilterControlPresent = r.Flag()
 	p.ConstrainedIntraPred = r.Flag()
 	p.RedundantPicCntPresent = r.Flag()
@@ -80,9 +102,17 @@ func ParsePPS(rbsp []byte) (*PPS, error) {
 	if r.MoreRBSPData() {
 		p.Transform8x8Mode = r.Flag()
 		p.PicScalingMatrixPresent = r.Flag()
-		// Custom scaling lists are not applied yet; bailing keeps us honest
-		// rather than silently decoding with a flat matrix.
-		// (Their bits are not consumed here, but Transform8x8Mode is what we need.)
+		// Reject rather than decode with flat matrices and a wrong Cr QP: the
+		// lists come before second_chroma_qp_index_offset and are not parsed.
+		if p.PicScalingMatrixPresent {
+			return nil, ErrPicScalingMatrix
+		}
+		if r.MoreRBSPData() {
+			p.SecondChromaQPIndexOffset = r.SE()
+			if r.Err() == nil && (p.SecondChromaQPIndexOffset < -maxChromaQPIndexOffset || p.SecondChromaQPIndexOffset > maxChromaQPIndexOffset) {
+				return nil, fmt.Errorf("h264 pps: second_chroma_qp_index_offset %d out of range [%d, %d]", p.SecondChromaQPIndexOffset, -maxChromaQPIndexOffset, maxChromaQPIndexOffset)
+			}
+		}
 	}
 	if err := r.Err(); err != nil {
 		return nil, fmt.Errorf("h264 pps: %w", err)

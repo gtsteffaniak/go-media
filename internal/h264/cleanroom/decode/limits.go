@@ -22,10 +22,15 @@ func maxFrameMacroblocks() uint64 {
 const (
 	maxSeqParameterSetID              = 31
 	maxLog2MaxFrameNumMinus4          = 12
-	maxLog2MaxPicOrderCntLsbMinus4     = 12
+	maxLog2MaxPicOrderCntLsbMinus4    = 12
 	maxNumRefFramesInPicOrderCntCycle = 255
 	maxChromaFormatIDC                = 3
 	maxBitDepth                       = 14
+	minSliceQP                        = 0  // SliceQPY lower bound for 8-bit (QpBdOffsetY = 0)
+	maxSliceQP                        = 51 // SliceQPY upper bound
+	minPicInitQPMinus26               = -26
+	maxPicInitQPMinus26               = 25
+	maxChromaQPIndexOffset            = 12 // |chroma_qp_index_offset| bound
 	maxParameterSetID                 = 255
 	maxCodedDimension                 = 65535 // pixels per axis for allocations
 )
