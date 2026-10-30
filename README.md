@@ -21,7 +21,7 @@ thumb, err := media.ThumbnailLarge(r, size, 10) // ~10% into the timeline
 | **Containers** | MP4/MOV/M4A/M4V/3GP, MKV/WebM, WAV, FLAC, OGG (Vorbis/Opus), MP3 |
 | **Probe & duration** | Stream layout, codecs, tags summary; duration from headers (MP3 CBR estimate where needed; WebM when `Duration` is present) |
 | **Tags & artwork** | ID3, MP4 `ilst`, Vorbis comments ([dhowden/tag](https://github.com/dhowden/tag)); APIC / `covr` / FLAC `PICTURE` |
-| **Subtitles** | Sidecar SRT/VTT/ASS → WebVTT; MKV text tracks extract; external track discovery |
+| **Subtitles** | Sidecar SRT/VTT/ASS/SSA and embedded MKV (SRT, ASS/SSA, WebVTT) and MP4 (`tx3g`, `wvtt`) text tracks → WebVTT, byte-identical to `ffmpeg -f webvtt` (golden-tested against ffmpeg 9.0.2); bitmap tracks (PGS, VobSub, DVB) return a typed unsupported error; external track discovery |
 | **Thumbnails** | MJPEG, VP8 (WebM/MKV), H.264 intra IDR (Baseline CAVLC + Main/High CABAC, 8-bit 4:2:0); embedded cover when `PreferEmbedded` |
 | **H.264 decode** | Clean-room intra-only decoder for thumbnail keyframes ([`docs/H264.md`](docs/H264.md))—not a general player |
 
@@ -112,7 +112,7 @@ Details: [`docs/H264.md`](docs/H264.md).
 
 ## Roadmap (selected)
 
-- Matroska tags and MKV embedded artwork; MP4 embedded subtitle boxes (`tx3g` / `wvtt`).
+- Matroska tags and MKV embedded artwork.
 - AIFF/AU duration; tighter MP3 duration without estimate.
 - Lossy WebP thumbnail output (research).
 

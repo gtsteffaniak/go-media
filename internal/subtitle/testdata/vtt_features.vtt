@@ -1,0 +1,33 @@
+WEBVTT - title
+Kind: captions
+
+STYLE
+::cue { color: yellow }
+
+REGION
+id:r1 width:40%
+
+NOTE a comment
+spanning lines
+
+intro
+00:00:01.000 --> 00:00:02.000 align:start position:0%
+<v Bob>Hello</v> <c.yellow>there</c> <i>it</i> <b>bo</b> <u>un</u>
+
+2
+00:01.500 --> 00:03.000 line:0 align:end
+Short timestamps, <00:00:02.000>karaoke, <ruby>kan<rt>ji</rt></ruby>
+&amp; &lt; &gt; &nbsp;x &lrm;&rlm; &copy;
+
+00:00:04.000 --> 00:00:05.000
+Brace { and backslash \N stay literal
+<i.loud>classed</i> <b>open
+
+01:00:00.000 --> 01:00:01.234
+Over an hour
+
+00:00:06.000 --> 00:00:07.000
+Overlap A
+
+00:00:06.500 --> 00:00:08.000
+Overlap B

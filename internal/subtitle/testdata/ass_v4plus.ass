@@ -1,0 +1,30 @@
+[Script Info]
+; comment line
+ScriptType: v4.00+
+PlayResX: 384
+PlayResY: 288
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Bold,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Fancy,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,1,1,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:02.50,Default,,0,0,0,,Plain, with, commas
+Dialogue: 1,0:00:03.00,0:00:04.00,Bold,Speaker,0,0,0,,Bold style{\i1} plus italic{\i0}
+Dialogue: 0,0:00:05.00,0:00:06.00,Fancy,Name, Last,0,0,0,,Field commas
+Dialogue: 0,0:00:07.00,0:00:08.00,Default,,0000,0000,0000,Scroll up;10;20;,{\an8\pos(10,20)\c&H0000FF&}Effect field
+Dialogue: 0,0:00:09.00,0:00:10.00,Default,,0,0,0,,Line\Nbreak\nsoft\hhard {\b1}b{\b0} {\u1}u{\u} {\s1}s{\s0}
+Dialogue: 0,0:00:11.00,0:00:12.00,Default,,0,0,0,,{\b1\i1}both{\r}reset {\rFancy}fancy{\r} plain
+Dialogue: 0,0:00:13.00,0:00:14.00,Default,,0,0,0,,{\b1}unclosed {\i1 block
+Dialogue: 0,0:00:15.00,0:00:16.00,Default,,0,0,0,,After unclosed{\fnArial\fs30\bord2}
+Comment: 0,0:00:17.00,0:00:18.00,Default,,0,0,0,,Comment is not shown
+Dialogue: 0,1:02:03.45,1:02:04.5,Default,,0,0,0,,Over an hour, centiseconds
+Dialogue: 0,0:00:20.00,0:00:22.00,Default,,0,0,0,,Overlap A
+Dialogue: 0,0:00:21.00,0:00:23.00,Default,,0,0,0,,Overlap A
+Dialogue: 0,0:00:21.00,0:00:23.00,Default,,0,0,0,,Overlap A
+Dialogue: 0,0:00:24.00,0:00:25.00,Default,,0,0,0,,{\p1}m 0 0 l 10 10{\p0}
+Dialogue: 0,0:00:26.00,0:00:27.00,Default,,0,0,0,,
+Dialogue: 0,0:00:28.00,0:00:29.00,Default,,0,0,0,,   leading spaces trimmed

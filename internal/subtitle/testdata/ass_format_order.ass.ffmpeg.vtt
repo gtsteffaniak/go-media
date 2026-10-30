@@ -1,0 +1,10 @@
+WEBVTT
+
+00:01.000 --> 00:02.000
+<i>Italic via reordered Format</i>
+
+00:03.000 --> 00:04.000
+<b>Style name keeps its trailing space</b>
+
+00:05.000 --> 00:06.000
+No exact match means no style

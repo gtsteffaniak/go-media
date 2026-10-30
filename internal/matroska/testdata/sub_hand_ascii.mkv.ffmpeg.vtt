@@ -1,0 +1,9 @@
+WEBVTT
+
+00:01.000 --> 00:02.500
+Plain <i>not markup</i> \{{}\⁠b1}
+
+00:03.000 --> 00:04.000
+Line one
+Line two
+  tabs	and  spaces
