@@ -33,8 +33,8 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
-	"github.com/gtsteffaniak/go-media/internal/vp8decode"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
+	"github.com/gtsteffaniak/go-media/internal/vp8decode"
 )
 
 // Options configures thumbnail generation.
@@ -61,7 +61,9 @@ type Result struct {
 }
 
 // Generate supports media inspection.
-func Generate(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt Options) (Result, error) {
+func Generate(r interface {
+	ReadAt([]byte, int64) (int, error)
+}, size int64, opt Options) (Result, error) {
 	normalizeOptions(&opt)
 	img, src, rot, err := sourceImage(r, size, opt)
 	if err != nil {
@@ -81,7 +83,9 @@ func fitOptions(opt Options, rot int) Options {
 
 // sourceImage decodes embedded art or a video frame without encoding. rot is
 // the display rotation still to apply to the scaled image (MP4 tkhd matrix).
-func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt Options) (image.Image, string, int, error) {
+func sourceImage(r interface {
+	ReadAt([]byte, int64) (int, error)
+}, size int64, opt Options) (image.Image, string, int, error) {
 	var rot int
 	img, src, err := decodeSource(r, size, opt, &rot)
 	if err != nil {
@@ -91,7 +95,9 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 }
 
 // decodeSource does the work of sourceImage, storing the MP4 rotation in rot.
-func decodeSource(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt Options, rot *int) (image.Image, string, error) {
+func decodeSource(r interface {
+	ReadAt([]byte, int64) (int, error)
+}, size int64, opt Options, rot *int) (image.Image, string, error) {
 	if opt.PreferEmbedded {
 		if data, mime, err := tagread.Artwork(r, size); err == nil {
 			img, err := decodeBytes(data, mime, opt.MaxWidth, opt.MaxHeight, opt.Fast)
@@ -110,9 +116,9 @@ func decodeSource(r interface{ ReadAt([]byte, int64) (int, error) }, size int64,
 	case format.MP4:
 		// One bounded moov header walk serves the rotation check and the
 		// MJPEG/H.264 seek. Rotation is applied by Generate after scaling.
-		src, ok := isobmff.OpenThumbSource(r, size)
-		if !ok {
-			break
+		src, err := isobmff.OpenThumbSourceErr(r, size)
+		if err != nil {
+			return nil, "", err
 		}
 		*rot = src.Rotation()
 		opt = fitOptions(opt, *rot)
@@ -135,6 +141,8 @@ func decodeSource(r interface{ ReadAt([]byte, int64) (int, error) }, size int64,
 		} else if yimg != nil {
 			return yimg, "decode", nil
 		}
+		// No MJPEG or H.264 track: name the codec from the index (no I/O).
+		return nil, "", src.UnsupportedReason()
 	case format.MKV, format.WebM:
 		// Probe the bounded header once and decide from it before any demux pass.
 		// Demuxing a multi-GB file only to find no usable track costs several
@@ -182,15 +190,19 @@ func decodeSource(r interface{ ReadAt([]byte, int64) (int, error) }, size int64,
 		if slices.Contains(hdr.VideoCodecIDs, "V_MPEG4/ISO/AVC") {
 			return nil, "", errs.UnsupProfile("thumbnail", "h264 in matroska")
 		}
+		return nil, "", errs.Unsup("thumbnail", "matroska: no decodable "+strings.Join(hdr.VideoCodecIDs, ",")+" frame near seek target (no cues/keyframe or frame decode failed)")
 	case format.MP3, format.FLAC, format.OGG:
-		if data, mime, err := tagread.Artwork(r, size); err == nil {
-			img, err := decodeBytes(data, mime, opt.MaxWidth, opt.MaxHeight, opt.Fast)
-			if err == nil {
-				return img, "embedded", nil
-			}
+		data, mime, err := tagread.Artwork(r, size)
+		if err != nil {
+			return nil, "", errs.Unsup("thumbnail", string(fmtID)+": no embedded cover art")
 		}
+		img, err := decodeBytes(data, mime, opt.MaxWidth, opt.MaxHeight, opt.Fast)
+		if err != nil {
+			return nil, "", errs.Unsup("thumbnail", string(fmtID)+": embedded cover art ("+mime+") not decodable")
+		}
+		return img, "embedded", nil
 	}
-	return nil, "", errs.Unsup("thumbnail", string(fmtID))
+	return nil, "", errs.Unsup("thumbnail", string(fmtID)+": container has no thumbnail decoder in go-media")
 }
 
 // hasThumbCodec reports whether any Matroska video codec is one the thumbnail
