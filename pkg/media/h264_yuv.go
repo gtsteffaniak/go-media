@@ -7,7 +7,9 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 )
 
-// H264KeyframeYUV420 decodes the sync sample at seekPercent to planar I420 bytes (for metrics).
+// H264KeyframeYUV420 decodes the sync sample at seekPercent to planar I420
+// bytes (for metrics). Samples are returned as coded, with no range or matrix
+// conversion. Open-GOP keyframes are accepted as in Thumbnail.
 func H264KeyframeYUV420(r io.ReaderAt, size int64, seekPercent float64, fast bool) (out []byte, w, h int, err error) {
 	defer func() {
 		if p := recover(); p != nil {

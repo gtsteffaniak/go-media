@@ -1,20 +1,53 @@
 // Package h264 implements intra-only H.264/AVC keyframe decode for thumbnails.
 //
 // Intra-only AVC decode for thumbnails via internal/h264/cleanroom (no Eyevinn/hi264).
+//
+// # Keyframes and open GOP
+//
+// A thumbnail decodes one sync sample (MP4 stss) with an empty DPB, as
+// ffmpeg's fast seek (-ss before -i) does. IDR samples always qualify. A
+// non-IDR sync sample (x264 --open-gop) is decoded as a fresh start when all
+// of its slices are I slices, or when it carries a recovery point SEI with
+// recovery_frame_cnt 0. Any other sample, or one that still contains P/B
+// slices, fails fast with errs.ErrUnsupportedProfile so callers fall back to
+// ffmpeg. See cleanroom.openGOPKeyframe.
+//
+// # Colour
+//
+// Colour follows ffmpeg rather than guessing (see ThumbColorFromFrame and
+// ThumbYCbCr.MatchFFmpegYUVOutput):
+//   - The SPS VUI video_signal_type is honored: video_full_range_flag selects
+//     full range, matrix_coefficients selects BT.709/BT.2020/BT.601. The MP4
+//     colr box is not read; the bitstream VUI is what ffmpeg's decoder uses.
+//   - Untagged streams (no colour description, or matrix 0/2) are BT.601
+//     limited range at every resolution, swscale's default. HD is not
+//     assumed to be BT.709.
+//   - JPEG and WebP output use the BT.601 matrix whatever the tag says,
+//     because ffmpeg's capture stays in YUV and those formats are always
+//     displayed as BT.601. PNG output goes through RGB and keeps the tag.
+//
+// Known residual differences from ffmpeg: full-range and BT.709 sources are
+// converted through an RGB intermediate that clips out-of-gamut values while
+// ffmpeg passes YUV straight through (about 5 dB PSNR lower than untagged
+// sources), and image/jpeg quantizes differently from ffmpeg's mjpeg encoder.
 package h264
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"image"
 
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom"
+	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/decode"
 	"github.com/gtsteffaniak/go-media/internal/h264/frame"
 	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 )
 
-// DecodeKeyframe decodes an H.264 IDR access unit in AVCC form (length-prefixed NALs).
+// DecodeKeyframe decodes an H.264 keyframe access unit in AVCC form
+// (length-prefixed NALs): an IDR, or an open-GOP intra/recovery-point
+// picture (see the package doc).
 func DecodeKeyframe(nal []byte, _ int, _ int) (b []byte, w, h int, err error) {
 	defer recoverDecode(&err)
 	img, err := DecodeAVCC(nil, nal, false)
@@ -64,7 +97,7 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 	}
 	if len(frames) == 0 {
 		releaseDecoder(dec)
-		return nil, errs.UnsupProfile("h264 keyframe", "no IDR slice in sample")
+		return nil, errs.UnsupProfile("h264 keyframe", "no decodable keyframe picture in sample")
 	}
 	out := cleanroom.ToFrame(dec, frames[0])
 	releaseDecoder(dec)
@@ -80,6 +113,12 @@ func recoverDecode(err *error) {
 func mapDecodeErr(err error) error {
 	if err == nil {
 		return nil
+	}
+	// P/B slices (including in a recovery-point picture accepted by the
+	// open-GOP rule) are a profile limit, not corruption: report unsupported
+	// so callers fall back to ffmpeg.
+	if errors.Is(err, decode.ErrInterSlice) {
+		return errs.UnsupProfile("h264 keyframe", err.Error())
 	}
 	msg := err.Error()
 	switch {

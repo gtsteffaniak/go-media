@@ -20,6 +20,12 @@ type Frame struct {
 
 	Y, Cb, Cr        []byte
 	StrideY, StrideC int
+
+	// Colour signalling copied from the active SPS VUI for every decoded
+	// picture (the buffer is pooled, so these are refreshed per picture).
+	VideoFullRange     bool  // video_full_range_flag
+	ColourDescription  bool  // colour_description_present_flag
+	MatrixCoefficients uint8 // matrix_coefficients (Table E-5); valid when ColourDescription
 }
 
 // NewFrame allocates a frame buffer for the dimensions from the SPS.

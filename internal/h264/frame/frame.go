@@ -13,10 +13,13 @@ type Frame struct {
 	StrideY  int     // bytes per row for luma
 	StrideC  int     // bytes per row for chroma
 
-	// Color space metadata (populated from SPS VUI if available)
-	MatrixCoefficients    uint // 0=unspecified, 1=BT.709, 5=BT.601, 9=BT.2020
-	VideoFullRangeFlag    bool // true = full range (0-255)
-	ColorDescriptionValid bool // true if color description was present in SPS VUI
+	// Color space metadata, copied from the SPS VUI video_signal_type.
+	// H.264 Table E-5 codes: 0=identity (GBR), 1=BT.709, 2=unspecified,
+	// 5/6=BT.601, 9=BT.2020. 0 and 2 are treated as untagged (BT.601, the
+	// ffmpeg default); see h264.ThumbColorFromFrame.
+	MatrixCoefficients    uint
+	VideoFullRangeFlag    bool // video_full_range_flag: full range (0-255) instead of limited
+	ColorDescriptionValid bool // colour_description_present_flag was set in the SPS VUI
 }
 
 // NewFrame creates a new frame buffer for the given dimensions.

@@ -26,7 +26,10 @@ func loadH264Thumb(r io.ReaderAt, size int64, seekPercent float64) (h264ThumbCtx
 	return h264ThumbCtx{track: t.Track, avcc: t.AVCC, sample: sample}, true
 }
 
-// H264ThumbnailYCbCr decodes an IDR frame to YCbCr for area/box downscale before JPEG encode.
+// H264ThumbnailYCbCr decodes the sync sample at seekPercent to YCbCr for
+// area/box downscale before encode. The sample may be an IDR or an open-GOP
+// keyframe (see package h264). CS/RNG follow the SPS VUI tags, BT.601 limited
+// when untagged.
 // Returns (nil, nil) when the file is not a decodable H.264 MP4 thumbnail path.
 func H264ThumbnailYCbCr(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*h264.ThumbYCbCr, error) {
 	ctx, ok := loadH264Thumb(r, size, seekPercent)
@@ -43,7 +46,8 @@ func H264ThumbnailYCbCr(r io.ReaderAt, size int64, seekPercent float64, fast boo
 	return h264.NewThumbYCbCr(fr), nil
 }
 
-// H264ThumbnailRGBA seeks to seekPercent and decodes an H.264 IDR frame to RGBA.
+// H264ThumbnailRGBA seeks to seekPercent and decodes the H.264 keyframe there
+// (IDR or open-GOP keyframe) to RGBA, using the VUI-tagged matrix and range.
 // Returns (nil, nil) when the file is not a decodable H.264 MP4 thumbnail path.
 func H264ThumbnailRGBA(r io.ReaderAt, size int64, seekPercent float64, fast bool) (*image.RGBA, error) {
 	ctx, ok := loadH264Thumb(r, size, seekPercent)

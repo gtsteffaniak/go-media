@@ -102,7 +102,11 @@ Optional `GOEXPERIMENT=simd` kernels are experimental (tier 3); not required for
 
 ## H.264 thumbnails
 
-The in-tree decoder is **intra-only** (IDR keyframes): CAVLC Baseline and CABAC Main/High for 8-bit 4:2:0, with optional fast preview (reduced deblock). Profiles that decode but fail the timing gate can be listed in `gatedProfiles` and rejected with `ErrUnsupportedProfile` so callers use ffmpeg. Implementation is clean-room MIT; ffmpeg/h264bsd are behavioral references only—no LGPL source.
+The in-tree decoder is **intra-only** (keyframes decoded alone, like ffmpeg `-ss` fast seek): CAVLC Baseline and CABAC Main/High for 8-bit 4:2:0, with optional fast preview (reduced deblock). Profiles that decode but fail the timing gate can be listed in `gatedProfiles` and rejected with `ErrUnsupportedProfile` so callers use ffmpeg. Implementation is clean-room MIT; ffmpeg/h264bsd are behavioral references only—no LGPL source.
+
+**Open GOP:** a non-IDR sync sample is decoded as a fresh start when every slice is intra or a recovery point SEI has `recovery_frame_cnt` 0; anything else fails fast with `ErrUnsupportedProfile`.
+
+**Colour (matches ffmpeg):** the SPS VUI range/matrix tags are honored (the MP4 `colr` box is not read); untagged video is BT.601 limited range at every resolution (swscale's default); JPEG/WebP output is BT.601 because ffmpeg's YUV capture drops the matrix tag, while PNG keeps it; VP8 is BT.601 limited. Known residuals: ~5 dB PSNR lower on full-range/BT.709 sources (RGB clipping) and JPEG quantizer differences.
 
 Details: [`docs/H264.md`](docs/H264.md).
 

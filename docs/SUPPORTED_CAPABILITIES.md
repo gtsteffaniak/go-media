@@ -168,7 +168,9 @@ MP4 sample entries (AV1, ProRes, PCM, AC-3, E-AC-3, Opus, FLAC) and MKV codec ID
 
 **ffmpeg equivalent (compare harness):** `ffmpeg -ss <seek> -i file -frames:v 1 -vf scale=… -q:v … out.jpg` (H.264: keyframe seek + skip loop filter; see [`test/compare/README.md`](../test/compare/README.md))
 
-Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream. MP4 files with a 90/180/270 display rotation are turned upright after scaling, like ffmpeg's autorotate. Scaled outputs round to the nearest pixel, so their size can differ from the ffmpeg preset by 1 px.
+Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 sync samples may be IDR or open-GOP keyframes: non-IDR ones decode when all slices are intra or a recovery point SEI has `recovery_frame_cnt` 0, otherwise `ErrUnsupportedProfile`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream, including MP4 files with a non-zero display rotation (callers fall back to ffmpeg, which autorotates). Scaled outputs round to the nearest pixel, so their size can differ from the ffmpeg preset by 1 px.
+
+**Colour (matches ffmpeg):** H.264 honors the SPS VUI range and matrix (MP4 `colr` is not read); untagged video is BT.601 limited at all resolutions; JPEG/WebP output is BT.601 for every source (ffmpeg's YUV→YUV capture drops the matrix tag), PNG keeps the tag; VP8 is BT.601 limited. Residuals: ~5 dB PSNR lower on full-range/BT.709 sources (RGB clipping) and JPEG quantizer differences.
 
 ### By video codec
 
@@ -176,7 +178,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns
 |-------|------------|:------:|-------|
 | **MJPEG** | MP4, MOV, MKV, … | ✅ | Direct frame extract |
 | **VP8** | `.webm`, `.mkv` | ✅ | Pure-Go VP8 decode (`gen2brain/vpx`) |
-| **H.264** Baseline CAVLC, 8-bit 4:2:0 intra IDR | MP4, MOV, M4V, … | ✅ | Clean-room intra decoder; H.264 in MKV returns `ErrUnsupportedProfile` |
+| **H.264** Baseline CAVLC, 8-bit 4:2:0 intra keyframe (IDR or open-GOP) | MP4, MOV, M4V, … | ✅ | Clean-room intra decoder; H.264 in MKV returns `ErrUnsupportedProfile` |
 | **H.264** Main / High CABAC intra | MP4, MOV, M4V, … | ✅ | Not MKV (see above) |
 | **H.264** interlaced, 10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
 | **VP9** | `.webm`, `.mkv` | ❌ | Typed unsupported in gate |
@@ -217,7 +219,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns
 | Capability | Containers | Status |
 |------------|------------|:------:|
 | MP4 sync sample index | `.mp4`, `.mov`, `.m4v`, `.3gp` | ✅ |
-| IDR decode to RGB/YUV | H.264 in MP4/MOV | ✅ | MKV H.264 thumbnail/decode not supported |
+| Keyframe (IDR / open-GOP) decode to RGB/YUV | H.264 in MP4/MOV | ✅ | MKV H.264 thumbnail/decode not supported |
 | Gated profiles (`ErrUnsupportedProfile`) | — | — | Profiles that fail timing gate in `gatedProfiles` (`internal/h264/sps.go`); none gated today |
 
 ---
