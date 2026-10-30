@@ -38,9 +38,13 @@ func MPEG4PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float6
 		seekPercent = 10
 	}
 	targetMs := int64(float64(h.durationMs()) * seekPercent / 100.0)
+	// Demux errors past ProbeHeader (truncated or corrupt index, clusters or
+	// blocks) go through mpeg4ThumbErr like decoder errors, so callers get
+	// errs.Unsupported and fall back to ffmpeg, matching the MP4 thumbErr
+	// contract. io.EOF from the cluster walk is the normal end of the file.
 	ix, err := indexSegment(r, size)
 	if err != nil {
-		return nil, err
+		return nil, mpeg4ThumbErr(err)
 	}
 	track, _, ok := videoTrackNumber(ix.tracks, mpeg4CodecIDs...)
 	if !ok {
@@ -60,7 +64,7 @@ func MPEG4PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float6
 	scale := h.timecodeScale()
 	start, err := seekStartCluster(r, ix, track, msToTicks(targetMs, scale), true)
 	if err != nil {
-		return nil, err
+		return nil, mpeg4ThumbErr(err)
 	}
 	w := clusterWalker{r: r, segEnd: ix.segEnd, off: start}
 	var pick []byte
@@ -70,7 +74,7 @@ func MPEG4PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float6
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, mpeg4ThumbErr(err)
 		}
 		if bi.track != track || bi.payloadLen <= 0 || !bi.keyframe {
 			continue
@@ -83,7 +87,7 @@ func MPEG4PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float6
 		}
 		frames, err := readFrames(r, bi)
 		if err != nil {
-			return nil, err
+			return nil, mpeg4ThumbErr(err)
 		}
 		if len(frames) > 0 && len(frames[0]) > 0 {
 			pick = frames[0]
@@ -102,7 +106,7 @@ func MPEG4PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float6
 	return pic, nil
 }
 
-// mpeg4ThumbErr maps an MPEG-4 Part 2 decoder error to a thumbnail error:
+// mpeg4ThumbErr maps an MPEG-4 Part 2 demux or decoder error to a thumbnail error:
 // a ProfileError keeps its identity, and any other error (corrupt or
 // truncated bitstream) becomes errs.Unsupported with the decoder's reason so
 // callers fall back to ffmpeg, matching the MP4 path's thumbErr.
