@@ -1,5 +1,8 @@
 // Package isobmff supports go-media parsers.
-
+//
+// H.264 thumbnails seek to an MP4 sync sample (stss), which may be an IDR or
+// an open-GOP keyframe; see internal/h264 for which ones decode and how
+// colour is chosen.
 package isobmff
 
 import (

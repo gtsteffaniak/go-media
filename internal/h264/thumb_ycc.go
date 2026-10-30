@@ -8,15 +8,18 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
-// ThumbYCbCr is a decoded IDR frame kept in YCbCr for fast downscale before JPEG encode.
-// Color metadata follows the bitstream VUI (see ThumbColorFromFrame for the ffmpeg rules).
+// ThumbYCbCr is a decoded keyframe kept in YCbCr for fast downscale before
+// encode. H.264 frames take CS/RNG from the bitstream VUI (see
+// ThumbColorFromFrame for the ffmpeg rules); VP8 frames are BT.601 limited
+// range. JPEG/WebP encoding then calls MatchFFmpegYUVOutput.
 type ThumbYCbCr struct {
-	YCbCr *image.YCbCr
-	CS    yuv.ColorSpace
-	RNG   yuv.Range
+	YCbCr *image.YCbCr   // samples as decoded (limited or full range)
+	CS    yuv.ColorSpace // YCbCr→RGB matrix (BT.601 when untagged)
+	RNG   yuv.Range      // sample range from video_full_range_flag
 }
 
-// NewThumbYCbCr wraps a decoded frame for the thumbnail pipeline.
+// NewThumbYCbCr wraps a decoded frame for the thumbnail pipeline, choosing the
+// matrix and range with ThumbColorFromFrame.
 func NewThumbYCbCr(f *frame.Frame) *ThumbYCbCr {
 	cs, rng := ThumbColorFromFrame(f)
 	return &ThumbYCbCr{
@@ -32,13 +35,19 @@ func (t *ThumbYCbCr) RGB(yy, cb, cr byte) (r, g, b byte) {
 	return byte(ri), byte(gi), byte(bi)
 }
 
+// ColorModel implements image.Image; At returns RGBA converted with CS and RNG.
 func (t *ThumbYCbCr) ColorModel() color.Model { return color.RGBAModel }
+
+// Bounds implements image.Image.
 func (t *ThumbYCbCr) Bounds() image.Rectangle {
 	if t.YCbCr == nil {
 		return image.Rect(0, 0, 0, 0)
 	}
 	return t.YCbCr.Bounds()
 }
+
+// At implements image.Image, converting with the frame matrix (CS) and range
+// (RNG).
 func (t *ThumbYCbCr) At(x, y int) color.Color {
 	if t.YCbCr == nil {
 		return color.RGBA{}

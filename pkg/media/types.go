@@ -94,7 +94,8 @@ type ThumbnailOptions struct {
 	SeekPercent float64
 	// Seek overrides SeekPercent when > 0.
 	Seek float64
-	// Format is jpeg, png, or webp-lossless.
+	// Format is jpeg, png, or webp-lossless. JPEG and WebP use the BT.601
+	// matrix like ffmpeg's YUV capture; PNG keeps the stream's tagged matrix.
 	Format string
 	// Quality is JPEG quality 1–100 (preferred over JPEGQuality).
 	Quality int

@@ -44,6 +44,8 @@ type SPS struct {
 	// fields are read; the rest of the VUI is ignored. When the VUI is absent
 	// or truncated they stay zero, which callers treat as "untagged" just like
 	// ffmpeg's AVCOL_SPC_UNSPECIFIED / AVCOL_RANGE_UNSPECIFIED.
+	// VUI video_signal_type, used for thumbnail colour like ffmpeg does.
+	// All zero when the SPS has no VUI or the VUI is truncated (untagged).
 	VideoFullRange     bool  // video_full_range_flag
 	ColourDescription  bool  // colour_description_present_flag
 	MatrixCoefficients uint8 // matrix_coefficients (2 = unspecified)

@@ -8,7 +8,11 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/thumb"
 )
 
-// Thumbnail returns a scaled JPEG, PNG, or WebP preview.
+// Thumbnail returns a scaled JPEG, PNG, or WebP preview of the keyframe at
+// the requested seek position. Colour and keyframe selection follow ffmpeg
+// (see the package doc): VUI tags honored, untagged video BT.601 limited,
+// JPEG/WebP shown as BT.601, open-GOP keyframes decoded when intra or
+// recovery-point; other streams return ErrUnsupported/ErrUnsupportedProfile.
 func Thumbnail(r io.ReaderAt, size int64, opt ThumbnailOptions) (res ThumbnailResult, err error) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -39,7 +43,9 @@ func ThumbnailLarge(r io.ReaderAt, size int64, seekPercent float64) (ThumbnailRe
 	return Thumbnail(r, size, OptionsForPreset(ThumbnailPresetLarge, seekPercent))
 }
 
-// ThumbnailRasterPNG returns a lossless PNG of the scaled decode (before JPEG/WebP).
+// ThumbnailRasterPNG returns a lossless PNG of the scaled decode (before
+// JPEG/WebP). It converts through RGB with the stream's tagged matrix and
+// range, like ffmpeg's PNG output; it skips the BT.601 JPEG/WebP rule.
 func ThumbnailRasterPNG(r io.ReaderAt, size int64, opt ThumbnailOptions) (data []byte, err error) {
 	defer func() {
 		if p := recover(); p != nil {

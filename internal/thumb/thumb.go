@@ -1,5 +1,19 @@
-// Package thumb supports go-media parsers.
-
+// Package thumb renders scaled keyframe thumbnails (JPEG, PNG, WebP).
+//
+// Colour matches ffmpeg's go-ffmpeg capture (scale then mjpeg/libwebp/png):
+//   - H.264 honors the SPS VUI range and matrix; untagged video is BT.601
+//     limited range at every resolution (swscale's default).
+//   - JPEG and WebP output use the BT.601 matrix for every source, because
+//     ffmpeg converts YUV→YUV and those formats are displayed as BT.601; PNG
+//     goes through RGB and keeps the tagged matrix
+//     (h264.ThumbYCbCr.MatchFFmpegYUVOutput).
+//   - VP8 is BT.601 limited range on every path (RFC 6386 §9.2), which
+//     is what ffmpeg's vp8 decoder reports.
+//
+// Residual differences: full-range and BT.709 sources go through an RGB
+// intermediate that clips out-of-gamut values (ffmpeg stays in YUV), roughly
+// 5 dB PSNR lower than untagged sources, and image/jpeg quantizes differently
+// from ffmpeg's mjpeg encoder.
 package thumb
 
 import (

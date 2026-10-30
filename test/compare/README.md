@@ -48,7 +48,7 @@ The gate has no Matroska or WebM tag fixtures, so MKV/WebM tags are not compared
 | Large quality | JPEG quality **90** | `-q:v` **5** |
 | H.264 seek | `SeekPercent` **10** (sync sample nearest 10% of **video track**, skipping a tiny black/flat keyframe) | `-ss` = `H264KeyframeTimeSec(10)`; `-skip_frame nokey` + `-skip_loop_filter all` |
 | Other video seek | `SeekPercent` = `10%` of **format** duration | `-ss` = `format.duration × 10%` |
-| H.264 decode | intra IDR, deblock off (`fast=true`) | matches skip flags above |
+| H.264 decode | intra keyframe (IDR or open-GOP intra/recovery point), deblock off (`fast=true`) | matches skip flags above |
 | Threads | n/a | `-threads 1` (timing fairness) |
 | MJPEG / VP8 | container paths in `internal/thumb` | ffmpeg full decode + same scale/q |
 

@@ -1,4 +1,12 @@
 // Package cleanroom implements decode-only H.264 intra for thumbnails.
+//
+// Only one access unit is decoded, with an empty DPB. IDR pictures are always
+// accepted; non-IDR pictures only under the open-GOP rule in openGOPKeyframe
+// (all slices intra, or a recovery point SEI with recovery_frame_cnt 0),
+// mirroring ffmpeg's fast seek. P/B slices fail with decode.ErrInterSlice.
+// The SPS VUI colour signalling (range and matrix) is copied onto every
+// decoded frame so callers can pick colours the way ffmpeg does.
+//
 // Slice/MB decode is adapted from mgvs/go-openh264 (BSD-2); see NOTICE-mgvs and THIRD_PARTY.md.
 package cleanroom
 
