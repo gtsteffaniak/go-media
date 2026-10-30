@@ -27,7 +27,10 @@ func validateSPSNAL(nal []byte) error {
 		return errs.UnsupProfile("h264", fmt.Sprintf("chroma format %d (need 4:2:0)", sps.ChromaFormatIDC))
 	}
 	if sps.BitDepthLumaMinus8 != 0 || sps.BitDepthChromaMinus8 != 0 {
-		return errs.UnsupProfile("h264", "10-bit or deeper luma/chroma")
+		// The clean-room decoder's sample pipeline (prediction, IDCT clip,
+		// deblocking tables, QpBdOffset dequant, SIMD kernels) is 8-bit only.
+		return errs.UnsupProfile("h264", fmt.Sprintf("%d-bit luma / %d-bit chroma (profile_idc %d); decoder is 8-bit only",
+			sps.BitDepthLumaMinus8+8, sps.BitDepthChromaMinus8+8, sps.Profile))
 	}
 	if sps.SeqScalingMatrixPresentFlag {
 		// High profile 8x8 transform is supported when lists are present.

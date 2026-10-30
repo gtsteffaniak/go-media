@@ -281,3 +281,14 @@ payloads are read. `tfhd`/`trex` defaults, base-data-offset,
 default-base-is-moof, `first_sample_flags` and non-sync / depends-on flags are
 honored. Black-frame keyframe skipping used for progressive MP4 is not applied
 to fragmented files.
+
+## Not supported in this release: 10-bit H.264, MPEG-4 Part 2
+
+- **10-bit H.264 (High 10)** returns `ErrUnsupportedProfile` with
+  `h264: N-bit luma / N-bit chroma (profile_idc P); decoder is 8-bit only`.
+  The clean-room decoder stores samples as bytes end to end (intra
+  prediction, IDCT clipping, bit-depth-scaled deblocking thresholds,
+  QpBdOffset dequantization and the SIMD kernels), so support needs a 16-bit
+  sample pipeline; it was not added rather than shipping an approximation.
+- **MPEG-4 Part 2 (`mp4v`)** returns `ErrUnsupported` with
+  `mp4: video codec mp4v (MPEG-4 Part 2) not supported (go-media has no decoder for this codec)`.

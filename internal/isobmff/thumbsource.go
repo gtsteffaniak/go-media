@@ -148,7 +148,7 @@ func (s ThumbSource) UnsupportedReason() error {
 	if video.err != nil && video.entry == ([4]byte{}) {
 		return thumbErr(video.err)
 	}
-	return errs.Unsup("thumbnail", "mp4: video codec "+describeSampleEntry(video.entry)+" not supported")
+	return errs.Unsup("thumbnail", "mp4: video codec "+describeSampleEntry(video.entry)+" not supported (go-media has no decoder for this codec)")
 }
 
 // sampleEntryNames maps video sample entry fourccs to codec names for
