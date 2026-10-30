@@ -1,0 +1,29 @@
+WEBVTT
+
+00:01.000 --> 00:02.500
+<i>Italic</i>, <b>bold</b> and <u>underline</u>
+<i>Upper</i> strike
+
+00:03.000 --> 00:04.000
+Leading spaces
+second line
+third
+fourth
+
+00:05.000 --> 00:06.000
+red big
+<b>nested</b>
+
+00:07.000 --> 00:08.000
+Top line <b>ass-ish</b> microdvd
+Fish &amp; chips &lt;3 &nbsp;
+
+00:09.000 --> 00:10.000
+<c.yellow>unknown tag << guillemets >> a <b> c
+<b unclosed and {brace</b>
+
+01:02:03.004 --> 01:02:04.005
+Over an hour, ms 4 and raw 5
+
+10:00:00.000 --> 10:00:01.999
+Dot separator, ten hours

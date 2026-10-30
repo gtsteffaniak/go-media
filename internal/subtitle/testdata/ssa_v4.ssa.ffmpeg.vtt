@@ -1,0 +1,11 @@
+WEBVTT
+
+00:01.000 --> 00:02.000
+<b>SSA bold default</b>
+
+00:03.000 --> 00:04.000
+<i>SSA italic, comma</i>
+
+00:05.000 --> 00:06.000
+Unknown style
+second line

@@ -22,11 +22,8 @@ World
 	if !strings.Contains(out, "WEBVTT") || !strings.Contains(out, "Hello") {
 		t.Fatalf("bad vtt: %s", out)
 	}
-	if strings.Contains(out, "00:00:01,000") {
-		t.Fatalf("expected WebVTT dot separator, got: %s", out)
-	}
-	if !strings.Contains(out, "00:00:01.000") {
-		t.Fatalf("expected WebVTT timestamp: %s", out)
+	if !strings.Contains(out, "00:01.000 --> 00:02.000") {
+		t.Fatalf("expected ffmpeg-style MM:SS.mmm timestamps: %s", out)
 	}
 }
 

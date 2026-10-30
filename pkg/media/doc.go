@@ -21,5 +21,22 @@
 // RGB clipping (ffmpeg stays in YUV), and JPEG quantization differs from
 // ffmpeg's mjpeg encoder.
 //
+// # Subtitle parity with ffmpeg
+//
+// SubtitleToWebVTT and ExtractEmbeddedSubtitle port ffmpeg's subtitle
+// pipeline (demuxer, text decoder to ASS, webvtt encoder and muxer), so their
+// output is byte-identical to "ffmpeg -i in -map 0:s:0 -f webvtt out.vtt" for
+// SRT, WebVTT, ASS and SSA sidecars, Matroska S_TEXT/UTF8, S_TEXT/ASCII,
+// ASS/SSA and D_WEBVTT tracks, and MP4 tx3g. Golden tests pin this against
+// ffmpeg 7.1.5. Matroska S_TEXT/WEBVTT and MP4 wvtt, which ffmpeg cannot
+// read, go through the same encoder. Bitmap formats (PGS, VobSub, DVB),
+// HDMV TEXTST and ARIB captions return ErrUnsupported naming the format.
+//
+// Intentional differences: a malformed D_WEBVTT block drops only that cue
+// (ffmpeg loses the rest of its cluster), unterminated laces do not run into
+// the next lace, MP4 edit lists with a non-zero media_time are ignored, and
+// SRT or ASS input with no cues is an error. See
+// docs/SUPPORTED_CAPABILITIES.md.
+//
 // Import: github.com/gtsteffaniak/go-media/pkg/media
 package media

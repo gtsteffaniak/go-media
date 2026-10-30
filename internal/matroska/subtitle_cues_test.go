@@ -28,9 +28,9 @@ func TestExtractSubtitleMatchesFFmpeg(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := "WEBVTT\n\n" +
-				"00:00:01.000 --> 00:00:03.000\n" + tc.first + "\n\n" +
-				"00:00:04.000 --> 00:00:06.000\nSecond\n\n" +
-				"00:00:10.000 --> 00:00:11.000\nThird\n"
+				"00:01.000 --> 00:03.000\n" + tc.first + "\n\n" +
+				"00:04.000 --> 00:06.000\nSecond\n\n" +
+				"00:10.000 --> 00:11.000\nThird\n"
 			if got != want {
 				t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 			}

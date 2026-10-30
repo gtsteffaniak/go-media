@@ -14,7 +14,9 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/subtitle"
 )
 
-// SubtitleToWebVTT converts a sidecar subtitle file to WebVTT.
+// SubtitleToWebVTT converts a sidecar subtitle file (.srt, .vtt, .ass, .ssa)
+// to WebVTT, byte-identical to ffmpeg's "-f webvtt" output for the same file.
+// SRT or ASS files with no cues return an error.
 func SubtitleToWebVTT(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -72,7 +74,11 @@ func ListSubtitleTracks(r io.ReaderAt, size int64) ([]SubtitleTrack, error) {
 	}
 }
 
-// ExtractEmbeddedSubtitle returns WebVTT for an embedded subtitle stream index.
+// ExtractEmbeddedSubtitle returns WebVTT for an embedded subtitle stream
+// index, byte-identical to "ffmpeg -map 0:<index> -f webvtt" for Matroska text
+// tracks and MP4 tx3g (see the package doc for the few intentional
+// differences). Bitmap tracks such as PGS, VobSub and DVB return
+// ErrUnsupported with a message naming the format.
 func ExtractEmbeddedSubtitle(r io.ReaderAt, size int64, streamIndex int) (string, error) {
 	id, err := sniff.Detect(r, size)
 	if err != nil {

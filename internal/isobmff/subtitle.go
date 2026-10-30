@@ -1,9 +1,7 @@
 package isobmff
 
 import (
-	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"strings"
 
@@ -53,13 +51,31 @@ func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, 
 	}
 }
 
+// extractWVTT converts an ISO/IEC 14496-30 WebVTT track (wvtt). ffmpeg 7.1
+// cannot read or write these, so there is no ffmpeg output to match; the
+// cues are produced the way ffmpeg handles every other WebVTT source: each
+// vttc box's payl text becomes a cue, timed by the sample's stts time and
+// duration (the edit list is not applied, as for tx3g), identifiers (iden) and
+// settings (sttg) are dropped, and the text goes through the same WebVTT
+// decoder and writer as sidecar .vtt files. vtte samples mark gaps.
 func extractWVTT(r io.ReaderAt, size int64, trackIndex int) (string, error) {
 	refs, err := SampleRefs(r, size, trackIndex)
 	if err != nil {
 		return "", err
 	}
-	var cues []string
-	for _, ref := range refs {
+	tt, err := readTextTrackTiming(r, size, trackIndex)
+	if err != nil {
+		return "", err
+	}
+	var events []subtitle.Event
+	var t int64
+	for i, ref := range refs {
+		var delta int64
+		if i < len(tt.deltas) {
+			delta = tt.deltas[i]
+		}
+		start := t
+		t += delta
 		if ref.Size <= 0 {
 			continue
 		}
@@ -67,57 +83,39 @@ func extractWVTT(r io.ReaderAt, size int64, trackIndex int) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		cue, err := parseWVTSample(payload)
-		if err != nil {
-			return "", err
-		}
-		if strings.TrimSpace(cue) != "" {
-			cues = append(cues, cue)
+		for _, text := range wvttCueTexts(payload) {
+			events = append(events, subtitle.Event{
+				Start:    rescaleRound(rescaleRound(start*1_000_000, tt.timescale), 1000),
+				Duration: rescaleRound(delta*1000, tt.timescale),
+				Dialog:   subtitle.DefaultDialog(len(events), subtitle.WebVTTToASS(text)),
+			})
 		}
 	}
-	if len(cues) == 0 {
+	if len(events) == 0 {
 		return "", errs.Unsup("subtitle", "no wvtt samples")
 	}
-	return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
+	return subtitle.WriteWebVTT("", events), nil
 }
 
-func parseWVTSample(payload []byte) (string, error) {
-	s := strings.TrimSpace(string(payload))
-	if strings.Contains(s, "-->") {
-		return s, nil
-	}
-	var start, body string
-	_, err := mp4.ReadBoxStructure(bytes.NewReader(payload), func(h *mp4.ReadHandle) (interface{}, error) {
-		switch h.BoxInfo.Type {
-		case mp4.BoxTypeCtim(), mp4.BoxTypePayl():
-			r := bytes.NewReader(payload)
-			if _, err := h.BoxInfo.SeekToPayload(r); err != nil {
-				return nil, err
-			}
-			data := make([]byte, h.BoxInfo.Size-h.BoxInfo.HeaderSize)
-			if _, err := io.ReadFull(r, data); err != nil {
-				return nil, err
-			}
-			txt := strings.TrimRight(string(data), "\x00")
-			if h.BoxInfo.Type == mp4.BoxTypeCtim() {
-				start = txt
-			} else {
-				body = txt
-			}
+// wvttCueTexts returns the payl text of every vttc box in one wvtt sample,
+// with trailing CR/LF trimmed; empty payloads are skipped as ffmpeg skips
+// empty WebVTT cues.
+func wvttCueTexts(sample []byte) []string {
+	var out []string
+	eachBox(sample, func(typ string, body []byte) {
+		if typ != "vttc" {
+			return
 		}
-		if h.BoxInfo.Type != mp4.BoxTypeAny() {
-			_, err := h.Expand()
-			return nil, err
-		}
-		return nil, nil
+		eachBox(body, func(typ string, body []byte) {
+			if typ != "payl" {
+				return
+			}
+			if text := strings.TrimRight(string(body), "\r\n\x00"); text != "" {
+				out = append(out, text)
+			}
+		})
 	})
-	if err != nil {
-		return "", err
-	}
-	if start != "" && body != "" {
-		return fmt.Sprintf("%s --> %s\n%s", start, start, body), nil
-	}
-	return "", errs.Unsup("subtitle", "empty wvtt sample")
+	return out
 }
 
 func extractSTPP(r io.ReaderAt, size int64, trackIndex int) (string, error) {
@@ -139,87 +137,134 @@ func extractSTPP(r io.ReaderAt, size int64, trackIndex int) (string, error) {
 	return subtitle.TTMLOrXMLToWebVTT(strings.Join(xmlParts, "\n"))
 }
 
+// extractTX3G converts a 3GPP timed text (tx3g, ffmpeg's mov_text) track the
+// way "ffmpeg -i in.mp4 -map 0:s:N out.vtt" does (ffmpeg 7.1): samples are
+// decoded with the track's default style (subtitle.MovText), each sample's
+// time comes from stts in the media timescale, its duration is the stts
+// delta, and the 2-byte empty samples
+// that fill gaps produce no cue. Times are rounded to milliseconds as the
+// ffmpeg CLI rounds them.
+//
+// The edit list is not applied. For the edit lists ffmpeg writes (one edit
+// at media_time 0) and for a leading empty edit, that is exactly ffmpeg's
+// output: the CLI subtracts the start_time the empty edit creates. For a
+// non-zero media_time ffmpeg's mov demuxer re-bases the track on its first
+// kept sample, which go-media intentionally does not reproduce.
 func extractTX3G(r io.ReaderAt, size int64, trackIndex int) (string, error) {
 	refs, err := SampleRefs(r, size, trackIndex)
 	if err != nil {
 		return "", err
 	}
-	info, err := mp4.Probe(ioat.New(r, size))
+	tt, err := readTextTrackTiming(r, size, trackIndex)
 	if err != nil {
 		return "", err
 	}
-	if trackIndex >= len(info.Tracks) {
-		return "", errs.Unsupported
-	}
-	timescale := info.Tracks[trackIndex].Timescale
-	if timescale == 0 {
-		timescale = 1000
-	}
-	var cues []string
-	var t uint64
-	for _, ref := range refs {
+	dec := subtitle.NewMovText(tt.entry)
+	var events []subtitle.Event
+	var t int64
+	for i, ref := range refs {
+		var delta int64
+		if i < len(tt.deltas) {
+			delta = tt.deltas[i]
+		}
+		start := t
+		t += delta
+		if ref.Size <= 0 {
+			continue
+		}
 		payload, err := ioat.ReadAll(r, size, ref.Offset, ref.Size)
 		if err != nil {
 			return "", err
 		}
-		text, dur, err := parseTX3GSample(payload)
-		if err != nil {
-			return "", err
-		}
-		if text == "" {
+		text, ok := dec.Decode(payload)
+		if !ok {
 			continue
 		}
-		start := tx3gTime(t, timescale)
-		end := tx3gTime(t+dur, timescale)
-		cues = append(cues, fmt.Sprintf("%s --> %s\n%s", start, end, text))
-		t += dur
+		events = append(events, subtitle.Event{
+			Start:    rescaleRound(rescaleRound(start*1_000_000, tt.timescale), 1000),
+			Duration: rescaleRound(delta*1000, tt.timescale),
+			Dialog:   subtitle.DefaultDialog(len(events), text),
+		})
 	}
-	if len(cues) == 0 {
+	if len(events) == 0 {
 		return "", errs.Unsup("subtitle", "no tx3g samples")
 	}
-	return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
+	return subtitle.WriteWebVTT(dec.Header(), events), nil
 }
 
-func parseTX3GSample(payload []byte) (text string, duration uint64, err error) {
-	if len(payload) < 2 {
-		return "", 0, errs.Unsup("subtitle", "tx3g sample too short")
-	}
-	off := 0
-	if len(payload) >= 2 && payload[0] == 0 && payload[1] == 0 {
-		off = 2
-	}
-	raw := payload[off:]
-	if len(raw) >= 2 && raw[0] == 0xfe && raw[1] == 0xff {
-		text = decodeUTF16BE(raw[2:])
-	} else {
-		text = strings.TrimRight(string(raw), "\x00")
-	}
-	text = strings.TrimSpace(text)
-	duration = 2000
-	return text, duration, nil
+// textTrackTiming is what extractTX3G and extractWVTT need from a trak besides sample offsets.
+type textTrackTiming struct {
+	timescale int64   // mdhd timescale
+	deltas    []int64 // per-sample stts durations in media ticks
+	entry     []byte  // first sample entry after size, type, reserved and data reference index
 }
 
-func decodeUTF16BE(b []byte) string {
-	if len(b) < 2 {
-		return ""
+// readTextTrackTiming reads mdhd, stts and the first
+// stsd entry of the trak at trackIndex.
+func readTextTrackTiming(r io.ReaderAt, size int64, trackIndex int) (textTrackTiming, error) {
+	var tt textTrackTiming
+	rs := ioat.New(r, size)
+	traks, err := mp4.ExtractBox(rs, nil, mp4.BoxPath{mp4.BoxTypeMoov(), mp4.BoxTypeTrak()})
+	if err != nil {
+		return tt, err
 	}
-	var runes []rune
-	for i := 0; i+1 < len(b); i += 2 {
-		r := rune(binary.BigEndian.Uint16(b[i : i+2]))
-		if r != 0 {
-			runes = append(runes, r)
+	if trackIndex >= len(traks) {
+		return tt, errs.Unsupported
+	}
+	stbl := []mp4.BoxType{mp4.BoxTypeMdia(), mp4.BoxTypeMinf(), mp4.BoxTypeStbl()}
+	boxes, err := mp4.ExtractBoxesWithPayload(rs, traks[trackIndex], []mp4.BoxPath{
+		{mp4.BoxTypeMdia(), mp4.BoxTypeMdhd()},
+		append(append(mp4.BoxPath{}, stbl...), mp4.BoxTypeStts()),
+	})
+	if err != nil {
+		return tt, err
+	}
+	tt.timescale = 1000
+	for _, b := range boxes {
+		switch p := b.Payload.(type) {
+		case *mp4.Mdhd:
+			if p.Timescale != 0 {
+				tt.timescale = int64(p.Timescale)
+			}
+		case *mp4.Stts:
+			for _, e := range p.Entries {
+				if uint64(len(tt.deltas))+uint64(e.SampleCount) > maxTX3GSamples {
+					return tt, errs.Unsup("subtitle", "tx3g track has too many samples")
+				}
+				for n := uint32(0); n < e.SampleCount; n++ {
+					tt.deltas = append(tt.deltas, int64(e.SampleDelta))
+				}
+			}
 		}
 	}
-	return string(runes)
+	stsds, err := mp4.ExtractBox(rs, traks[trackIndex], append(append(mp4.BoxPath{}, stbl...), mp4.BoxTypeStsd()))
+	if err != nil {
+		return tt, err
+	}
+	if len(stsds) > 0 && stsds[0].Size <= 1<<16 {
+		raw, err := ioat.ReadAll(r, size, int64(stsds[0].Offset+stsds[0].HeaderSize), int64(stsds[0].Size-stsds[0].HeaderSize))
+		if err != nil {
+			return tt, err
+		}
+		// FullBox header (4), entry count (4), then the first entry.
+		if len(raw) >= 8+16 {
+			e := raw[8:]
+			n := int(binary.BigEndian.Uint32(e))
+			if n >= 16 && n <= len(e) {
+				tt.entry = e[16:n]
+			}
+		}
+	}
+	return tt, nil
 }
 
-func tx3gTime(ticks uint64, timescale uint32) string {
-	ms := ticks * 1000 / uint64(timescale)
-	h := ms / 3_600_000
-	ms %= 3_600_000
-	m := ms / 60_000
-	ms %= 60_000
-	s := ms / 1000
-	ms %= 1000
-	return fmt.Sprintf("%02d:%02d:%02d.%03d", h, m, s, ms)
+// maxTX3GSamples bounds the expanded stts of a tx3g track.
+const maxTX3GSamples = 1 << 20
+
+// rescaleRound returns a/d rounded half away from zero, as av_rescale does.
+func rescaleRound(a, d int64) int64 {
+	if a < 0 {
+		return -((-a + d/2) / d)
+	}
+	return (a + d/2) / d
 }
