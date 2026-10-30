@@ -30,6 +30,7 @@ const (
 	idSimpleBlock       = 0xA3
 	idBlockGroup        = 0xA0
 	idBlock             = 0xA1
+	idBlockDuration     = 0x9B
 	idReferenceBlock    = 0xFB
 
 	// maxCuesElement bounds the Cues read. A 2-hour file with one cue per
@@ -53,7 +54,8 @@ type blockInfo struct {
 	track      uint64
 	timecode   int64 // absolute, in timecode ticks
 	keyframe   bool
-	lacing     byte // 0 none, 1 Xiph, 2 fixed, 3 EBML
+	duration   int64 // BlockDuration in timecode ticks; -1 when absent
+	lacing     byte  // 0 none, 1 Xiph, 2 fixed, 3 EBML
 	payloadOff int64
 	payloadLen int64
 }
@@ -470,6 +472,7 @@ func readBlockGroup(r io.ReaderAt, off, n, clusterTC int64) (blockInfo, bool, er
 	var bi blockInfo
 	var have bool
 	key := true
+	dur := int64(-1)
 	for p := off; p < end; {
 		id, h, sz, err := readElementHeader(r, p, end)
 		if err != nil || sz < 0 {
@@ -484,10 +487,20 @@ func readBlockGroup(r io.ReaderAt, off, n, clusterTC int64) (blockInfo, bool, er
 			bi, have = b, true
 		case idReferenceBlock:
 			key = false
+		case idBlockDuration:
+			if sz > 0 && sz <= 8 {
+				var b [8]byte
+				if m, _ := r.ReadAt(b[:sz], p+h); int64(m) == sz {
+					if v, _ := bufUint(b[:sz]); v <= 1<<62 {
+						dur = int64(v)
+					}
+				}
+			}
 		}
 		p += h + sz
 	}
 	bi.keyframe = key
+	bi.duration = dur
 	return bi, have, nil
 }
 
@@ -522,6 +535,7 @@ func parseBlockHeader(b []byte, off, n, clusterTC int64, simple bool) (blockInfo
 		lacing:     (flags >> 1) & 3,
 		payloadOff: off + hdr,
 		payloadLen: n - hdr,
+		duration:   -1,
 	}
 	if simple {
 		bi.keyframe = flags&0x80 != 0

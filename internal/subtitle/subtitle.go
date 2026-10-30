@@ -120,7 +120,13 @@ func toVTTTime(s string) string {
 	return out
 }
 
-// stripASSTags is an internal subtitle helper.
+// StripASSTags removes ASS override blocks such as {\an7} and converts \N
+// line breaks, leaving the plain dialogue text.
+func StripASSTags(s string) string {
+	return stripASSTags(s)
+}
+
+// stripASSTags removes ASS override blocks and converts \N line breaks.
 func stripASSTags(s string) string {
 	s = strings.ReplaceAll(s, "\\N", "\n")
 	for {
