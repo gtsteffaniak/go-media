@@ -31,7 +31,7 @@ func PictureRGBAScaled(p *gvp8.Picture, maxW, maxH int, scaler int) *image.RGBA 
 	}
 	if sp.Width == tw && sp.Height == th {
 		out := image.NewRGBA(image.Rect(0, 0, tw, th))
-		yuv420BT709LimitedToRGBA(out, sp)
+		yuv420BT601LimitedToRGBA(out, sp)
 		return out
 	}
 	mode := scaler
@@ -213,7 +213,7 @@ func scalePictureCatmull(p *gvp8.Picture, tw, th int) *image.RGBA {
 		sp = halve420(sp)
 	}
 	mid := image.NewRGBA(image.Rect(0, 0, sp.Width, sp.Height))
-	yuv420BT709LimitedToRGBA(mid, sp)
+	yuv420BT601LimitedToRGBA(mid, sp)
 	if sp.Width == tw && sp.Height == th {
 		return mid
 	}

@@ -162,6 +162,9 @@ func (d *Decoder) decodeSliceUnit(u nal.Unit, frame *decode.Frame, lastHdr *deco
 		return nil, h, err
 	}
 	d.markCovered(h.FirstMB, h.DecodedMBs)
+	frame.VideoFullRange = sps.VideoFullRange
+	frame.ColourDescription = sps.ColourDescription
+	frame.MatrixCoefficients = sps.MatrixCoefficients
 	return frame, h, nil
 }
 

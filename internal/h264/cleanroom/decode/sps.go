@@ -39,6 +39,14 @@ type SPS struct {
 	Height  int
 	OffsetX int // luma pixel origin of the visible (cropped) region
 	OffsetY int
+
+	// Colour signalling from the VUI video_signal_type (E.1.1). Only these
+	// fields are read; the rest of the VUI is ignored. When the VUI is absent
+	// or truncated they stay zero, which callers treat as "untagged" just like
+	// ffmpeg's AVCOL_SPC_UNSPECIFIED / AVCOL_RANGE_UNSPECIFIED.
+	VideoFullRange     bool  // video_full_range_flag
+	ColourDescription  bool  // colour_description_present_flag
+	MatrixCoefficients uint8 // matrix_coefficients (2 = unspecified)
 }
 
 // isHighProfile lists the profiles whose SPS contains the
@@ -153,10 +161,11 @@ func ParseSPS(rbsp []byte) (*SPS, error) {
 		s.CropTop = r.UE()
 		s.CropBottom = r.UE()
 	}
-	// vui_parameters_present_flag and the VUI are not needed for dimensions — skip them.
-
 	if err := r.Err(); err != nil {
 		return nil, fmt.Errorf("h264 sps: %w", err)
+	}
+	if r.Flag() { // vui_parameters_present_flag
+		parseVUIColour(r, s)
 	}
 	if err := checkMacroblockBudget(s); err != nil {
 		return nil, err
@@ -165,6 +174,41 @@ func ParseSPS(rbsp []byte) (*SPS, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// parseVUIColour reads the VUI up to video_signal_type and stores the range and
+// matrix. ffmpeg's h264_ps.c reads the same fields to set color_range and
+// colorspace on the decoded frame, which swscale then uses. A VUI that is
+// truncated before these fields leaves them untagged instead of failing the
+// SPS: the colour fields are advisory and the picture is still decodable.
+func parseVUIColour(r *bitstream.Reader, s *SPS) {
+	if r.Flag() { // aspect_ratio_info_present_flag
+		if r.U(8) == 255 { // aspect_ratio_idc == Extended_SAR
+			r.U(16) // sar_width
+			r.U(16) // sar_height
+		}
+	}
+	if r.Flag() { // overscan_info_present_flag
+		r.Flag() // overscan_appropriate_flag
+	}
+	if !r.Flag() { // video_signal_type_present_flag
+		return
+	}
+	r.U(3) // video_format
+	full := r.Flag()
+	desc := r.Flag()
+	var mc uint32
+	if desc {
+		r.U(8) // colour_primaries
+		r.U(8) // transfer_characteristics
+		mc = r.U(8)
+	}
+	if r.Err() != nil {
+		return
+	}
+	s.VideoFullRange = full
+	s.ColourDescription = desc
+	s.MatrixCoefficients = uint8(mc)
 }
 
 // ChromaArrayType is a derived parameter: it is 0 when colour

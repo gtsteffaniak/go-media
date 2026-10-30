@@ -9,7 +9,7 @@ import (
 )
 
 // ThumbYCbCr is a decoded IDR frame kept in YCbCr for fast downscale before JPEG encode.
-// Color metadata follows the bitstream VUI (matches ffmpeg swscale defaults).
+// Color metadata follows the bitstream VUI (see ThumbColorFromFrame for the ffmpeg rules).
 type ThumbYCbCr struct {
 	YCbCr *image.YCbCr
 	CS    yuv.ColorSpace
@@ -52,3 +52,15 @@ func (t *ThumbYCbCr) At(x, y int) color.Color {
 
 // RGBLUT returns lookup tables matching RGB for this frame's colour space.
 func (t *ThumbYCbCr) RGBLUT() *yuv.RGBLUT { return yuv.NewRGBLUT(t.CS, t.RNG) }
+
+// MatchFFmpegYUVOutput switches the matrix to BT.601 for JPEG and WebP output.
+//
+// ffmpeg's capture path (scale → mjpeg/libwebp) never converts to RGB: swscale
+// does a YUV→YUV conversion, which rescales the range to what the encoder wants
+// but keeps the samples in the source matrix. JPEG (JFIF) and WebP are always
+// decoded as BT.601, so a BT.709-tagged source ends up displayed with the
+// BT.601 matrix. Using BT.601 here reproduces that output exactly; the range
+// is still honored because swscale does convert it.
+func (t *ThumbYCbCr) MatchFFmpegYUVOutput() {
+	t.CS = yuv.BT601
+}

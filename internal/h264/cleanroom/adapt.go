@@ -27,6 +27,7 @@ func ToFrame(dec *Decoder, src *decode.Frame) *frame.Frame {
 			StrideY:  src.StrideY,
 			StrideC:  src.StrideC,
 		}
+		copyColour(out, src)
 		if dec != nil && dec.pic == src {
 			dec.pic = nil
 		}
@@ -51,5 +52,14 @@ func copyToFrame(src *decode.Frame) *frame.Frame {
 		copy(dst.Cb[y*dst.StrideC:], src.Cb[cs+cx0:cs+cx0+cw])
 		copy(dst.Cr[y*dst.StrideC:], src.Cr[cs+cx0:cs+cx0+cw])
 	}
+	copyColour(dst, src)
 	return dst
+}
+
+// copyColour carries the SPS VUI colour signalling onto the shared frame so
+// the thumbnail colour selection can honor explicit tags like ffmpeg does.
+func copyColour(dst *frame.Frame, src *decode.Frame) {
+	dst.VideoFullRangeFlag = src.VideoFullRange
+	dst.ColorDescriptionValid = src.ColourDescription
+	dst.MatrixCoefficients = uint(src.MatrixCoefficients)
 }

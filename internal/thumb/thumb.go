@@ -15,6 +15,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/h264"
+	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
@@ -123,7 +124,12 @@ func sourceImage(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, 
 		if jpegOut {
 			if pic, ok := matroska.VP8PictureAtSeek(r, size, hdr, opt.SeekPercent); ok {
 				if ycc := vp8decode.PictureYCbCr(pic); ycc != nil {
-					return ycc, "decode", nil
+					// VP8 samples are BT.601 limited range (RFC 6386 §9.2,
+					// color_space 0); ffmpeg's vp8 decoder reports the same and
+					// swscale expands the range for MJPEG. Wrapping them as
+					// video YCbCr applies that expansion instead of treating
+					// them as full-range JFIF samples.
+					return &h264.ThumbYCbCr{YCbCr: ycc, CS: yuv.BT601, RNG: yuv.LimitedRange}, "decode", nil
 				}
 			}
 		}
@@ -176,6 +182,12 @@ func decodeBytes(data []byte, mime string, maxW, maxH int, fast bool) (image.Ima
 func encodeImageRaster(img image.Image, opt Options, src string) (Result, error) {
 	mode := scalerFromOptions(opt)
 	jpegOut := opt.Format == "" || opt.Format == "jpeg"
+	if t, ok := img.(*h264.ThumbYCbCr); ok && opt.Format != "png" {
+		// ffmpeg's JPEG/WebP capture keeps YUV end to end, so the viewer applies
+		// BT.601 whatever the source tag says. PNG goes through RGB and keeps
+		// the tagged matrix. See ThumbYCbCr.MatchFFmpegYUVOutput.
+		t.MatchFFmpegYUVOutput()
+	}
 	if jpegOut {
 		if _, ok := img.(*h264.ThumbYCbCr); ok {
 			if scaled, ok := tryScaleYCbCrSource(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
