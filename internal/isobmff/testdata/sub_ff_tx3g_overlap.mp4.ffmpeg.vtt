@@ -1,0 +1,20 @@
+WEBVTT
+
+00:01.000 --> 00:02.000
+Overlaps the next cue
+
+00:02.000 --> 00:03.000
+No blank line before index
+
+00:05.000 --> 00:06.000
+Out of order (later)
+
+00:07.000 --> 00:08.000
+Duplicate
+
+00:09.000 --> 00:11.000
+End before start (gets the gap)
+
+00:11.000 --> 00:12.000
+No spaces around arrow
+2024

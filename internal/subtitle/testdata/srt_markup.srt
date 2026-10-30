@@ -1,0 +1,32 @@
+1
+00:00:01,000 --> 00:00:02,500
+<i>Italic</i>, <b>bold</b> and <u>underline</u>
+<I>Upper</I> <s>strike</s>
+
+2
+00:00:03,000 --> 00:00:04,000
+   Leading spaces  
+second line<br>third<br/>fourth
+
+3
+00:00:05,000 --> 00:00:06,000
+<font color="#ff0000">red</font> <font size=20 face="Arial">big</font>
+<font color=blue><b>nested</b></font>
+
+4
+00:00:07,000 --> 00:00:08,000
+{\an8}Top line {\b1}ass-ish{\b0} {Y:i}microdvd
+Fish &amp; chips &lt;3 &nbsp;
+
+5
+00:00:09,000 --> 00:00:10,000
+<c.yellow>unknown tag</c> << guillemets >> a < b > c
+<b unclosed and {brace
+
+6
+01:02:03,004 --> 01:02:04,5
+Over an hour, ms 4 and raw 5
+
+7
+10:00:00.000 --> 10:00:01.999
+Dot separator, ten hours

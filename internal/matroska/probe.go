@@ -51,7 +51,12 @@ type trackEntry struct {
 	CodecPrivate []byte `ebml:"CodecPrivate"`
 	Language     string `ebml:"Language"`
 	Name         string `ebml:"Name"`
-	Video        *struct {
+	// DefaultDuration is the nominal frame length in nanoseconds; ffmpeg
+	// uses it as a subtitle block's duration when BlockDuration is absent.
+	DefaultDuration uint64 `ebml:"DefaultDuration"`
+	// ContentEncodings lists the compression applied to the track's frames.
+	ContentEncodings *contentEncodings `ebml:"ContentEncodings"`
+	Video            *struct {
 		PixelWidth  uint64 `ebml:"PixelWidth"`
 		PixelHeight uint64 `ebml:"PixelHeight"`
 	} `ebml:"Video"`
@@ -60,6 +65,22 @@ type trackEntry struct {
 		Channels          uint64  `ebml:"Channels"`
 		BitDepth          uint64  `ebml:"BitDepth"`
 	} `ebml:"Audio"`
+}
+
+// contentEncodings is the Matroska ContentEncodings master element.
+type contentEncodings struct {
+	ContentEncoding []contentEncoding `ebml:"ContentEncoding"`
+}
+
+// contentEncoding is one Matroska ContentEncoding element. A zero Scope is
+// read as the spec default 1 (all frames).
+type contentEncoding struct {
+	ContentEncodingScope uint64 `ebml:"ContentEncodingScope"`
+	ContentEncodingType  uint64 `ebml:"ContentEncodingType"`
+	ContentCompression   *struct {
+		ContentCompAlgo     uint64 `ebml:"ContentCompAlgo"`
+		ContentCompSettings []byte `ebml:"ContentCompSettings"`
+	} `ebml:"ContentCompression"`
 }
 
 // Duration reads container length from headers in internal.

@@ -1,9 +1,17 @@
-// Package subtitle supports go-media parsers.
+// Package subtitle converts text subtitles to WebVTT.
+//
+// Every text format is converted the way ffmpeg 7.1 does it, so results match
+// "ffmpeg -i in -map 0:s:N out.vtt" byte for byte: a port of the ffmpeg
+// demuxer for the file format (demux.go) or the container code in the
+// matroska and isobmff packages yields packets, a port of the ffmpeg decoder
+// turns each into an ASS dialog (decoders.go), and a port of the ffmpeg
+// webvtt encoder and muxer writes the result (webvtt_writer.go). The
+// committed ffmpeg outputs in testdata pin that behaviour; see
+// testdata/gen-subtitles.sh.
 
 package subtitle
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -13,114 +21,61 @@ import (
 	"time"
 )
 
-// ParseSRT converts SubRip input to WebVTT.
+// ParseSRT converts SubRip input to WebVTT, matching
+// "ffmpeg -i in.srt out.vtt" byte for byte (see ParseSRTEvents and
+// WriteWebVTT). It fails when the input has no cues.
 func ParseSRT(r io.Reader) (string, error) {
-	sc := bufio.NewScanner(r)
-	var cues []string
-	var idx int
-	var start, end string
-	var text []string
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
-			if start != "" && len(text) > 0 {
-				cues = append(cues, cueBlock(start, end, strings.Join(text, "\n")))
-				start, end, text = "", "", nil
-			}
-			continue
-		}
-		if _, err := strconv.Atoi(line); err == nil && start == "" {
-			idx++
-			continue
-		}
-		if strings.Contains(line, "-->") {
-			parts := strings.Split(line, "-->")
-			if len(parts) == 2 {
-				start = toVTTTime(strings.TrimSpace(parts[0]))
-				end = toVTTTime(strings.TrimSpace(parts[1]))
-			}
-			continue
-		}
-		if start != "" {
-			text = append(text, line)
-		}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return "", err
 	}
-	if start != "" && len(text) > 0 {
-		cues = append(cues, cueBlock(start, end, strings.Join(text, "\n")))
-	}
-	if len(cues) == 0 {
+	ev := ParseSRTEvents(data)
+	if len(ev) == 0 {
 		return "", fmt.Errorf("no cues")
 	}
-	return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
+	return WriteWebVTT("", ev), nil
 }
 
-// ParseVTT normalizes WebVTT (passthrough with header guarantee).
+// ParseVTT re-encodes WebVTT input the way "ffmpeg -i in.vtt out.vtt"
+// does: cues are sorted, identifiers, cue settings, STYLE, REGION and NOTE
+// blocks are dropped, and only <b>, <i> and <u> markup is kept. It fails
+// when the input does not start with a WEBVTT header.
 func ParseVTT(r io.Reader) (string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return "", err
 	}
-	s := string(data)
-	if !strings.HasPrefix(s, "WEBVTT") {
+	if !bytes.HasPrefix(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf")), []byte("WEBVTT")) {
 		return "", fmt.Errorf("invalid vtt")
 	}
-	return s, nil
+	return WriteWebVTT("", ParseVTTEvents(data)), nil
 }
 
 var assTime = regexp.MustCompile(`^(\d+):(\d{2}):(\d{2})\.(\d{2,3})`)
 
-// ParseASS converts SSA/ASS dialogue lines to WebVTT (text only).
+// ParseASS converts ASS (v4+) or SSA (v4) input to WebVTT, matching
+// "ffmpeg -i in.ass out.vtt": style bold, italic and underline flags and
+// the \b, \i, \u, \r and \N override codes are kept, everything else is
+// dropped. It fails when the input has no Dialogue lines.
 func ParseASS(r io.Reader) (string, error) {
-	sc := bufio.NewScanner(r)
-	var cues []string
-	for sc.Scan() {
-		line := sc.Text()
-		if !strings.HasPrefix(line, "Dialogue:") {
-			continue
-		}
-		parts := strings.SplitN(line, ",", 10)
-		if len(parts) < 10 {
-			continue
-		}
-		start := toVTTTime(parts[1])
-		end := toVTTTime(parts[2])
-		text := stripASSTags(parts[9])
-		cues = append(cues, cueBlock(start, end, text))
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return "", err
 	}
-	if len(cues) == 0 {
+	header, ev := ParseASSEvents(data)
+	if len(ev) == 0 {
 		return "", fmt.Errorf("no dialogue")
 	}
-	return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
+	return WriteWebVTT(header, ev), nil
 }
 
-// cueBlock is an internal subtitle helper.
-func cueBlock(start, end, text string) string {
-	return start + " --> " + end + "\n" + text
+// StripASSTags removes ASS override blocks such as {\an7} and converts \N
+// line breaks, leaving the plain dialogue text.
+func StripASSTags(s string) string {
+	return stripASSTags(s)
 }
 
-// toVTTTime is an internal subtitle helper.
-func toVTTTime(s string) string {
-	s = strings.TrimSpace(s)
-	if i := strings.IndexByte(s, ' '); i >= 0 {
-		s = s[:i]
-	}
-	s = strings.ReplaceAll(s, ",", ".")
-	parts := strings.SplitN(s, ".", 2)
-	clock := strings.Split(parts[0], ":")
-	if len(clock) == 2 {
-		clock = append([]string{"00"}, clock...)
-	}
-	if len(clock) == 3 && len(clock[0]) == 1 {
-		clock[0] = "0" + clock[0]
-	}
-	out := strings.Join(clock, ":")
-	if len(parts) == 2 {
-		out += "." + (parts[1] + "000")[:3]
-	}
-	return out
-}
-
-// stripASSTags is an internal subtitle helper.
+// stripASSTags removes ASS override blocks and converts \N line breaks.
 func stripASSTags(s string) string {
 	s = strings.ReplaceAll(s, "\\N", "\n")
 	for {
@@ -172,4 +127,31 @@ func ParseDuration(s string) (time.Duration, error) {
 	min, _ := strconv.Atoi(m[2])
 	sec, _ := strconv.Atoi(m[3])
 	return time.Duration(h)*time.Hour + time.Duration(min)*time.Minute + time.Duration(sec)*time.Second, nil
+}
+
+// cueBlock is an internal subtitle helper.
+func cueBlock(start, end, text string) string {
+	return start + " --> " + end + "\n" + text
+}
+
+// toVTTTime is an internal subtitle helper.
+func toVTTTime(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, ' '); i >= 0 {
+		s = s[:i]
+	}
+	s = strings.ReplaceAll(s, ",", ".")
+	parts := strings.SplitN(s, ".", 2)
+	clock := strings.Split(parts[0], ":")
+	if len(clock) == 2 {
+		clock = append([]string{"00"}, clock...)
+	}
+	if len(clock) == 3 && len(clock[0]) == 1 {
+		clock[0] = "0" + clock[0]
+	}
+	out := strings.Join(clock, ":")
+	if len(parts) == 2 {
+		out += "." + (parts[1] + "000")[:3]
+	}
+	return out
 }
