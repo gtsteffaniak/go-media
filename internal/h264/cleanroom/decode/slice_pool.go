@@ -31,6 +31,7 @@ func (sd *sliceDecoder) prepare(r *bitstream.Reader, h *SliceHeader, sps *SPS, p
 	sd.sps = sps
 	sd.pps = pps
 	sd.frame = frame
+	sd.prepareHBD(frame)
 	sd.qp = int(h.SliceQP)
 	sd.decodedMBs = 0
 	sd.w4 = frame.MbWidth * 4

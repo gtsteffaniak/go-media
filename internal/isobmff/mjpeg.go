@@ -25,9 +25,14 @@ func (idx *movieIndex) mjpegFrame(seekPercent float64) ([]byte, bool) {
 			continue
 		}
 		switch string(idx.tracks[i].entry[:]) {
-		case "avc1", "encv":
+		case "avc1", "avc3", "encv":
 			return nil, false
 		case "mp4v":
+			// An esds naming MPEG-4 Part 2 is not MJPEG, even when a
+			// sample happens to contain an FFD8 byte pair.
+			if oti, _, err := esdsConfig(idx.tracks[i].esds); err == nil && oti == 0x20 {
+				continue
+			}
 			if _, ok := visualMJPEGSampleEntry(r, size, i); ok {
 				videoTrack = i
 			}

@@ -32,7 +32,12 @@ func DecodeSlice(rbsp []byte, nalType nal.Type, nalRefIDC uint8, sps *SPS, pps *
 		return h, err
 	}
 	h.DecodedMBs = sd.decodedMBs
-	if !skipDeblock {
+	if sd.hbd {
+		if !skipDeblock {
+			sd.deblockW()
+		}
+		frame.downconvert()
+	} else if !skipDeblock {
 		sd.deblock() // assumes one slice per frame
 	}
 	releaseSliceDecoder(sd)

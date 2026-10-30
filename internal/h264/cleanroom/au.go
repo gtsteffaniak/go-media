@@ -11,7 +11,6 @@
 package cleanroom
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 
@@ -53,6 +52,15 @@ var ErrIncompletePicture = errors.New("h264 cleanroom: picture is missing macrob
 // (including a recovered panic) the pooled picture buffer is dropped so stale
 // samples can never surface in a later decode.
 func (d *Decoder) DecodeIDRAVC(data []byte) (frames []*decode.Frame, err error) {
+	return d.DecodeIDRAVCLen(data, 4)
+}
+
+// DecodeIDRAVCLen is DecodeIDRAVC for NAL units carrying lenSize-byte
+// big-endian length prefixes, where lenSize is avcC lengthSizeMinusOne+1
+// (1, 2, 3 or 4), as ffmpeg's h264_parse splits NALs with nal_length_size.
+// Out-of-range values fall back to 4, matching inBandSPS and
+// prependParameterSets.
+func (d *Decoder) DecodeIDRAVCLen(data []byte, lenSize int) (frames []*decode.Frame, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			frames = nil
@@ -62,7 +70,7 @@ func (d *Decoder) DecodeIDRAVC(data []byte) (frames []*decode.Frame, err error) 
 			d.pic = nil
 		}
 	}()
-	nalus, err := extractAVCNalus(data)
+	nalus, err := extractAVCNalus(data, lenSize)
 	if err != nil {
 		return nil, err
 	}
@@ -326,14 +334,24 @@ func pictureDimsMatch(f *decode.Frame, s *decode.SPS) bool {
 		f.MbHeight == mbH &&
 		f.CropWidth == s.Width &&
 		f.CropHeight == s.Height &&
-		f.ChromaArrayType == s.ChromaArrayType()
+		f.ChromaArrayType == s.ChromaArrayType() &&
+		f.BitDepthY == int(s.BitDepthLuma) &&
+		f.BitDepthC == int(s.BitDepthChroma)
 }
 
-func extractAVCNalus(data []byte) ([][]byte, error) {
+// extractAVCNalus splits data into NAL units with lenSize-byte big-endian
+// length prefixes (1 to 4; anything else is treated as 4).
+func extractAVCNalus(data []byte, lenSize int) ([][]byte, error) {
+	if lenSize < 1 || lenSize > 4 {
+		lenSize = 4
+	}
 	var nalus [][]byte
-	for len(data) >= 4 {
-		length := int(binary.BigEndian.Uint32(data[:4]))
-		data = data[4:]
+	for len(data) >= lenSize {
+		length := 0
+		for _, b := range data[:lenSize] {
+			length = length<<8 | int(b)
+		}
+		data = data[lenSize:]
 		if length < 0 || length > len(data) {
 			return nil, errors.New("avc: invalid NALU length")
 		}

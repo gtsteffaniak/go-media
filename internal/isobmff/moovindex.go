@@ -3,6 +3,7 @@ package isobmff
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"sort"
@@ -45,6 +46,12 @@ type movieIndex struct {
 	r      io.ReaderAt
 	size   int64
 	tracks []trackIndex
+	// fragmented is set when moov holds an mvex box, i.e. samples live in
+	// moof fragments. It comes from the moov walk the index already does.
+	fragmented bool
+	// moovEnd is the file offset just past moov; fragmented seeks hop
+	// top-level boxes from here when there is no mfra index.
+	moovEnd int64
 }
 
 // deferredTable is one stts or stsc box left unparsed until first use.
@@ -78,14 +85,18 @@ type trackIndex struct {
 	deferred []deferredTable
 	once     *sync.Once
 
-	handler   [4]byte
-	entry     [4]byte // first stsd sample entry type, e.g. "avc1"
-	trackID   uint32  // tkhd track_ID
-	rotation  int     // tkhd display rotation, ffprobe sign convention
-	avcC      []byte  // avcC payload for avc1/encv entries
-	timescale uint32
-	duration  uint64
-	st        sampleTable
+	handler  [4]byte
+	entry    [4]byte // first stsd sample entry type, e.g. "avc1"
+	trackID  uint32  // tkhd track_ID
+	rotation int     // tkhd display rotation, ffprobe sign convention
+	avcC     []byte  // avcC payload for avc1/encv entries
+	esds     []byte  // esds payload for mp4v entries
+	// fragmented copies movieIndex.fragmented so seek errors can say why the
+	// moov sample tables are empty.
+	fragmented bool
+	timescale  uint32
+	duration   uint64
+	st         sampleTable
 }
 
 // sampleTable locates samples of one track without expanding per-sample state.
@@ -131,7 +142,11 @@ func openMovieIndex(r io.ReaderAt, size int64) (*movieIndex, error) {
 			if boxSize > maxMoovSize {
 				return nil, errs.Unsup("mp4 index", "moov exceeds 64 MiB")
 			}
-			return indexMoov(r, size, off+hdrLen, off+boxSize)
+			idx, err := indexMoov(r, size, off+hdrLen, off+boxSize)
+			if idx != nil {
+				idx.moovEnd = off + boxSize
+			}
+			return idx, err
 		}
 		off += boxSize
 	}
@@ -161,13 +176,13 @@ func readBoxHeader(r io.ReaderAt, size, off, end int64, buf []byte) (typ [4]byte
 		}
 		ls := binary.BigEndian.Uint64(buf[8:16])
 		if ls > uint64(end-off) {
-			return typ, 0, 0, errs.Unsup("mp4 index", "box exceeds parent")
+			return typ, 0, 0, errs.Unsup("mp4 index", fmt.Sprintf("%q box at offset %d: largesize %d exceeds parent (%d bytes left)", typ[:], off, ls, end-off))
 		}
 		boxSize = int64(ls)
 		hdrLen = 16
 	}
 	if boxSize < hdrLen || boxSize > end-off {
-		return typ, 0, 0, errs.Unsup("mp4 index", "invalid box size")
+		return typ, 0, 0, errs.Unsup("mp4 index", fmt.Sprintf("%q box at offset %d: size %d invalid (header %d, %d bytes left in parent; truncated file?)", typ[:], off, boxSize, hdrLen, end-off))
 	}
 	return typ, hdrLen, boxSize, nil
 }
@@ -203,6 +218,10 @@ func readPayload(r io.ReaderAt, start, end int64, limit int64) ([]byte, error) {
 func indexMoov(r io.ReaderAt, size, start, end int64) (*movieIndex, error) {
 	idx := &movieIndex{r: r, size: size}
 	err := walkBoxes(r, size, start, end, func(typ [4]byte, ps, pe int64) error {
+		if typ == [4]byte{'m', 'v', 'e', 'x'} {
+			idx.fragmented = true
+			return nil
+		}
 		if typ != [4]byte{'t', 'r', 'a', 'k'} {
 			return nil
 		}
@@ -216,6 +235,9 @@ func indexMoov(r io.ReaderAt, size, start, end int64) (*movieIndex, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	for i := range idx.tracks {
+		idx.tracks[i].fragmented = idx.fragmented
 	}
 	return idx, nil
 }
@@ -349,7 +371,8 @@ func (tr *trackIndex) parseMdhd(b []byte) error {
 	return nil
 }
 
-// parseStsd records the first sample entry type and, for H.264, its avcC payload.
+// parseStsd records the first sample entry type and, for H.264, its avcC
+// payload, or for mp4v, its esds payload.
 func (tr *trackIndex) parseStsd(b []byte) {
 	if len(b) < 16 {
 		return
@@ -360,7 +383,10 @@ func (tr *trackIndex) parseStsd(b []byte) {
 		return
 	}
 	copy(tr.entry[:], e[4:8])
-	if t := string(tr.entry[:]); t != "avc1" && t != "encv" {
+	want := "avcC"
+	if string(tr.entry[:]) == "mp4v" {
+		want = "esds"
+	} else if !isAVCEntry(string(tr.entry[:])) {
 		return
 	}
 	const visualEntryLen = 8 + 78
@@ -372,8 +398,12 @@ func (tr *trackIndex) parseStsd(b []byte) {
 		if csz < 8 || csz > len(c) {
 			return
 		}
-		if string(c[4:8]) == "avcC" {
-			tr.avcC = c[8:csz]
+		if string(c[4:8]) == want {
+			if want == "esds" {
+				tr.esds = c[8:csz]
+			} else {
+				tr.avcC = c[8:csz]
+			}
 			return
 		}
 		c = c[csz:]
@@ -810,7 +840,7 @@ func (m *movieIndex) track(i int) (*trackIndex, error) {
 // read, so track() then reports it as unsupported.
 func (m *movieIndex) firstAVC() (int, bool) {
 	for i := range m.tracks {
-		if t := string(m.tracks[i].entry[:]); t == "avc1" || t == "encv" {
+		if isAVCEntry(string(m.tracks[i].entry[:])) {
 			return i, true
 		}
 	}
@@ -819,15 +849,38 @@ func (m *movieIndex) firstAVC() (int, bool) {
 
 // avcConfig decodes the track's avcC box.
 func (tr *trackIndex) avcConfig() (*mp4.AVCDecoderConfiguration, bool) {
+	cfg, err := tr.avcConfigErr()
+	return cfg, err == nil
+}
+
+// isAVCEntry reports whether a sample entry fourcc carries H.264 the
+// thumbnail path decodes: avc1 (parameter sets in avcC), avc3 (parameter sets
+// may be in-band, ISO/IEC 14496-15 §5.4.2.1) and encv (avc1 behind a
+// protection scheme, kept for mp4.Probe CodecAVC1 parity).
+func isAVCEntry(t string) bool {
+	return t == "avc1" || t == "avc3" || t == "encv"
+}
+
+// avcConfigErr decodes the track's avcC box, or says why it cannot.
+//
+// An avc3 entry may legally carry an avcC with no SPS/PPS, or (in some
+// muxers) none at all; the parameter sets then travel in each keyframe
+// sample. That matches ffmpeg's h264 decoder, which accepts in-band SPS/PPS
+// and lets them replace extradata ones, so a missing avcC on avc3 yields an
+// empty configuration with 4-byte NAL lengths instead of an error.
+func (tr *trackIndex) avcConfigErr() (*mp4.AVCDecoderConfiguration, error) {
+	if len(tr.avcC) == 0 && string(tr.entry[:]) == "avc3" {
+		return &mp4.AVCDecoderConfiguration{ConfigurationVersion: 1, LengthSizeMinusOne: 3}, nil
+	}
 	if len(tr.avcC) == 0 {
-		return nil, false
+		return nil, errs.Unsup("thumbnail", "mp4: avcC box missing from "+string(tr.entry[:])+" sample entry")
 	}
 	var cfg mp4.AVCDecoderConfiguration
 	cfg.SetType(mp4.BoxTypeAvcC())
 	if _, err := mp4.Unmarshal(bytes.NewReader(tr.avcC), uint64(len(tr.avcC)), &cfg, mp4.Context{}); err != nil {
-		return nil, false
+		return nil, errs.Unsup("thumbnail", "mp4: avcC invalid: "+err.Error())
 	}
-	return &cfg, true
+	return &cfg, nil
 }
 
 // durationTicks returns mdhd duration, or the stts sum when mdhd has none.
@@ -866,7 +919,10 @@ func (tr *trackIndex) targetSample(seekPercent float64) int {
 // empty (black or flat) keyframes. See pickThumbnailKeyframe.
 func (tr *trackIndex) keyframeAt(seekPercent float64) (int, error) {
 	if !tr.st.usable() {
-		return 0, errs.Unsup("mp4 seek", "no usable moov sample tables (fragmented or empty)")
+		if tr.fragmented {
+			return 0, errs.Unsup("mp4 seek", "fragmented MP4 (samples in moof, moov sample tables empty)")
+		}
+		return 0, errs.Unsup("mp4 seek", "no usable moov sample tables (empty stbl)")
 	}
 	target := tr.targetTick(seekPercent)
 	return tr.st.pickThumbnailKeyframe(tr.st.sampleAtTime(target), target)

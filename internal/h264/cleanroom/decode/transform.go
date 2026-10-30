@@ -1,4 +1,6 @@
 // Package decode implements H.264 slice/MB decode (mgvs/go-openh264 BSD-2; see THIRD_PARTY_NOTICES.md).
+// 8-bit samples use byte planes and SIMD kernels; 9/10-bit 4:2:0 streams use
+// the scalar uint16 path in hbd*.go and are rounded to 8 bits per slice.
 package decode
 
 import h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"

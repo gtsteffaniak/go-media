@@ -46,7 +46,8 @@ func TestParsePPSQPRanges(t *testing.T) {
 	}{
 		{"min-init", -26, 0, nil, ""},
 		{"max-init", 25, 0, nil, ""},
-		{"init-too-low", -27, 0, nil, "pic_init_qp_minus26"},
+		{"min-init-10bit", -38, 0, nil, ""},
+		{"init-too-low", -39, 0, nil, "pic_init_qp_minus26"},
 		{"init-too-high", 26, 0, nil, "pic_init_qp_minus26"},
 		{"chroma-min", 0, -12, nil, ""},
 		{"chroma-max", 0, 12, nil, ""},
@@ -125,7 +126,7 @@ func FuzzParsePPS(f *testing.F) {
 	for _, s := range [][]byte{
 		ppsRBSPWithQP(-26, -12, nil),
 		ppsRBSPWithQP(25, 12, nil),
-		ppsRBSPWithQP(-27, 0, nil),
+		ppsRBSPWithQP(-39, 0, nil),
 		ppsRBSPWithQP(26, 0, nil),
 		ppsRBSPWithQP(0, 13, nil),
 		ppsRBSPWithQP(0, 0, i32(-13)),
@@ -138,7 +139,7 @@ func FuzzParsePPS(f *testing.F) {
 		if err != nil {
 			return
 		}
-		if p.PicInitQPMinus26 < -26 || p.PicInitQPMinus26 > 25 ||
+		if p.PicInitQPMinus26 < minPicInitQPMinus26 || p.PicInitQPMinus26 > 25 ||
 			p.ChromaQPIndexOffset < -12 || p.ChromaQPIndexOffset > 12 ||
 			p.SecondChromaQPIndexOffset < -12 || p.SecondChromaQPIndexOffset > 12 {
 			t.Fatalf("accepted out-of-range PPS QP fields: %+v", p)

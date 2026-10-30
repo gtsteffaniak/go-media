@@ -20,7 +20,16 @@ var ErrEOF = errors.New("bitstream: read past the end of data")
 var (
 	errBitsRange = errors.New("bitstream: U(n) — n out of range 0..32")
 	errExpGolomb = errors.New("bitstream: invalid Exp-Golomb (corrupt bitstream)")
+	errSyntax    = errors.New("bitstream: syntax element out of range (corrupt bitstream)")
 )
+
+// Fail marks the reader with a sticky corrupt-syntax error (if none is set)
+// so callers can reject an out-of-range element without reading further.
+func (r *Reader) Fail() {
+	if r.err == nil {
+		r.err = errSyntax
+	}
+}
 
 // Reader reads bits from RBSP sequentially.
 type Reader struct {

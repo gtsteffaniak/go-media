@@ -159,11 +159,14 @@ func readSliceHeader(r *bitstream.Reader, nalType nal.Type, nalRefIDC uint8, sps
 
 	sliceQPDelta := r.SE()
 	h.SliceQP = 26 + pps.PicInitQPMinus26 + sliceQPDelta
-	// The decoder reconstructs 8-bit samples only (QpBdOffsetY = 0), so
-	// SliceQPY must lie in [0, 51] (ISO/IEC 14496-10 7.4.3).
-	if r.Err() == nil && (h.SliceQP < minSliceQP || h.SliceQP > maxSliceQP) {
+	// SliceQPY must lie in [-QpBdOffsetY, 51] (ISO/IEC 14496-10 7.4.3).
+	minQP := int32(minSliceQP)
+	if sps.BitDepthLuma > 8 {
+		minQP -= 6 * int32(sps.BitDepthLuma-8)
+	}
+	if r.Err() == nil && (h.SliceQP < minQP || h.SliceQP > maxSliceQP) {
 		return nil, fmt.Errorf("h264 slice: SliceQPY %d (pic_init_qp_minus26=%d slice_qp_delta=%d) out of range [%d, %d]",
-			h.SliceQP, pps.PicInitQPMinus26, sliceQPDelta, minSliceQP, maxSliceQP)
+			h.SliceQP, pps.PicInitQPMinus26, sliceQPDelta, minQP, maxSliceQP)
 	}
 
 	if base == SliceSP || base == SliceSI {

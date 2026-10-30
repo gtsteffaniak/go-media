@@ -16,6 +16,9 @@
 //   - JPEG and WebP output are BT.601 for every source, since ffmpeg's capture
 //     stays in YUV and drops the matrix tag; PNG output keeps the tag.
 //   - VP8 is BT.601 limited range.
+//   - H.264 High 10 (9/10-bit 4:2:0) keyframes are reconstructed at full
+//     precision, bit-exact with ffmpeg, then rounded to 8 bits before RGB
+//     conversion; RGB differs slightly from swscale's direct 10-bit path.
 //
 // Residual differences: full-range and BT.709 sources lose about 5 dB PSNR to
 // RGB clipping (ffmpeg stays in YUV), and JPEG quantization differs from

@@ -26,8 +26,11 @@ func validateSPSNAL(nal []byte) error {
 	if sps.ChromaFormatIDC != 1 {
 		return errs.UnsupProfile("h264", fmt.Sprintf("chroma format %d (need 4:2:0)", sps.ChromaFormatIDC))
 	}
-	if sps.BitDepthLumaMinus8 != 0 || sps.BitDepthChromaMinus8 != 0 {
-		return errs.UnsupProfile("h264", "10-bit or deeper luma/chroma")
+	if sps.BitDepthLumaMinus8 > 2 || sps.BitDepthChromaMinus8 > 2 {
+		// 9/10-bit 4:2:0 is reconstructed on a scalar uint16 path; deeper
+		// samples (High 4:4:4 Predictive, 12/14-bit) are not.
+		return errs.UnsupProfile("h264", fmt.Sprintf("%d-bit luma / %d-bit chroma (profile_idc %d); decoder supports 8, 9 and 10 bits",
+			sps.BitDepthLumaMinus8+8, sps.BitDepthChromaMinus8+8, sps.Profile))
 	}
 	if sps.SeqScalingMatrixPresentFlag {
 		// High profile 8x8 transform is supported when lists are present.

@@ -35,14 +35,14 @@ package h264
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"image"
+	"strings"
 
+	"github.com/abema/go-mp4"
+	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom"
 	"github.com/gtsteffaniak/go-media/internal/h264/cleanroom/decode"
 	"github.com/gtsteffaniak/go-media/internal/h264/frame"
-	"github.com/abema/go-mp4"
-	"github.com/gtsteffaniak/go-media/internal/errs"
 )
 
 // DecodeKeyframe decodes an H.264 keyframe access unit in AVCC form
@@ -68,7 +68,6 @@ func DecodeAVCC(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (im
 	return frameToRGBA(fr), nil
 }
 
-
 // DecodeAVCCFrame returns the decoded frame without RGB conversion.
 func DecodeAVCCFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (fr *frame.Frame, err error) {
 	defer recoverDecode(&err)
@@ -81,16 +80,37 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 		return nil, errs.UnsupProfile("h264 keyframe", "empty sample")
 	}
 	data := sample
+	// An SPS inside the sample (avc3, or avc1 written with repeat-headers)
+	// takes precedence over avcC, as in ffmpeg where in-band parameter sets
+	// replace extradata ones. The decoder already applies them in NAL order
+	// after the prepended avcC sets; this only picks which SPS to validate.
+	// The NAL length field width comes from avcC (lengthSizeMinusOne+1, 1, 2
+	// or 4 bytes), as ffmpeg's h264_parse uses nal_length_size; 4 is assumed
+	// only when there is no avcC.
+	// The same width is passed to the decoder so the prepended avcC sets and
+	// the sample's own NAL units are split with it.
+	lenSize := 4
 	if avcc != nil {
-		if len(avcc.SequenceParameterSets) > 0 {
-			if err := validateSPSNAL(avcc.SequenceParameterSets[0].NALUnit); err != nil {
-				return nil, err
-			}
-		}
+		lenSize = int(avcc.LengthSizeMinusOne) + 1
+	}
+	if lenSize < 1 || lenSize > 4 {
+		lenSize = 4
+	}
+	sps := inBandSPS(sample, lenSize)
+	if sps == nil && avcc != nil && len(avcc.SequenceParameterSets) > 0 {
+		sps = avcc.SequenceParameterSets[0].NALUnit
+	}
+	if sps == nil {
+		return nil, errs.UnsupProfile("h264 keyframe", "no SPS in avcC or keyframe sample (avc3 without in-band parameter sets)")
+	}
+	if err := validateSPSNAL(sps); err != nil {
+		return nil, err
+	}
+	if avcc != nil {
 		data = prependParameterSets(avcc, sample)
 	}
 	dec := borrowDecoder(fast)
-	frames, err := dec.DecodeIDRAVC(data)
+	frames, err := dec.DecodeIDRAVCLen(data, lenSize)
 	if err != nil {
 		releaseDecoder(dec)
 		return nil, mapDecodeErr(err)
@@ -130,4 +150,29 @@ func mapDecodeErr(err error) error {
 	default:
 		return fmt.Errorf("h264 decode: %w", err)
 	}
+}
+
+// inBandSPS returns the first SPS NAL unit in a sample whose NAL units carry
+// lenSize-byte big-endian length prefixes (1 to 4, from avcC
+// lengthSizeMinusOne+1), or nil. Out-of-range lenSize values fall back to 4.
+// It only hops NAL length headers, so it costs a few reads per sample.
+func inBandSPS(sample []byte, lenSize int) []byte {
+	if lenSize < 1 || lenSize > 4 {
+		lenSize = 4
+	}
+	for len(sample) > lenSize {
+		n := 0
+		for _, b := range sample[:lenSize] {
+			n = n<<8 | int(b)
+		}
+		sample = sample[lenSize:]
+		if n <= 0 || n > len(sample) {
+			return nil
+		}
+		if sample[0]&0x1f == 7 {
+			return sample[:n]
+		}
+		sample = sample[n:]
+	}
+	return nil
 }

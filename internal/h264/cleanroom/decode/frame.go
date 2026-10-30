@@ -21,6 +21,14 @@ type Frame struct {
 	Y, Cb, Cr        []byte
 	StrideY, StrideC int
 
+	// BitDepthY/BitDepthC are the coded sample bit depths (8, 9 or 10).
+	// Above 8 bits the decoder reconstructs into Y16/Cb16/Cr16 (same
+	// strides as the 8-bit planes) and rounds the result into Y/Cb/Cr after
+	// each slice, so Y/Cb/Cr always hold 8-bit samples. Y16 is nil for 8-bit
+	// streams.
+	BitDepthY, BitDepthC int
+	Y16, Cb16, Cr16      []uint16
+
 	// Colour signalling copied from the active SPS VUI for every decoded
 	// picture (the buffer is pooled, so these are refreshed per picture).
 	VideoFullRange     bool  // video_full_range_flag
@@ -67,9 +75,18 @@ func NewFrame(s *SPS) (*Frame, error) {
 		CropHeight:      s.Height,
 		CropX:           s.OffsetX,
 		CropY:           s.OffsetY,
+		BitDepthY:       int(s.BitDepthLuma),
+		BitDepthC:       int(s.BitDepthChroma),
 	}
+	if f.BitDepthY > maxDecodeBitDepth || f.BitDepthC > maxDecodeBitDepth {
+		return nil, fmt.Errorf("h264 frame: %d-bit luma / %d-bit chroma exceeds the %d-bit decode limit", f.BitDepthY, f.BitDepthC, maxDecodeBitDepth)
+	}
+	hbd := f.BitDepthY > 8 || (f.BitDepthC > 8 && f.ChromaArrayType != 0)
 	f.StrideY = f.CodedWidth
 	f.Y = make([]byte, yBytes)
+	if hbd {
+		f.Y16 = make([]uint16, yBytes)
+	}
 
 	if f.ChromaArrayType != 0 {
 		f.MbWidthC, f.MbHeightC = mbChromaDims(f.ChromaArrayType)
@@ -82,6 +99,10 @@ func NewFrame(s *SPS) (*Frame, error) {
 		f.StrideC = cw
 		f.Cb = make([]byte, cBytes)
 		f.Cr = make([]byte, cBytes)
+		if hbd {
+			f.Cb16 = make([]uint16, cBytes)
+			f.Cr16 = make([]uint16, cBytes)
+		}
 	}
 	return f, nil
 }

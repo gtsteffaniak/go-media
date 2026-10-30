@@ -51,6 +51,8 @@ type sliceDecoder struct {
 	pps   *PPS
 	frame *Frame
 
+	hbdState
+
 	qp int // current QP_Y (accumulated via mb_qp_delta)
 
 	w4, h4     int     // grid of luma 4x4 blocks over the whole frame
@@ -118,7 +120,8 @@ func (sd *sliceDecoder) run() error {
 		case MbIPCM:
 			sd.decodeIPCM(addr)
 			sd.markMBRecon4(mbX, mbY)
-			sd.mbQP[addr] = 0 // I_PCM: QP_Y=0 for deblocking
+			// I_PCM: QP'Y = 0 for deblocking (QPY = -QpBdOffsetY; ffmpeg and JM).
+			sd.mbQP[addr] = -sd.qpOff
 		case MbI16x16:
 			if err := sd.decodeMB16(addr, mb); err != nil {
 				return err
@@ -195,6 +198,11 @@ func (sd *sliceDecoder) decodeIPCM(addr int) {
 	r, frame, sps := sd.r, sd.frame, sd.sps
 	r.AlignToByte()
 	mbX, mbY := addr%frame.MbWidth, addr/frame.MbWidth
+	if sd.hbd {
+		sd.decodeIPCMW(mbX, mbY)
+		sd.setMBNonzero(mbX, mbY, 16)
+		return
+	}
 	for i := 0; i < 256; i++ {
 		frame.Y[(mbY*16+i/16)*frame.StrideY+mbX*16+i%16] = byte(r.U(int(sps.BitDepthLuma)))
 	}
