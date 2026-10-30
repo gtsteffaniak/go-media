@@ -33,7 +33,6 @@
 package h264
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -85,7 +84,14 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 	// takes precedence over avcC, as in ffmpeg where in-band parameter sets
 	// replace extradata ones. The decoder already applies them in NAL order
 	// after the prepended avcC sets; this only picks which SPS to validate.
-	sps := inBandSPS(sample)
+	// The NAL length field width comes from avcC (lengthSizeMinusOne+1, 1, 2
+	// or 4 bytes), as ffmpeg's h264_parse uses nal_length_size; 4 is assumed
+	// only when there is no avcC.
+	lenSize := 4
+	if avcc != nil {
+		lenSize = int(avcc.LengthSizeMinusOne) + 1
+	}
+	sps := inBandSPS(sample, lenSize)
 	if sps == nil && avcc != nil && len(avcc.SequenceParameterSets) > 0 {
 		sps = avcc.SequenceParameterSets[0].NALUnit
 	}
@@ -141,12 +147,20 @@ func mapDecodeErr(err error) error {
 	}
 }
 
-// inBandSPS returns the first SPS NAL unit in a 4-byte length-prefixed sample,
-// or nil. It only hops NAL length headers, so it costs a few reads per sample.
-func inBandSPS(sample []byte) []byte {
-	for len(sample) >= 5 {
-		n := int(binary.BigEndian.Uint32(sample))
-		sample = sample[4:]
+// inBandSPS returns the first SPS NAL unit in a sample whose NAL units carry
+// lenSize-byte big-endian length prefixes (1 to 4, from avcC
+// lengthSizeMinusOne+1), or nil. Out-of-range lenSize values fall back to 4.
+// It only hops NAL length headers, so it costs a few reads per sample.
+func inBandSPS(sample []byte, lenSize int) []byte {
+	if lenSize < 1 || lenSize > 4 {
+		lenSize = 4
+	}
+	for len(sample) > lenSize {
+		n := 0
+		for _, b := range sample[:lenSize] {
+			n = n<<8 | int(b)
+		}
+		sample = sample[lenSize:]
 		if n <= 0 || n > len(sample) {
 			return nil
 		}
