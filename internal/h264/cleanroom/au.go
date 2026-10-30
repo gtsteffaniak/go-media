@@ -326,7 +326,9 @@ func pictureDimsMatch(f *decode.Frame, s *decode.SPS) bool {
 		f.MbHeight == mbH &&
 		f.CropWidth == s.Width &&
 		f.CropHeight == s.Height &&
-		f.ChromaArrayType == s.ChromaArrayType()
+		f.ChromaArrayType == s.ChromaArrayType() &&
+		f.BitDepthY == int(s.BitDepthLuma) &&
+		f.BitDepthC == int(s.BitDepthChroma)
 }
 
 func extractAVCNalus(data []byte) ([][]byte, error) {

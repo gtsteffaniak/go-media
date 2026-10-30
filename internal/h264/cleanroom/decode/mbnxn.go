@@ -48,18 +48,20 @@ func (sd *sliceDecoder) decodeMBNxN(addr int) error {
 		return errors.New("h264: invalid coded_block_pattern")
 	}
 	if cbpLuma != 0 || cbpChroma != 0 {
-		sd.qp = (sd.qp + int(r.SE()) + 52) % 52
+		sd.addQPDelta(int(r.SE()))
 	}
-	qp := sd.qp
+	qp := sd.dqQP() // QP'Y
 
 	// Luma: prediction + residual for each 4x4 block (scan order).
 	for blk := 0; blk < 16; blk++ {
 		bx, by := luma4x4BlockX[blk], luma4x4BlockY[blk]
 		gx, gy := mbX*4+bx, mbY*4+by
 
-		top, left, corner, availTop, availLeft := sd.luma4x4Neighbors(gx, gy)
 		var pred [16]byte
-		predictIntra4x4(pred[:], int(sd.i4mode[gy*sd.w4+gx]), top, left, corner, availLeft, availTop)
+		if !sd.hbd {
+			top, left, corner, availTop, availLeft := sd.luma4x4Neighbors(gx, gy)
+			predictIntra4x4(pred[:], int(sd.i4mode[gy*sd.w4+gx]), top, left, corner, availLeft, availTop)
+		}
 
 		var d [16]int32
 		var tc uint8
@@ -67,7 +69,7 @@ func (sd *sliceDecoder) decodeMBNxN(addr int) error {
 			n := sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 16)
 			tc = uint8(n)
 			sd.nzLuma[gy*sd.w4+gx] = tc
-			d = h264k.DequantScan4x4(sd.coeffScratch[:16], qp)
+			d = sd.dqScan4(sd.coeffScratch[:16], qp)
 			if n == 1 && sd.coeffScratch[0] != 0 {
 				tc = 0 // DC-only block: take the IDCT DC shortcut
 			}
@@ -75,7 +77,11 @@ func (sd *sliceDecoder) decodeMBNxN(addr int) error {
 			sd.nzLuma[gy*sd.w4+gx] = 0
 		}
 		px0, py0 := gx*4, gy*4
-		h264k.IDCTAdd4x4Luma(f.Y, f.StrideY, px0, py0, pred[:], 4, 0, 0, d, tc)
+		if sd.hbd {
+			sd.recon4x4W(gx, gy, d)
+		} else {
+			h264k.IDCTAdd4x4Luma(f.Y, f.StrideY, px0, py0, pred[:], 4, 0, 0, d, tc)
+		}
 		sd.recon4[gy*sd.w4+gx] = true
 	}
 
@@ -128,19 +134,21 @@ func (sd *sliceDecoder) decodeMB8x8Cavlc(addr int) error {
 		return errors.New("h264: invalid coded_block_pattern")
 	}
 	if cbpLuma != 0 || cbpChroma != 0 {
-		sd.qp = (sd.qp + int(r.SE()) + 52) % 52
+		sd.addQPDelta(int(r.SE()))
 	}
-	qp := sd.qp
+	qp := sd.dqQP() // QP'Y
 
 	for blk8 := 0; blk8 < 4; blk8++ {
 		b8x, b8y := blk8%2, blk8/2
 		gx, gy := mbX*4+b8x*2, mbY*4+b8y*2
 		px0, py0 := mbX*16+b8x*8, mbY*16+b8y*8
 
-		top, left, corner, availTop, availLeft, availTL, _ := sd.luma8x8Neighbors(gx, gy, px0, py0)
-		ft, fl, fc := filterRef8x8(top, left, corner, availTop, availLeft, availTL)
 		var pred [64]byte
-		predictIntra8x8(pred[:], int(sd.i4mode[gy*sd.w4+gx]), ft, fl, fc, availLeft, availTop)
+		if !sd.hbd {
+			top, left, corner, availTop, availLeft, availTL, _ := sd.luma8x8Neighbors(gx, gy, px0, py0)
+			ft, fl, fc := filterRef8x8(top, left, corner, availTop, availLeft, availTL)
+			predictIntra8x8(pred[:], int(sd.i4mode[gy*sd.w4+gx]), ft, fl, fc, availLeft, availTop)
+		}
 
 		var res [64]int32
 		if cbpLuma&(1<<uint(blk8)) != 0 {
@@ -168,7 +176,11 @@ func (sd *sliceDecoder) decodeMB8x8Cavlc(addr int) error {
 				sd.recon4[(gy+dy)*sd.w4+gx+dx] = true
 			}
 		}
-		h264k.IDCT8x8Add(f.Y, f.StrideY, px0, py0, pred[:], res)
+		if sd.hbd {
+			sd.recon8x8W(gx, gy, px0, py0, &res)
+		} else {
+			h264k.IDCT8x8Add(f.Y, f.StrideY, px0, py0, pred[:], res)
+		}
 	}
 
 	switch f.ChromaArrayType {

@@ -181,7 +181,8 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **H.264** Baseline CAVLC, 8-bit 4:2:0 intra keyframe (IDR or open-GOP) | MP4, MOV, M4V, … | ✅ | Clean-room intra decoder; H.264 in MKV returns `ErrUnsupportedProfile` |
 | **H.264 `avc3`** (in-band SPS/PPS) | MP4, MOV | ✅ | SPS/PPS read from the keyframe sample; an SPS in the sample wins over avcC, as in ffmpeg. avcC may be absent or empty |
 | **H.264** Main / High CABAC intra | MP4, MOV, M4V, … | ✅ | Not MKV (see above) |
-| **H.264** interlaced, 10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
+| **H.264** High 10 (9/10-bit 4:2:0) intra | MP4, MOV, M4V, … | ✅ | CAVLC and CABAC, 4x4/8x8 transforms; reconstruction bit-exact with ffmpeg's 10-bit output, then rounded to 8 bits |
+| **H.264** interlaced, >10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
 | **VP9** | `.webm`, `.mkv` | ❌ | Typed unsupported in gate |
 | **AV1**, **HEVC** | — | ❌ | |
 
@@ -268,7 +269,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | `mp3: no embedded cover art` | Audio file without artwork |
 | `<format>: container has no thumbnail decoder in go-media` | Other containers |
 
-H.264 profile gaps use `media: unsupported profile h264: ...` (for example `10-bit or deeper luma/chroma`, `chroma format 2 (need 4:2:0)`).
+H.264 profile gaps use `media: unsupported profile h264: ...` (for example `12-bit luma / 12-bit chroma (profile_idc 244); decoder supports 8, 9 and 10 bits`, `chroma format 2 (need 4:2:0)`).
 
 ## Fragmented H.264 MP4
 
@@ -282,13 +283,26 @@ default-base-is-moof, `first_sample_flags` and non-sync / depends-on flags are
 honored. Black-frame keyframe skipping used for progressive MP4 is not applied
 to fragmented files.
 
-## Not supported in this release: 10-bit H.264, MPEG-4 Part 2
+## High bit depth H.264 (High 10)
 
-- **10-bit H.264 (High 10)** returns `ErrUnsupportedProfile` with
-  `h264: N-bit luma / N-bit chroma (profile_idc P); decoder is 8-bit only`.
-  The clean-room decoder stores samples as bytes end to end (intra
-  prediction, IDCT clipping, bit-depth-scaled deblocking thresholds,
-  QpBdOffset dequantization and the SIMD kernels), so support needs a 16-bit
-  sample pipeline; it was not added rather than shipping an approximation.
+9- and 10-bit 4:2:0 keyframes decode on a separate scalar `uint16` path
+(`internal/h264/cleanroom/decode/hbd*.go`); 8-bit streams keep the byte/SIMD
+path unchanged. As in ffmpeg: intra DC default `1<<(BitDepth-1)`, QP range
+`[-QpBdOffsetY, 51]` with `QP'Y = QPY + QpBdOffsetY` dequantization (no
+int16 saturation), chroma `QP'C` with `QpBdOffsetC`, clipping to
+`(1<<BitDepth)-1`, I_PCM samples at the stream bit depth (deblocked with
+`QP'Y = 0`), and deblocking `alpha/beta/tc0` scaled by `1<<(BitDepth-8)`.
+The decoded planes are rounded to 8 bits (`(v + (1<<(bd-9))) >> (bd-8)`)
+before the shared RGB/scaler stage. The rounded planes equal ffmpeg's
+`-pix_fmt yuv420p10le` output rounded the same way (0 differing samples on
+High 10 CAVLC, CABAC and 8x8-transform assets at several seeks, including
+negative QP and chroma QP offsets). Caveat: RGB is produced from the 8-bit
+planes; ffmpeg's swscale converts 10-bit YUV to RGB directly with different
+chroma interpolation, so full-resolution PNGs differ from ffmpeg's direct
+10-bit→rgb24 by ~31–35 dB PSNR on noisy test content while matching
+ffmpeg's 8-bit YUV→RGB path at the usual ~44 dB. 4:2:2, 4:4:4 and depths
+above 10 bits still return `ErrUnsupportedProfile` with the exact depth.
+
+## Not supported in this release: MPEG-4 Part 2
 - **MPEG-4 Part 2 (`mp4v`)** returns `ErrUnsupported` with
   `mp4: video codec mp4v (MPEG-4 Part 2) not supported (go-media has no decoder for this codec)`.

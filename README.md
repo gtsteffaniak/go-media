@@ -22,7 +22,7 @@ thumb, err := media.ThumbnailLarge(r, size, 10) // ~10% into the timeline
 | **Probe & duration** | Stream layout, codecs, tags summary; duration from headers (MP3 CBR estimate where needed; WebM when `Duration` is present) |
 | **Tags & artwork** | ID3, MP4 `ilst`, Vorbis comments ([dhowden/tag](https://github.com/dhowden/tag)); APIC / `covr` / FLAC `PICTURE` |
 | **Subtitles** | Sidecar SRT/VTT/ASS → WebVTT; MKV text tracks extract; external track discovery |
-| **Thumbnails** | MJPEG, VP8 (WebM/MKV), H.264 intra IDR (Baseline CAVLC + Main/High CABAC, 8-bit 4:2:0; `avc1`/`avc3`, progressive or fragmented MP4); embedded cover when `PreferEmbedded` |
+| **Thumbnails** | MJPEG, VP8 (WebM/MKV), H.264 intra IDR (Baseline CAVLC + Main/High/High 10 CABAC, 8/9/10-bit 4:2:0; `avc1`/`avc3`, progressive or fragmented MP4); embedded cover when `PreferEmbedded` |
 | **H.264 decode** | Clean-room intra-only decoder for thumbnail keyframes ([`docs/H264.md`](docs/H264.md))—not a general player |
 
 Capability reference (by feature, with ffmpeg equivalents where useful): **[`docs/SUPPORTED_CAPABILITIES.md`](docs/SUPPORTED_CAPABILITIES.md)**.
@@ -102,7 +102,7 @@ Optional `GOEXPERIMENT=simd` kernels are experimental (tier 3); not required for
 
 ## H.264 thumbnails
 
-The in-tree decoder is **intra-only** (keyframes decoded alone, like ffmpeg `-ss` fast seek): CAVLC Baseline and CABAC Main/High for 8-bit 4:2:0, with optional fast preview (reduced deblock). Profiles that decode but fail the timing gate can be listed in `gatedProfiles` and rejected with `ErrUnsupportedProfile` so callers use ffmpeg. Implementation is clean-room MIT; ffmpeg/h264bsd are behavioral references only—no LGPL source.
+The in-tree decoder is **intra-only** (keyframes decoded alone, like ffmpeg `-ss` fast seek): CAVLC Baseline and CABAC Main/High for 8-bit 4:2:0 plus High 10 (9/10-bit 4:2:0, bit-exact with ffmpeg before the 8-bit RGB stage), with optional fast preview (reduced deblock). Profiles that decode but fail the timing gate can be listed in `gatedProfiles` and rejected with `ErrUnsupportedProfile` so callers use ffmpeg. Implementation is clean-room MIT; ffmpeg/h264bsd are behavioral references only—no LGPL source.
 
 **Open GOP:** a non-IDR sync sample is decoded as a fresh start when every slice is intra or a recovery point SEI has `recovery_frame_cnt` 0; anything else fails fast with `ErrUnsupportedProfile`.
 

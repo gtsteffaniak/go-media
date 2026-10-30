@@ -44,9 +44,13 @@ func readLevelsInto(r *bitstream.Reader, trailingOnes, totalCoeff int, level []i
 				levelCode = levelPrefix
 			case levelPrefix == 14:
 				levelCode = 14 + int(r.U(4))
-			default: // 15
+			case levelPrefix == 15:
 				levelCode = 30 + int(r.U(12))
+			default: // escape (High profiles, large levels)
+				levelCode = levelEscape(r, levelPrefix, 0)
 			}
+		} else if levelPrefix >= 16 {
+			levelCode = levelEscape(r, levelPrefix, 1)
 		} else {
 			size := suffixLength
 			if levelPrefix >= 15 {
@@ -69,11 +73,16 @@ func readLevelsInto(r *bitstream.Reader, trailingOnes, totalCoeff int, level []i
 
 	for ; i < totalCoeff; i++ {
 		levelPrefix := readLevelPrefix(r)
-		size := suffixLength
-		if levelPrefix >= 15 {
-			size = 12
+		var levelCode int
+		if levelPrefix >= 16 {
+			levelCode = levelEscape(r, levelPrefix, suffixLength)
+		} else {
+			size := suffixLength
+			if levelPrefix >= 15 {
+				size = 12
+			}
+			levelCode = (levelPrefix << suffixLength) + int(r.U(size))
 		}
-		levelCode := (levelPrefix << suffixLength) + int(r.U(size))
 		level[i] = int32((levelCode >> 1) + 1)
 		if level[i] > int32(3<<(suffixLength-1)) && suffixLength < 6 {
 			suffixLength++
@@ -83,4 +92,24 @@ func readLevelsInto(r *bitstream.Reader, trailingOnes, totalCoeff int, level []i
 		}
 	}
 	return level
+}
+
+// maxLevelPrefix bounds level_prefix: the spec allows at most 11+bitDepth
+// (25 at 14-bit); anything longer is a corrupt stream.
+const maxLevelPrefix = 25
+
+// levelEscape returns levelCode for level_prefix >= 16 (spec 9.2.2.1):
+// a (levelPrefix-3)-bit suffix plus (1<<(levelPrefix-3))-4096. These codes
+// only occur for very large levels (High profiles, high bit depth). Corrupt
+// prefixes set the reader error instead of reading unbounded suffixes.
+func levelEscape(r *bitstream.Reader, levelPrefix, suffixLength int) int {
+	if levelPrefix > maxLevelPrefix {
+		r.Fail()
+		return 0
+	}
+	code := (15 << uint(suffixLength)) + int(r.U(levelPrefix-3))
+	if suffixLength == 0 {
+		code += 15
+	}
+	return code + (1 << uint(levelPrefix-3)) - 4096
 }

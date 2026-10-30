@@ -54,22 +54,23 @@ func (sd *sliceDecoder) decodeMB8x8Cabac(addr int) error {
 	if cbpLuma != 0 || cbpChroma != 0 {
 		qpDelta := cb.parseDeltaQpCabac(sd.lastQpDeltaNonZero)
 		sd.lastQpDeltaNonZero = qpDelta != 0
-		sd.qp = (sd.qp + qpDelta + 52) % 52
+		sd.addQPDelta(qpDelta)
 	} else {
 		sd.lastQpDeltaNonZero = false
 	}
-	qp := sd.qp
+	qp := sd.dqQP() // QP'Y
 
 	for blk8 := 0; blk8 < 4; blk8++ {
 		b8x, b8y := blk8%2, blk8/2
 		gx, gy := mbX*4+b8x*2, mbY*4+b8y*2
 		px0, py0 := mbX*16+b8x*8, mbY*16+b8y*8
 
-		top, left, corner, availTop, availLeft, availTL, availTR := sd.luma8x8Neighbors(gx, gy, px0, py0)
-		ft, fl, fc := filterRef8x8(top, left, corner, availTop, availLeft, availTL)
-		_ = availTR
 		var pred [64]byte
-		predictIntra8x8(pred[:], int(sd.i4mode[gy*sd.w4+gx]), ft, fl, fc, availLeft, availTop)
+		if !sd.hbd {
+			top, left, corner, availTop, availLeft, availTL, _ := sd.luma8x8Neighbors(gx, gy, px0, py0)
+			ft, fl, fc := filterRef8x8(top, left, corner, availTop, availLeft, availTL)
+			predictIntra8x8(pred[:], int(sd.i4mode[gy*sd.w4+gx]), ft, fl, fc, availLeft, availTop)
+		}
 
 		var res [64]int32
 		var tc int
@@ -84,7 +85,11 @@ func (sd *sliceDecoder) decodeMB8x8Cabac(addr int) error {
 				sd.recon4[(gy+dy)*sd.w4+gx+dx] = true
 			}
 		}
-		h264k.IDCT8x8Add(f.Y, f.StrideY, px0, py0, pred[:], res)
+		if sd.hbd {
+			sd.recon8x8W(gx, gy, px0, py0, &res)
+		} else {
+			h264k.IDCT8x8Add(f.Y, f.StrideY, px0, py0, pred[:], res)
+		}
 	}
 
 	switch f.ChromaArrayType {

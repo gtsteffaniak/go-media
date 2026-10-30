@@ -26,9 +26,10 @@ const (
 	maxNumRefFramesInPicOrderCntCycle = 255
 	maxChromaFormatIDC                = 3
 	maxBitDepth                       = 14
-	minSliceQP                        = 0  // SliceQPY lower bound for 8-bit (QpBdOffsetY = 0)
-	maxSliceQP                        = 51 // SliceQPY upper bound
-	minPicInitQPMinus26               = -26
+	maxDecodeBitDepth                 = 10                            // highest sample depth reconstructed (9/10-bit via hbd.go)
+	minSliceQP                        = 0                             // SliceQPY lower bound for 8-bit; -QpBdOffsetY above 8 bits
+	maxSliceQP                        = 51                            // SliceQPY upper bound
+	minPicInitQPMinus26               = -26 - 6*(maxDecodeBitDepth-8) // -(26+QpBdOffsetY) at 10-bit; the slice re-checks per SPS
 	maxPicInitQPMinus26               = 25
 	maxChromaQPIndexOffset            = 12 // |chroma_qp_index_offset| bound
 	maxParameterSetID                 = 255

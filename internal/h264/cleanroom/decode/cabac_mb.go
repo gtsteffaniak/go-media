@@ -71,12 +71,16 @@ func (sd *sliceDecoder) decodeMB16Cabac(addr int, mb MBType) error {
 
 	qpDelta := cb.parseDeltaQpCabac(sd.lastQpDeltaNonZero) // always present for I_16x16
 	sd.lastQpDeltaNonZero = qpDelta != 0
-	sd.qp = (sd.qp + qpDelta + 52) % 52
-	qp := sd.qp
+	sd.addQPDelta(qpDelta)
+	qp := sd.dqQP() // QP'Y
 	sd.mbCbp[addr] = mb.CBPChroma<<4 | mb.CBPLuma
 
-	top, left, corner, availL, availT := sd.lumaNeighbors16(mbX, mbY)
-	predictIntra16x16At(f.Y, f.StrideY, mbX*16, mbY*16, mb.Intra16x16PredMode, top, left, corner, availL, availT)
+	if sd.hbd {
+		sd.predLuma16W(mbX, mbY, mb.Intra16x16PredMode)
+	} else {
+		top, left, corner, availL, availT := sd.lumaNeighbors16(mbX, mbY)
+		predictIntra16x16At(f.Y, f.StrideY, mbX*16, mbY*16, mb.Intra16x16PredMode, top, left, corner, availL, availT)
+	}
 
 	cA, cB := sd.lumaDCCondTerm(mbX, mbY)
 	dcScan, dcCount := residualBlockCABAC(sd, resI16LumaDC, cA, cB)
@@ -95,13 +99,17 @@ func (sd *sliceDecoder) decodeMB16Cabac(addr int, mb MBType) error {
 			acScan, tc := residualBlockCABAC(sd, resI16LumaAC, ca, cb2)
 			sd.nzLuma[gy*sd.w4+gx] = uint8(tc)
 			nz[ri] = uint8(tc)
-			blocks[ri] = dequant4x4(buildAC(acScan), qp)
+			blocks[ri] = sd.dq4(buildAC(acScan), qp)
 		} else {
 			sd.nzLuma[gy*sd.w4+gx] = 0
 		}
 		blocks[ri][0] = dcVals[ri]
 	}
-	h264k.IDCTAdd16LumaInPlace(f.Y, f.StrideY, mbX, mbY, &blocks, nz[:])
+	if sd.hbd {
+		sd.addLuma16W(mbX, mbY, &blocks, nz[:])
+	} else {
+		h264k.IDCTAdd16LumaInPlace(f.Y, f.StrideY, mbX, mbY, &blocks, nz[:])
+	}
 
 	switch f.ChromaArrayType {
 	case 0:
@@ -149,18 +157,20 @@ func (sd *sliceDecoder) decodeMBNxNCabac(addr int) error {
 	if cbpLuma != 0 || cbpChroma != 0 {
 		qpDelta := cb.parseDeltaQpCabac(sd.lastQpDeltaNonZero)
 		sd.lastQpDeltaNonZero = qpDelta != 0
-		sd.qp = (sd.qp + qpDelta + 52) % 52
+		sd.addQPDelta(qpDelta)
 	} else {
 		sd.lastQpDeltaNonZero = false
 	}
-	qp := sd.qp
+	qp := sd.dqQP() // QP'Y
 
 	for blk := 0; blk < 16; blk++ {
 		bx, by := luma4x4BlockX[blk], luma4x4BlockY[blk]
 		gx, gy := mbX*4+bx, mbY*4+by
-		top, left, corner, availTop, availLeft := sd.luma4x4Neighbors(gx, gy)
 		var pred [16]byte
-		predictIntra4x4(pred[:], int(sd.i4mode[gy*sd.w4+gx]), top, left, corner, availLeft, availTop)
+		if !sd.hbd {
+			top, left, corner, availTop, availLeft := sd.luma4x4Neighbors(gx, gy)
+			predictIntra4x4(pred[:], int(sd.i4mode[gy*sd.w4+gx]), top, left, corner, availLeft, availTop)
+		}
 
 		var d [16]int32
 		var tc uint8
@@ -169,12 +179,16 @@ func (sd *sliceDecoder) decodeMBNxNCabac(addr int) error {
 			scan, n := residualBlockCABAC(sd, resLuma4x4, ca, cbB)
 			tc = uint8(n)
 			sd.nzLuma[gy*sd.w4+gx] = tc
-			d = dequant4x4(inverseScan4x4(scan), qp)
+			d = sd.dq4(inverseScan4x4(scan), qp)
 		} else {
 			sd.nzLuma[gy*sd.w4+gx] = 0
 		}
 		px0, py0 := gx*4, gy*4
-		h264k.IDCTAdd4x4Luma(f.Y, f.StrideY, px0, py0, pred[:], 4, 0, 0, d, tc)
+		if sd.hbd {
+			sd.recon4x4W(gx, gy, d)
+		} else {
+			h264k.IDCTAdd4x4Luma(f.Y, f.StrideY, px0, py0, pred[:], 4, 0, 0, d, tc)
+		}
 		sd.recon4[gy*sd.w4+gx] = true
 	}
 
@@ -191,7 +205,7 @@ func (sd *sliceDecoder) decodeMBNxNCabac(addr int) error {
 func (sd *sliceDecoder) reconstructChroma420Cabac(mbX, mbY, predMode, cbpChroma, qpY int) {
 	f := sd.frame
 	// Index 0 is Cb, index 1 is Cr. Each has its own offset.
-	qpC := [2]int{chromaQPFor(sd.pps, 0, qpY), chromaQPFor(sd.pps, 1, qpY)}
+	qpC := [2]int{sd.chromaDqQP(0, qpY), sd.chromaDqQP(1, qpY)}
 	const numBlk = 4
 	comps := []struct {
 		buf   []byte
@@ -217,9 +231,13 @@ func (sd *sliceDecoder) reconstructChroma420Cabac(mbX, mbY, predMode, cbpChroma,
 	}
 
 	for c := range comps {
-		top, left, corner, availL, availT := sd.chromaNeighbors(comps[c].buf, mbX, mbY)
 		cx0, cy0 := mbX*f.MbWidthC, mbY*f.MbHeightC
-		predictIntraChroma8x8At(comps[c].buf, f.StrideC, cx0, cy0, predMode, top, left, corner, availL, availT)
+		if sd.hbd {
+			sd.predChromaW(c, mbX, mbY, predMode)
+		} else {
+			top, left, corner, availL, availT := sd.chromaNeighbors(comps[c].buf, mbX, mbY)
+			predictIntraChroma8x8At(comps[c].buf, f.StrideC, cx0, cy0, predMode, top, left, corner, availL, availT)
+		}
 		var blocks [4][16]int32
 		var nz [4]uint8
 		for blk := 0; blk < numBlk; blk++ {
@@ -231,13 +249,17 @@ func (sd *sliceDecoder) reconstructChroma420Cabac(mbX, mbY, predMode, cbpChroma,
 				tc := uint8(n)
 				comps[c].nz[gy*sd.cw4+gx] = tc
 				nz[blk] = tc
-				blocks[blk] = dequant4x4(buildAC(acScan), qpC[c])
+				blocks[blk] = sd.dq4(buildAC(acScan), qpC[c])
 			} else {
 				comps[c].nz[gy*sd.cw4+gx] = 0
 			}
 			blocks[blk][0] = dc[c][blk]
 		}
-		h264k.IDCTAdd4Chroma420InPlace(comps[c].buf, f.StrideC, cx0, cy0, &blocks, nz[:])
+		if sd.hbd {
+			sd.addChromaW(c, cx0, cy0, &blocks, nz[:])
+		} else {
+			h264k.IDCTAdd4Chroma420InPlace(comps[c].buf, f.StrideC, cx0, cy0, &blocks, nz[:])
+		}
 	}
 }
 
