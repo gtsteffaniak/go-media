@@ -80,6 +80,8 @@ type trackIndex struct {
 
 	handler   [4]byte
 	entry     [4]byte // first stsd sample entry type, e.g. "avc1"
+	trackID   uint32  // tkhd track_ID
+	rotation  int     // tkhd display rotation, ffprobe sign convention
 	avcC      []byte  // avcC payload for avc1/encv entries
 	timescale uint32
 	duration  uint64
@@ -230,6 +232,13 @@ func indexTrak(r io.ReaderAt, size, start, end int64) (trackIndex, error) {
 					return errs.Unsup("mp4 index", "trak nesting too deep")
 				}
 				return visit(s, e, depth+1)
+			case "tkhd":
+				// Read only through the matrix (88 bytes for version 1).
+				b, err := readPayload(r, s, min(e, s+88), 88)
+				if err != nil {
+					return err
+				}
+				tr.parseTkhd(b)
 			case "mdhd":
 				b, err := readPayload(r, s, e, 64)
 				if err != nil {
@@ -269,6 +278,42 @@ func indexTrak(r io.ReaderAt, size, start, end int64) (trackIndex, error) {
 		tr.once = new(sync.Once)
 	}
 	return tr, nil
+}
+
+// parseTkhd records the track ID and display rotation from a tkhd payload.
+// A truncated tkhd leaves both at zero (no rotation), matching listTrakMeta.
+func (tr *trackIndex) parseTkhd(b []byte) {
+	if len(b) < 4 {
+		return
+	}
+	idOff, matOff := 12, 40
+	if b[0] == 1 {
+		idOff, matOff = 20, 52
+	}
+	if len(b) >= idOff+4 {
+		tr.trackID = binary.BigEndian.Uint32(b[idOff:])
+	}
+	if len(b) < matOff+36 {
+		return
+	}
+	var m [9]int32
+	for i := range m {
+		m[i] = int32(binary.BigEndian.Uint32(b[matOff+4*i:]))
+	}
+	tr.rotation = rotationFromMatrix(m)
+}
+
+// videoRotation returns the rotation of the first motion-video track (cover
+// art traks are skipped). ok is false when there is no video track.
+func (m *movieIndex) videoRotation() (int, bool) {
+	for i := range m.tracks {
+		tr := &m.tracks[i]
+		if string(tr.handler[:]) != "vide" || isAttachedCoverSampleEntry(string(tr.entry[:]), "vide") {
+			continue
+		}
+		return tr.rotation, true
+	}
+	return 0, false
 }
 
 // load parses deferred stts/stsc boxes once; concurrent callers share the result.

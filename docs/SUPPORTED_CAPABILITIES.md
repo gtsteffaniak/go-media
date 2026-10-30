@@ -168,7 +168,7 @@ MP4 sample entries (AV1, ProRes, PCM, AC-3, E-AC-3, Opus, FLAC) and MKV codec ID
 
 **ffmpeg equivalent (compare harness):** `ffmpeg -ss <seek> -i file -frames:v 1 -vf scale=… -q:v … out.jpg` (H.264: keyframe seek + skip loop filter; see [`test/compare/README.md`](../test/compare/README.md))
 
-Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream, including MP4 files with a non-zero display rotation (callers fall back to ffmpeg, which autorotates). Scaled outputs round to the nearest pixel, so their size can differ from the ffmpeg preset by 1 px.
+Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream. MP4 files with a 90/180/270 display rotation are turned upright after scaling, like ffmpeg's autorotate. Scaled outputs round to the nearest pixel, so their size can differ from the ffmpeg preset by 1 px.
 
 ### By video codec
 
