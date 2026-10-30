@@ -14,9 +14,14 @@ player: it decodes one intra VOP per call and never runs inter prediction.
 The keyframe is the sync sample at or before the seek target (stss or
 fragment flags, like H.264). In Matroska it is the keyframe block at or before
 the target, else the first one after, with reads capped by `maxCollectBytes`.
-An `mp4v` entry carrying another codec, such as MPEG-2 (OTI `0x60`–`0x65`),
-MPEG-1 (`0x6A`) or JPEG (`0x6C`), is reported by name and is not decoded.
-MJPEG stored as `mp4v` still goes to the MJPEG path.
+An `mp4v` entry whose esds names another codec, such as MPEG-2 (OTI
+`0x60`–`0x65`), MPEG-1 (`0x6A`) or JPEG (`0x6C`), first goes to the MJPEG
+path. If the sample nearest the seek target holds an extractable JPEG frame
+(SOI to EOI), as MJPEG stored as `mp4v` with OTI `0x6C` normally does, that
+frame is decoded and returned as the thumbnail. Otherwise the MPEG-4 path
+returns an unsupported error that names the codec the esds declares, for
+example "mp4v track carries MPEG-2 video", and nothing is decoded. Only OTI
+`0x20` is decoded as MPEG-4 Part 2.
 
 ## Supported coding tools
 
