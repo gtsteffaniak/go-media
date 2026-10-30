@@ -54,7 +54,7 @@ The gate has no Matroska or WebM tag fixtures, so MKV/WebM tags are not compared
 
 **Not bit-identical:** go `image/jpeg` **Quality** uses Go’s quant tables; ffmpeg MJPEG **-q:v** uses libavcodec qscale. The harness maps 1–100 → 2–31 with `ffmpegQScale`; PSNR/SSIM gate visual parity, not identical coefficients. **Colors:** H.264 thumbnails decode to YCbCr; aggressive downscales (e.g. small preset) use **`scaleYCbCrArea` with per-tile RGB averaging** (same definition as full-frame `rgbaFromYCbCr` + area, without a 1080p RGBA buffer). Mild downscales (e.g. 1080p→large) use **YCbCr plane** area (`scaleYCbCrArea` matrix path). `Fast` on the small preset affects MJPEG/cover decode, not the H.264 matrix path. Repeated thumbs from one file can use `isobmff.OpenH264MP4Thumb` to cache `mp4.Probe` + avcC.
 
-MP4 files with a non-zero display rotation (`tkhd` matrix, for example portrait phone video) return `ErrUnsupported` from `Thumbnail`, so callers fall back to ffmpeg, which autorotates. Because of the rounding difference above, a scaled thumbnail can be 1 px taller or wider than the ffmpeg preset output.
+MP4 files with a non-zero display rotation (`tkhd` matrix, for example portrait phone video) are fitted to the display box (max width and height swapped for 90/270) and the scaled thumbnail is turned upright, matching ffmpeg's autorotate. Because of the rounding difference above, a scaled thumbnail can be 1 px taller or wider than the ffmpeg preset output.
 
 `TestThumbnailPresetMatchesMedia` and `TestFFmpegQScaleForPresets` in `cmd/gomedia-compare/` guard preset parity.
 
