@@ -258,57 +258,179 @@ func lower(c byte) byte {
 	return c
 }
 
-// webvttReplace is ffmpeg's webvtt_tag_replace table, tried in order.
+// webvttReplace is ffmpeg 9.0.2's webvtt_tag_replace table, tried in order.
 var webvttReplace = [][2]string{
-	{"<i>", "{\\i1}"}, {"</i>", "{\\i0}"},
-	{"<b>", "{\\b1}"}, {"</b>", "{\\b0}"},
-	{"<u>", "{\\u1}"}, {"</u>", "{\\u0}"},
 	{"{", "\\{{}"}, {"\\", "\\\u2060"},
 	{"&gt;", ">"}, {"&lt;", "<"},
 	{"&lrm;", "\u200e"}, {"&rlm;", "\u200f"},
 	{"&amp;", "&"}, {"&nbsp;", "\\h"},
 }
 
-// WebVTTToASS converts a WebVTT cue payload to ASS text, porting ffmpeg's
-// webvtt_event_to_ass. Only <i>, <b> and <u> without classes survive; other
-// tags (<c.x>, <v Name>, <ruby>, timestamps, classed tags) are dropped with
-// their content kept. The entities &gt; &lt; &amp; &lrm; &rlm; and &nbsp;
-// are decoded; others stay literal. A "{" becomes "\{{}" and a "\" gets a
-// U+2060 word joiner after it, which then appear literally in the WebVTT
-// output, exactly as with ffmpeg.
-func WebVTTToASS(p string) string {
-	var b strings.Builder
-	skip := false
-	for i := 0; i < len(p) && p[i] != 0; {
+// webvttValidTags is ffmpeg 9.0.2's webvtt_valid_tags table. A tag matches
+// when its name starts with the entry (strncmp over the entry's length), so
+// classed tags such as <i.loud> count as <i>, and so does any tag whose name
+// merely begins with i, b or u.
+var webvttValidTags = [][2]string{
+	{"i", "{\\i1}"}, {"/i", "{\\i0}"},
+	{"b", "{\\b1}"}, {"/b", "{\\b0}"},
+	{"u", "{\\u1}"}, {"/u", "{\\u0}"},
+}
+
+// WebVTTToASS converts a WebVTT cue payload to ASS text, porting ffmpeg
+// 9.0.2's webvtt_event_to_ass. startMs and endMs are the cue's start and
+// end time in milliseconds.
+//
+//   - Tags whose name starts with i, b or u (with or without classes) become
+//     the ASS bold/italic/underline overrides; every other tag (<c.x>,
+//     <v Name>, <ruby>, ...) is dropped with its content kept. A "<" with no
+//     closing ">" ends the cue text.
+//   - Inline cue timestamps (<00:01.500>) strictly inside the cue and in
+//     increasing order split the text into {\kf} karaoke segments, which the
+//     WebVTT encoder then drops; other timestamps are dropped like tags.
+//   - The entities &gt; &lt; &amp; &lrm; &rlm; and &nbsp; are decoded; others
+//     stay literal. A "{" becomes "\{{}" and a "\" gets a U+2060 word joiner
+//     after it, which then appear literally in the WebVTT output.
+//
+// Version note: ffmpeg 7.1 only recognised exact <i>, <b> and <u> tags
+// (classed tags were dropped) and had no karaoke timing; go-media follows
+// 9.0.2, the version the golden tests pin.
+func WebVTTToASS(p string, startMs, endMs int64) string {
+	if i := strings.IndexByte(p, 0); i >= 0 {
+		p = p[:i]
+	}
+	var buf, seg strings.Builder
+	flush := func(durCs int64) {
+		if durCs > 0 {
+			buf.WriteString("{\\kf" + strconv.FormatInt(durCs, 10) + "}")
+		}
+		buf.WriteString(seg.String())
+		seg.Reset()
+	}
+	prevTs := int64(-1)
+	var startCs int64
+	for i := 0; i < len(p); {
+		if p[i] == '<' {
+			end := strings.IndexByte(p[i:], '>')
+			if end < 0 {
+				break
+			}
+			body := p[i+1 : i+end]
+			i += end + 1
+			if ts, ok := readCueTimestamp(body, startMs, endMs, prevTs); ok {
+				endCs := (ts - startMs + 5) / 10
+				flush(endCs - startCs)
+				startCs = endCs
+				prevTs = ts
+				continue
+			}
+			for _, t := range webvttValidTags {
+				if strings.HasPrefix(body, t[0]) {
+					seg.WriteString(t[1])
+					break
+				}
+			}
+			// ffmpeg tries the replacement table at the next position in the
+			// same pass and then restarts the loop; doing it on the next
+			// iteration is equivalent.
+			continue
+		}
 		replaced := false
 		for _, r := range webvttReplace {
 			if strings.HasPrefix(p[i:], r[0]) {
-				b.WriteString(r[1])
+				seg.WriteString(r[1])
 				i += len(r[0])
 				replaced = true
 				break
 			}
 		}
-		if i >= len(p) || p[i] == 0 {
-			break
-		}
 		if replaced {
-			skip = false
 			continue
 		}
 		switch c := p[i]; {
-		case c == '<':
-			skip = true
-		case c == '>':
-			skip = false
-		case c == '\n' && i+1 < len(p) && p[i+1] != 0:
-			b.WriteString("\\N")
-		case !skip && c != '\r':
-			b.WriteByte(c)
+		case c == '\n' && i+1 < len(p):
+			seg.WriteString("\\N")
+		case c != '\r':
+			seg.WriteByte(c)
 		}
 		i++
 	}
-	return b.String()
+	if prevTs < 0 {
+		flush(0)
+	} else {
+		flush((endMs-startMs+5)/10 - startCs)
+	}
+	return buf.String()
+}
+
+// readCueTimestamp ports ffmpeg 9.0.2's read_cue_timestamp: body must be
+// only digits, colons and periods, start with a digit, parse as a WebVTT
+// timestamp, lie strictly inside (cueStart, cueEnd) and come after prevTs.
+func readCueTimestamp(body string, cueStart, cueEnd, prevTs int64) (int64, bool) {
+	if body == "" || !isDigit(body[0]) {
+		return 0, false
+	}
+	for i := 0; i < len(body); i++ {
+		if c := body[i]; !isDigit(c) && c != ':' && c != '.' {
+			return 0, false
+		}
+	}
+	ts := parseWebVTTTimestamp(body)
+	if ts <= cueStart || ts >= cueEnd || (prevTs >= 0 && ts <= prevTs) {
+		return 0, false
+	}
+	return ts, true
+}
+
+// parseWebVTTTimestamp ports ffmpeg's parse_webvtt_timestamp, including its
+// sscanf field widths: "%d:%2d:%2d.%3d", then "%2d:%2d.%3d". A short
+// fraction is taken as a number, so "00:01.5" is 1.005 s, as in ffmpeg.
+// It returns -1 when neither form matches or minutes/seconds exceed 59.
+func parseWebVTTTimestamp(s string) int64 {
+	if v, ok := scanFields(s, []int{0, 2, 2, 3}, "::."); ok {
+		h, m, sec, ms := v[0], v[1], v[2], v[3]
+		if m > 59 || sec > 59 {
+			return -1
+		}
+		return h*3600000 + m*60000 + sec*1000 + ms
+	}
+	if v, ok := scanFields(s, []int{2, 2, 3}, ":."); ok {
+		m, sec, ms := v[0], v[1], v[2]
+		if m > 59 || sec > 59 {
+			return -1
+		}
+		return m*60000 + sec*1000 + ms
+	}
+	return -1
+}
+
+// scanFields emulates sscanf with "%Nd" conversions (width 0 = unlimited)
+// separated by the literal bytes in seps, on input that holds only digits,
+// colons and periods. Trailing input after the last field is ignored.
+func scanFields(s string, widths []int, seps string) ([]int64, bool) {
+	out := make([]int64, 0, len(widths))
+	i := 0
+	for f, w := range widths {
+		if f > 0 {
+			if i >= len(s) || s[i] != seps[f-1] {
+				return nil, false
+			}
+			i++
+		}
+		j := i
+		var v int64
+		for j < len(s) && isDigit(s[j]) && (w == 0 || j-i < w) {
+			if v < 1<<40 {
+				v = v*10 + int64(s[j]-'0')
+			}
+			j++
+		}
+		if j == i {
+			return nil, false
+		}
+		out = append(out, v)
+		i = j
+	}
+	return out, true
 }
 
 // PlainTextToASS converts raw text to ASS text, porting ffmpeg's text

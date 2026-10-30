@@ -83,11 +83,13 @@ func extractWVTT(r io.ReaderAt, size int64, trackIndex int) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		startMs := rescaleRound(rescaleRound(start*1_000_000, tt.timescale), 1000)
+		durMs := rescaleRound(delta*1000, tt.timescale)
 		for _, text := range wvttCueTexts(payload) {
 			events = append(events, subtitle.Event{
-				Start:    rescaleRound(rescaleRound(start*1_000_000, tt.timescale), 1000),
-				Duration: rescaleRound(delta*1000, tt.timescale),
-				Dialog:   subtitle.DefaultDialog(len(events), subtitle.WebVTTToASS(text)),
+				Start:    startMs,
+				Duration: durMs,
+				Dialog:   subtitle.DefaultDialog(len(events), subtitle.WebVTTToASS(text, startMs, startMs+durMs)),
 			})
 		}
 	}

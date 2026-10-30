@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gtsteffaniak/go-media/internal/ffmpegtest"
 )
 
 // extractFile runs ExtractSubtitleWebVTT on stream 0 of a fixture.
@@ -24,8 +26,8 @@ func extractFile(t *testing.T, path string) (string, error) {
 }
 
 // TestSubtitleFFmpegGoldens compares every MP4 fixture that has a
-// <fixture>.ffmpeg.vtt golden (ffmpeg 7.1.5 output, see
-// testdata/gen-subtitles.sh at the repository root) byte for byte.
+// <fixture>.ffmpeg.vtt golden (output of the ffmpeg pinned in
+// testdata/subtitle-ffmpeg-version.txt, see testdata/gen-subtitles.sh at the repository root) byte for byte.
 func TestSubtitleFFmpegGoldens(t *testing.T) {
 	goldens, err := filepath.Glob("testdata/sub_*.mp4.ffmpeg.vtt")
 	if err != nil {
@@ -68,14 +70,12 @@ func TestSubtitleGoMediaOnly(t *testing.T) {
 }
 
 // TestSubtitleLiveFFmpeg re-runs the installed ffmpeg on every golden
-// fixture and compares go-media with that output. It is skipped when ffmpeg
-// is not on PATH; a failure here with passing goldens means the local ffmpeg
-// version behaves differently from the one the goldens were captured with.
+// fixture and compares go-media with that output. It is skipped unless the
+// ffmpeg on PATH prints the -version line recorded in
+// testdata/subtitle-ffmpeg-version.txt, since other releases legitimately
+// produce different bytes.
 func TestSubtitleLiveFFmpeg(t *testing.T) {
-	ff, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		t.Skip("ffmpeg not on PATH")
-	}
+	ff := ffmpegtest.LiveFFmpeg(t, "../../testdata/subtitle-ffmpeg-version.txt")
 	goldens, _ := filepath.Glob("testdata/sub_*.mp4.ffmpeg.vtt")
 	for _, g := range goldens {
 		fixture := strings.TrimSuffix(g, ".ffmpeg.vtt")

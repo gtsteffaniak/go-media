@@ -97,14 +97,16 @@ func ExtractSubtitleWebVTT(r io.ReaderAt, size int64, streamIndex int) (string, 
 			if err != nil {
 				return "", err
 			}
-			dialog, ok := kind.dialog(fb, readOrder)
+			startMs := ticksToMs(start, scale)
+			durMs := rescaleRound(laceDur*scale, 1_000_000)
+			dialog, ok := kind.dialog(fb, readOrder, startMs, startMs+durMs)
 			if !ok {
 				continue
 			}
 			readOrder++
 			events = append(events, subtitle.Event{
-				Start:    ticksToMs(start, scale),
-				Duration: rescaleRound(laceDur*scale, 1_000_000),
+				Start:    startMs,
+				Duration: durMs,
 				Dialog:   dialog,
 			})
 		}
@@ -163,8 +165,9 @@ func subtitleKind(codecID string) (subKind, error) {
 }
 
 // dialog turns one frame into an ASS dialog line, or reports false when
-// ffmpeg's demuxer or decoder produces no subtitle for it.
-func (k subKind) dialog(fb []byte, readOrder int) (string, bool) {
+// ffmpeg's demuxer or decoder produces no subtitle for it. startMs and endMs
+// are the cue's times, which WebVTT inline timestamps are checked against.
+func (k subKind) dialog(fb []byte, readOrder int, startMs, endMs int64) (string, bool) {
 	switch k {
 	case kindASS:
 		// The frame is already the "ReadOrder,Layer,Style,..." dialog line
@@ -179,7 +182,7 @@ func (k subKind) dialog(fb []byte, readOrder int) (string, bool) {
 		if !ok {
 			return "", false
 		}
-		return subtitle.DefaultDialog(readOrder, subtitle.WebVTTToASS(text)), true
+		return subtitle.DefaultDialog(readOrder, subtitle.WebVTTToASS(text, startMs, endMs)), true
 	case kindText:
 		if len(fb) == 0 {
 			return "", false

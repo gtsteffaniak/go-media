@@ -350,7 +350,7 @@ func ParseVTTEvents(b []byte) []Event {
 			// A zero-size packet: ffmpeg's decoder emits no subtitle.
 			continue
 		}
-		ev = append(ev, Event{Start: p.pts, Duration: p.dur, Dialog: DefaultDialog(i, WebVTTToASS(p.data))})
+		ev = append(ev, Event{Start: p.pts, Duration: p.dur, Dialog: DefaultDialog(i, WebVTTToASS(p.data, p.pts, p.pts+p.dur))})
 	}
 	return ev
 }
@@ -370,7 +370,10 @@ func ParseASSEvents(b []byte) (header string, events []Event) {
 			n = len(s) - pos
 		}
 		line := s[pos : pos+n]
-		if start, dur, d, ok := assDialogue(line, readOrder); ok {
+		// ffmpeg 9.0 (libavformat/assdec.c) moves events whose duration is
+		// zero or negative into the header instead of emitting them, since
+		// renderers treat them as hidden; ffmpeg 7.1 still emitted them.
+		if start, dur, d, ok := assDialogue(line, readOrder); ok && dur > 0 {
 			readOrder++
 			q = append(q, queued{pts: start, dur: dur, pos: int64(pos), data: d})
 		} else {

@@ -44,7 +44,8 @@ func DefaultDialog(readOrder int, text string) string {
 // Every event becomes a cue, even one whose rendered text is empty, as with
 // the ffmpeg CLI; callers drop the packets ffmpeg's demuxers and decoders
 // drop (for example empty SubRip cues). With no events the result is just "WEBVTT\n",
-// which is what ffmpeg writes for a track with no cues.
+// which is what ffmpeg writes for a track with no cues. A negative duration
+// is clamped by clampNegativeDuration, an intentional difference from ffmpeg.
 func WriteWebVTT(header string, events []Event) string {
 	// One renderer for the whole track: ffmpeg keeps its tag stack in the
 	// encoder context, so tags left open by a malformed override block are
@@ -52,16 +53,13 @@ func WriteWebVTT(header string, events []Event) string {
 	r := &vttRenderer{styles: parseASSStyles(header)}
 	var b strings.Builder
 	b.WriteString("WEBVTT\n")
-	for _, ev := range events {
+	for i, ev := range events {
 		// A dialog that renders to nothing still becomes a cue with an empty
 		// payload: the ffmpeg CLI muxes the zero-size encoder output anyway.
 		text := r.render(ev.Dialog)
 		dur := ev.Duration
 		if dur < 0 {
-			// ffmpeg carries the duration in AVSubtitle.end_display_time, a
-			// uint32 in milliseconds, so a negative duration that survived the
-			// demuxer (only possible on the last cue) wraps around.
-			dur = int64(uint32(dur))
+			dur = clampNegativeDuration(events, i)
 		}
 		b.WriteByte('\n')
 		writeVTTTime(&b, ev.Start)
@@ -544,4 +542,24 @@ func (r *vttRenderer) overrideCode(buf string, i int) int {
 		r.styleApply(buf[i+2 : end])
 	}
 	return end
+}
+
+// clampNegativeDuration returns the duration go-media uses for events[i]
+// when its end is before its start. Any text demuxer can produce one from a
+// malformed timestamp; Matroska and MP4 durations are unsigned and cannot.
+//
+// Intentional difference from ffmpeg: ffmpeg stores the duration in
+// AVSubtitle.end_display_time, a uint32 of milliseconds, so the negative
+// value wraps to about 1193 hours and the cue stays on screen for the rest
+// of playback. go-media instead ends the cue at the next later cue's start,
+// or makes it zero-length when there is none, so a broken timestamp never
+// shows text longer than until the next cue.
+func clampNegativeDuration(events []Event, i int) int64 {
+	start := events[i].Start
+	for _, next := range events[i+1:] {
+		if next.Start > start {
+			return next.Start - start
+		}
+	}
+	return 0
 }

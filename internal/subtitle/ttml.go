@@ -36,16 +36,33 @@ func TTMLOrXMLToWebVTT(xml string) (string, error) {
 		}
 		return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
 	}
-	var cues []string
+	type ttmlCue struct{ start, end, body string }
+	var parsed []ttmlCue
 	for _, m := range matches {
 		body := stripXMLTags(m[3])
 		if body == "" {
 			continue
 		}
-		cues = append(cues, ttmlTimeToVTT(m[1])+" --> "+ttmlTimeToVTT(m[2])+"\n"+body)
+		parsed = append(parsed, ttmlCue{ttmlTimeToVTT(m[1]), ttmlTimeToVTT(m[2]), body})
 	}
-	if len(cues) == 0 {
+	if len(parsed) == 0 {
 		return "", ErrEmpty
+	}
+	var cues []string
+	for i, c := range parsed {
+		// An end before the start is clamped as in WriteWebVTT: to the next
+		// later cue's start, else to the start (zero length). The timestamps
+		// are fixed-width HH:MM:SS.mmm, so string order is time order.
+		if c.end < c.start {
+			c.end = c.start
+			for _, n := range parsed[i+1:] {
+				if n.start > c.start {
+					c.end = n.start
+					break
+				}
+			}
+		}
+		cues = append(cues, c.start+" --> "+c.end+"\n"+c.body)
 	}
 	return "WEBVTT\n\n" + strings.Join(cues, "\n\n") + "\n", nil
 }

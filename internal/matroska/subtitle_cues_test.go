@@ -7,7 +7,7 @@ import (
 )
 
 // TestExtractSubtitleMatchesFFmpeg checks cue text and end times against
-// ffmpeg 7.1.5 `-map 0:s:0 out.vtt` for WebM WebVTT (cue id + settings in the
+// ffmpeg 9.0.2 `-map 0:s:0 out.vtt` for WebM WebVTT (cue id + settings in the
 // block), SRT and ASS tracks. Cue settings, identifiers, ASS Dialogue fields
 // and override tags must not leak into the cue text.
 func TestExtractSubtitleMatchesFFmpeg(t *testing.T) {

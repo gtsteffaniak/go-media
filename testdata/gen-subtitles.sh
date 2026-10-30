@@ -1,27 +1,34 @@
 #!/bin/sh
 # gen-subtitles.sh regenerates the subtitle fixtures and their ffmpeg goldens.
 #
-# Every <fixture>.ffmpeg.vtt next to a fixture is ffmpeg's own output for
+# Every <fixture>.ffmpeg.vtt next to a fixture is ffmpeg's own output (except
+# for the documented end-before-start clamp patched in below) for
 #
 #     ffmpeg -nostdin -v error -i <fixture> -map 0:s:0 -f webvtt <golden>
 #
 # and the golden tests in internal/subtitle, internal/matroska and
 # internal/isobmff require go-media to reproduce it byte for byte.
 #
-# Goldens captured with: ffmpeg 7.1.5 (Debian build, libavformat 61.7.100).
+# Goldens captured with: ffmpeg 9.0.2, the static build CI pins
+# (scripts/install-ffmpeg.sh); the exact -version line is recorded in
+# testdata/subtitle-ffmpeg-version.txt.
 # A different ffmpeg version may print different bytes; re-run this script
 # and review the diff before committing new goldens.
 #
-# Usage: testdata/gen-subtitles.sh            # goldens only
+# Usage: [FFMPEG=$HOME/ffmpeg-9.0.2/ffmpeg] testdata/gen-subtitles.sh            # goldens only
 #        testdata/gen-subtitles.sh --fixtures # rebuild fixtures, then goldens
 set -eu
 cd "$(dirname "$0")/.."
-FF="ffmpeg -nostdin -v error -y"
+FFMPEG=${FFMPEG:-ffmpeg}
+FF="$FFMPEG -nostdin -v error -y"
 S=internal/subtitle/testdata
 M=internal/matroska/testdata
 I=internal/isobmff/testdata
 
-ffmpeg -version | head -n 1
+# The golden tests read this file; the live tests only run when the
+# ffmpeg on PATH prints the same first -version line.
+"$FFMPEG" -version | head -n 1 >testdata/subtitle-ffmpeg-version.txt
+cat testdata/subtitle-ffmpeg-version.txt
 
 if [ "${1:-}" = "--fixtures" ]; then
 	# Hand-built Matroska (bitmap codecs, lacing, zlib, header stripping,
@@ -53,12 +60,17 @@ golden() { # golden <fixture> [input options]
 
 for f in "$S"/*.srt "$S"/*.ass "$S"/*.ssa "$S"/*.vtt; do
 	case $f in
+	*.ffmpeg.vtt) continue ;;
 	*/srt_structure.srt) golden "$f" -f srt ;;
 	*) golden "$f" ;;
 	esac
 done
 # Fixtures ffmpeg cannot convert (bitmap codecs, S_TEXT/WEBVTT, wvtt) have
 # hand-written *.expected.vtt files instead; see the tests.
+# Documented difference: the last srt_structure cue ends before it starts.
+# ffmpeg wraps that to ~1193 h (on screen for the rest of playback); go-media
+# makes it zero-length, so the golden carries go-media's end time instead.
+sed -i 's/^00:13.000 --> 1193:02:59.296$/00:13.000 --> 00:13.000/' "$S/srt_structure.srt.ffmpeg.vtt"
 for f in "$M"/sub_*.mkv; do
 	case $f in
 	*_pgs.mkv | *_vobsub.mkv | *_dvbsub.mkv | *_textst.mkv | *_aribsub.mkv | *_stextwebvtt.mkv) ;;
