@@ -157,7 +157,7 @@ var sampleEntryNames = map[string]string{
 	"hvc1": "HEVC", "hev1": "HEVC", "dvh1": "Dolby Vision HEVC", "dvhe": "Dolby Vision HEVC",
 	"av01": "AV1", "vp09": "VP9", "vp08": "VP8",
 	"mp4v": "MPEG-4 Part 2", "s263": "H.263", "h263": "H.263",
-	"avc2": "H.264", "avc3": "H.264 with in-band parameter sets", "avc4": "H.264 with in-band parameter sets",
+	"avc2": "H.264", "avc4": "H.264 with in-band parameter sets",
 	"apch": "ProRes", "apcn": "ProRes", "apcs": "ProRes", "apco": "ProRes", "ap4h": "ProRes",
 	"mjp2": "Motion JPEG 2000", "vvc1": "VVC", "vvi1": "VVC",
 	"encv": "encrypted video", "resv": "restricted video",

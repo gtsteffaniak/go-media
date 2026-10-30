@@ -179,6 +179,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **MJPEG** | MP4, MOV, MKV, … | ✅ | Direct frame extract |
 | **VP8** | `.webm`, `.mkv` | ✅ | Pure-Go VP8 decode (`gen2brain/vpx`) |
 | **H.264** Baseline CAVLC, 8-bit 4:2:0 intra keyframe (IDR or open-GOP) | MP4, MOV, M4V, … | ✅ | Clean-room intra decoder; H.264 in MKV returns `ErrUnsupportedProfile` |
+| **H.264 `avc3`** (in-band SPS/PPS) | MP4, MOV | ✅ | SPS/PPS read from the keyframe sample; an SPS in the sample wins over avcC, as in ffmpeg. avcC may be absent or empty |
 | **H.264** Main / High CABAC intra | MP4, MOV, M4V, … | ✅ | Not MKV (see above) |
 | **H.264** interlaced, 10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
 | **VP9** | `.webm`, `.mkv` | ❌ | Typed unsupported in gate |

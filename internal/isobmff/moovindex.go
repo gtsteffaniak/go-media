@@ -374,7 +374,7 @@ func (tr *trackIndex) parseStsd(b []byte) {
 		return
 	}
 	copy(tr.entry[:], e[4:8])
-	if t := string(tr.entry[:]); t != "avc1" && t != "encv" {
+	if !isAVCEntry(string(tr.entry[:])) {
 		return
 	}
 	const visualEntryLen = 8 + 78
@@ -824,7 +824,7 @@ func (m *movieIndex) track(i int) (*trackIndex, error) {
 // read, so track() then reports it as unsupported.
 func (m *movieIndex) firstAVC() (int, bool) {
 	for i := range m.tracks {
-		if t := string(m.tracks[i].entry[:]); t == "avc1" || t == "encv" {
+		if isAVCEntry(string(m.tracks[i].entry[:])) {
 			return i, true
 		}
 	}
@@ -837,8 +837,25 @@ func (tr *trackIndex) avcConfig() (*mp4.AVCDecoderConfiguration, bool) {
 	return cfg, err == nil
 }
 
+// isAVCEntry reports whether a sample entry fourcc carries H.264 the
+// thumbnail path decodes: avc1 (parameter sets in avcC), avc3 (parameter sets
+// may be in-band, ISO/IEC 14496-15 §5.4.2.1) and encv (avc1 behind a
+// protection scheme, kept for mp4.Probe CodecAVC1 parity).
+func isAVCEntry(t string) bool {
+	return t == "avc1" || t == "avc3" || t == "encv"
+}
+
 // avcConfigErr decodes the track's avcC box, or says why it cannot.
+//
+// An avc3 entry may legally carry an avcC with no SPS/PPS, or (in some
+// muxers) none at all; the parameter sets then travel in each keyframe
+// sample. That matches ffmpeg's h264 decoder, which accepts in-band SPS/PPS
+// and lets them replace extradata ones, so a missing avcC on avc3 yields an
+// empty configuration with 4-byte NAL lengths instead of an error.
 func (tr *trackIndex) avcConfigErr() (*mp4.AVCDecoderConfiguration, error) {
+	if len(tr.avcC) == 0 && string(tr.entry[:]) == "avc3" {
+		return &mp4.AVCDecoderConfiguration{ConfigurationVersion: 1, LengthSizeMinusOne: 3}, nil
+	}
 	if len(tr.avcC) == 0 {
 		return nil, errs.Unsup("thumbnail", "mp4: avcC box missing from "+string(tr.entry[:])+" sample entry")
 	}

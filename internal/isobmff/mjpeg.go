@@ -25,7 +25,7 @@ func (idx *movieIndex) mjpegFrame(seekPercent float64) ([]byte, bool) {
 			continue
 		}
 		switch string(idx.tracks[i].entry[:]) {
-		case "avc1", "encv":
+		case "avc1", "avc3", "encv":
 			return nil, false
 		case "mp4v":
 			if _, ok := visualMJPEGSampleEntry(r, size, i); ok {
