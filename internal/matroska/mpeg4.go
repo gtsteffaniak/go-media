@@ -1,0 +1,98 @@
+package matroska
+
+import (
+	"io"
+
+	"github.com/gtsteffaniak/go-media/internal/errs"
+	"github.com/gtsteffaniak/go-media/internal/mpeg4"
+)
+
+// CodecMPEG4ASP is the Matroska CodecID for MPEG-4 Part 2 video.
+const CodecMPEG4ASP = "V_MPEG4/ISO/ASP"
+
+// mpeg4CodecIDs are the Matroska MPEG-4 Part 2 CodecIDs ffmpeg maps to its
+// mpeg4 decoder (libavformat/matroska.c ff_mkv_codec_tags).
+var mpeg4CodecIDs = []string{CodecMPEG4ASP, "V_MPEG4/ISO/SP", "V_MPEG4/ISO/AP"}
+
+// IsMPEG4CodecID reports whether id is an MPEG-4 Part 2 CodecID.
+func IsMPEG4CodecID(id string) bool {
+	for _, c := range mpeg4CodecIDs {
+		if c == id {
+			return true
+		}
+	}
+	return false
+}
+
+// MPEG4PictureAtSeek decodes the MPEG-4 Part 2 keyframe at or before
+// seekPercent of the file duration (the first keyframe after it when none
+// precede it). CodecPrivate supplies the VOL headers. It returns (nil, nil)
+// when the file has no MPEG-4 Part 2 video track. h must come from
+// ProbeHeader on the same reader.
+func MPEG4PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64) (*mpeg4.Picture, error) {
+	if h == nil || !h.HasDuration() {
+		return nil, errs.Unsup("thumbnail", "matroska: no duration, seek impossible")
+	}
+	if seekPercent <= 0 {
+		seekPercent = 10
+	}
+	targetMs := int64(float64(h.durationMs()) * seekPercent / 100.0)
+	ix, err := indexSegment(r, size)
+	if err != nil {
+		return nil, err
+	}
+	track, _, ok := videoTrackNumber(ix.tracks, mpeg4CodecIDs...)
+	if !ok {
+		return nil, nil
+	}
+	var config []byte
+	for i, t := range ix.tracks {
+		n := t.TrackNumber
+		if n == 0 {
+			n = uint64(i + 1)
+		}
+		if n == track {
+			config = t.CodecPrivate
+			break
+		}
+	}
+	scale := h.timecodeScale()
+	start, err := seekStartCluster(r, ix, track, msToTicks(targetMs, scale), true)
+	if err != nil {
+		return nil, err
+	}
+	w := clusterWalker{r: r, segEnd: ix.segEnd, off: start}
+	var pick []byte
+	for {
+		bi, err := w.next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if bi.track != track || bi.payloadLen <= 0 || !bi.keyframe {
+			continue
+		}
+		if timecodeTicksToMs(bi.timecode, scale) > targetMs && pick != nil {
+			break
+		}
+		if bi.payloadLen > maxCollectBytes {
+			return nil, errs.Unsup("matroska", "MPEG-4 keyframe too large")
+		}
+		frames, err := readFrames(r, bi)
+		if err != nil {
+			return nil, err
+		}
+		if len(frames) > 0 && len(frames[0]) > 0 {
+			pick = frames[0]
+		}
+		if timecodeTicksToMs(bi.timecode, scale) > targetMs {
+			break
+		}
+	}
+	if pick == nil {
+		return nil, errs.Unsup("thumbnail", "matroska: no MPEG-4 Part 2 keyframe found")
+	}
+	return mpeg4.DecodeKeyframe(config, pick)
+}

@@ -141,7 +141,13 @@ func decodeSource(r interface {
 		} else if yimg != nil {
 			return yimg, "decode", nil
 		}
-		// No MJPEG or H.264 track: name the codec from the index (no I/O).
+		// MPEG-4 Part 2 (mp4v) I-VOP.
+		if yimg, err := src.MPEG4ThumbnailYCbCr(opt.SeekPercent); err != nil {
+			return nil, "", err
+		} else if yimg != nil {
+			return yimg, "decode", nil
+		}
+		// No MJPEG, H.264 or MPEG-4 track: name the codec from the index (no I/O).
 		return nil, "", src.UnsupportedReason()
 	case format.MKV, format.WebM:
 		// Probe the bounded header once and decide from it before any demux pass.
@@ -153,6 +159,15 @@ func decodeSource(r interface {
 		}
 		if len(hdr.VideoCodecIDs) == 0 {
 			return nil, "", errs.Unsup("thumbnail", "matroska: no video track in bounded header (unknown-size cluster, truncated, or no Segment)")
+		}
+		if slices.ContainsFunc(hdr.VideoCodecIDs, matroska.IsMPEG4CodecID) && !hasThumbCodec(hdr.VideoCodecIDs) {
+			pic, err := matroska.MPEG4PictureAtSeek(r, size, hdr, opt.SeekPercent)
+			if err != nil {
+				return nil, "", err
+			}
+			if pic != nil {
+				return isobmff.PictureYCbCr(pic), "decode", nil
+			}
 		}
 		if !hasThumbCodec(hdr.VideoCodecIDs) {
 			if slices.Contains(hdr.VideoCodecIDs, "V_MPEG4/ISO/AVC") {

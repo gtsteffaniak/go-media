@@ -90,6 +90,7 @@ type trackIndex struct {
 	trackID  uint32  // tkhd track_ID
 	rotation int     // tkhd display rotation, ffprobe sign convention
 	avcC     []byte  // avcC payload for avc1/encv entries
+	esds     []byte  // esds payload for mp4v entries
 	// fragmented copies movieIndex.fragmented so seek errors can say why the
 	// moov sample tables are empty.
 	fragmented bool
@@ -370,7 +371,8 @@ func (tr *trackIndex) parseMdhd(b []byte) error {
 	return nil
 }
 
-// parseStsd records the first sample entry type and, for H.264, its avcC payload.
+// parseStsd records the first sample entry type and, for H.264, its avcC
+// payload, or for mp4v, its esds payload.
 func (tr *trackIndex) parseStsd(b []byte) {
 	if len(b) < 16 {
 		return
@@ -381,7 +383,10 @@ func (tr *trackIndex) parseStsd(b []byte) {
 		return
 	}
 	copy(tr.entry[:], e[4:8])
-	if !isAVCEntry(string(tr.entry[:])) {
+	want := "avcC"
+	if string(tr.entry[:]) == "mp4v" {
+		want = "esds"
+	} else if !isAVCEntry(string(tr.entry[:])) {
 		return
 	}
 	const visualEntryLen = 8 + 78
@@ -393,8 +398,12 @@ func (tr *trackIndex) parseStsd(b []byte) {
 		if csz < 8 || csz > len(c) {
 			return
 		}
-		if string(c[4:8]) == "avcC" {
-			tr.avcC = c[8:csz]
+		if string(c[4:8]) == want {
+			if want == "esds" {
+				tr.esds = c[8:csz]
+			} else {
+				tr.avcC = c[8:csz]
+			}
 			return
 		}
 		c = c[csz:]
