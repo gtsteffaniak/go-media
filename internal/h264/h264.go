@@ -87,9 +87,14 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 	// The NAL length field width comes from avcC (lengthSizeMinusOne+1, 1, 2
 	// or 4 bytes), as ffmpeg's h264_parse uses nal_length_size; 4 is assumed
 	// only when there is no avcC.
+	// The same width is passed to the decoder so the prepended avcC sets and
+	// the sample's own NAL units are split with it.
 	lenSize := 4
 	if avcc != nil {
 		lenSize = int(avcc.LengthSizeMinusOne) + 1
+	}
+	if lenSize < 1 || lenSize > 4 {
+		lenSize = 4
 	}
 	sps := inBandSPS(sample, lenSize)
 	if sps == nil && avcc != nil && len(avcc.SequenceParameterSets) > 0 {
@@ -105,7 +110,7 @@ func decodeFrame(avcc *mp4.AVCDecoderConfiguration, sample []byte, fast bool) (*
 		data = prependParameterSets(avcc, sample)
 	}
 	dec := borrowDecoder(fast)
-	frames, err := dec.DecodeIDRAVC(data)
+	frames, err := dec.DecodeIDRAVCLen(data, lenSize)
 	if err != nil {
 		releaseDecoder(dec)
 		return nil, mapDecodeErr(err)
