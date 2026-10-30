@@ -12,6 +12,12 @@ func MJPEGFrame(r io.ReaderAt, size int64, seekPercent float64) ([]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
+	return idx.mjpegFrame(seekPercent)
+}
+
+// mjpegFrame returns the MJPEG sample at seekPercent using an existing index.
+func (idx *movieIndex) mjpegFrame(seekPercent float64) ([]byte, bool) {
+	r, size := idx.r, idx.size
 	videoTrack := -1
 	for i := range idx.tracks {
 		if idx.tracks[i].err != nil {

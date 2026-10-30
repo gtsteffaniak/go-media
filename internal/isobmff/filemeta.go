@@ -214,15 +214,11 @@ func isMotionMJPEGTrak(meta trakMeta) bool {
 
 // VideoRotation returns the display rotation in degrees of the first video
 // track (ffprobe sign convention). ok is false when there is no video track.
+// It reads only the tkhd, hdlr and stsd headers through the lazy moov index.
 func VideoRotation(r io.ReaderAt, size int64) (int, bool) {
-	metas, err := listTrakMeta(r, size)
+	idx, err := openMovieIndex(r, size)
 	if err != nil {
 		return 0, false
 	}
-	for _, m := range metas {
-		if m.HandlerType == "vide" && !m.AttachedCover {
-			return m.Rotation, true
-		}
-	}
-	return 0, false
+	return idx.videoRotation()
 }
