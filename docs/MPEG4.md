@@ -51,7 +51,10 @@ The binary, grayscale and shape-only VOL shapes; sprites/GMC (`sprite_enable`);
 data partitioning and RVLC; NEWPRED; reduced-resolution VOPs; scalability;
 Studio profile; `not_8_bit`; the short video header (H.263 baseline); and
 a sync sample that is not an I-VOP. Missing VOL headers and truncated or
-corrupt bitstreams return `ErrCorrupt`-wrapped errors with the reason.
+corrupt bitstreams return `ErrCorrupt`-wrapped errors with the reason from
+the decoder package. The MP4 and Matroska thumbnail paths rewrap those as
+`ErrUnsupported` (`unsupported thumbnail: mp4: …` / `matroska: …`, keeping the
+reason) so callers fall back to ffmpeg; profile errors keep their identity.
 AVI has no demuxer, so AVI DivX/XviD is not reached.
 
 ## Safety and performance

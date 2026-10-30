@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -120,5 +121,15 @@ func TestESDSConfig(t *testing.T) {
 	}
 	if _, _, err := esdsConfig([]byte{0, 0, 0, 0, 0x03, 0x7f}); err == nil {
 		t.Fatal("oversized descriptor accepted")
+	}
+}
+
+// TestThumbErrCorrupt checks that an MPEG-4 decoder corrupt error reaching
+// thumbErr is reported as Unsupported so callers fall back to ffmpeg.
+func TestThumbErrCorrupt(t *testing.T) {
+	err := thumbErr(fmt.Errorf("%w: mpeg4: bad VOP", errs.Corrupt))
+	var ue *errs.UnsupportedError
+	if !errors.As(err, &ue) || !strings.Contains(ue.Reason, "bad VOP") {
+		t.Fatalf("got %v, want Unsupported naming the reason", err)
 	}
 }

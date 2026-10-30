@@ -1,6 +1,7 @@
 package matroska
 
 import (
+	"errors"
 	"io"
 
 	"github.com/gtsteffaniak/go-media/internal/errs"
@@ -94,5 +95,25 @@ func MPEG4PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float6
 	if pick == nil {
 		return nil, errs.Unsup("thumbnail", "matroska: no MPEG-4 Part 2 keyframe found")
 	}
-	return mpeg4.DecodeKeyframe(config, pick)
+	pic, err := mpeg4.DecodeKeyframe(config, pick)
+	if err != nil {
+		return nil, mpeg4ThumbErr(err)
+	}
+	return pic, nil
+}
+
+// mpeg4ThumbErr maps an MPEG-4 Part 2 decoder error to a thumbnail error:
+// a ProfileError keeps its identity, and any other error (corrupt or
+// truncated bitstream) becomes errs.Unsupported with the decoder's reason so
+// callers fall back to ffmpeg, matching the MP4 path's thumbErr.
+func mpeg4ThumbErr(err error) error {
+	var pe *errs.ProfileError
+	if errors.As(err, &pe) {
+		return err
+	}
+	var ue *errs.UnsupportedError
+	if errors.As(err, &ue) {
+		return errs.Unsup("thumbnail", "matroska: "+ue.Reason)
+	}
+	return errs.Unsup("thumbnail", "matroska: "+err.Error())
 }

@@ -162,7 +162,9 @@ func (s ThumbSource) MPEG4ThumbnailYCbCr(seekPercent float64) (*h264.ThumbYCbCr,
 	}
 	pic, err := mpeg4.DecodeKeyframe(dsi, sample)
 	if err != nil {
-		return nil, err
+		// Bitstream/truncation errors become errs.Unsupported so callers fall
+		// back to ffmpeg; ProfileError identity is kept by thumbErr.
+		return nil, thumbErr(err)
 	}
 	return PictureYCbCr(pic), nil
 }
