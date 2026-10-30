@@ -22,8 +22,9 @@ thumb, err := media.ThumbnailLarge(r, size, 10) // ~10% into the timeline
 | **Probe & duration** | Stream layout, codecs, tags summary; duration from headers (MP3 CBR estimate where needed; WebM when `Duration` is present) |
 | **Tags & artwork** | ID3, MP4 `ilst`, Vorbis comments ([dhowden/tag](https://github.com/dhowden/tag)); APIC / `covr` / FLAC `PICTURE` |
 | **Subtitles** | Sidecar SRT/VTT/ASS → WebVTT; MKV text tracks extract; external track discovery |
-| **Thumbnails** | MJPEG, VP8 (WebM/MKV), H.264 intra IDR (Baseline CAVLC + Main/High/High 10 CABAC, 8/9/10-bit 4:2:0; `avc1`/`avc3`, progressive or fragmented MP4); embedded cover when `PreferEmbedded` |
+| **Thumbnails** | MJPEG, VP8 (WebM/MKV), H.264 intra IDR (Baseline CAVLC + Main/High/High 10 CABAC, 8/9/10-bit 4:2:0; `avc1`/`avc3`, progressive or fragmented MP4), MPEG-4 Part 2 / DivX / XviD I-VOP (MP4 `mp4v`, MKV; [`docs/MPEG4.md`](docs/MPEG4.md)); embedded cover when `PreferEmbedded` |
 | **H.264 decode** | Clean-room intra-only decoder for thumbnail keyframes ([`docs/H264.md`](docs/H264.md))—not a general player |
+| **MPEG-4 Part 2 decode** | Clean-room I-VOP decoder (Simple / Advanced Simple), bit-exact with ffmpeg ([`docs/MPEG4.md`](docs/MPEG4.md)) |
 
 Capability reference (by feature, with ffmpeg equivalents where useful): **[`docs/SUPPORTED_CAPABILITIES.md`](docs/SUPPORTED_CAPABILITIES.md)**.
 

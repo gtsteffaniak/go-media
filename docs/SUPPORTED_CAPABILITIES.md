@@ -183,6 +183,8 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **H.264** Main / High CABAC intra | MP4, MOV, M4V, … | ✅ | Not MKV (see above) |
 | **H.264** High 10 (9/10-bit 4:2:0) intra | MP4, MOV, M4V, … | ✅ | CAVLC and CABAC, 4x4/8x8 transforms; reconstruction bit-exact with ffmpeg's 10-bit output, then rounded to 8 bits |
 | **H.264** interlaced, >10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
+| **MPEG-4 Part 2** SP/ASP I-VOP (DivX, XviD, lavc `mpeg4`) | MP4, MOV (`mp4v`), MKV (`V_MPEG4/ISO/ASP`) | ✅ | H.263 and MPEG quantisation, custom matrices, alternate scan, field DCT, resync markers, DivX packed B-frames; bit-exact with ffmpeg (`simple_idct`). See [`MPEG4.md`](MPEG4.md) |
+| **MPEG-4 Part 2** shape, sprites/GMC, data partitioning, RVLC, NEWPRED, reduced resolution, scalability, Studio, short header (H.263) | — | ❌ | `ErrUnsupportedProfile` naming the tool |
 | **VP9** | `.webm`, `.mkv` | ❌ | Typed unsupported in gate |
 | **AV1**, **HEVC** | — | ❌ | |
 
@@ -265,9 +267,13 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | `mp4 seek: fragmented MP4: no moof boxes after moov` / `no sync sample for track N in M moof boxes` / `duration unknown ...` | fragmented file whose fragments cannot be located or contain no keyframe |
 | `mp4: avcC box missing from avc1 sample entry` / `mp4: avcC invalid: ...` | H.264 decoder configuration unusable |
 | `mp4: sync sample N unreadable (...)` | Keyframe bytes could not be read |
+| `mp4: mp4v track carries MPEG-2 video (go-media has no decoder for this codec)` | `mp4v` entry whose esds objectTypeIndication is not MPEG-4 Part 2 (ffmpeg's `ff_mp4_obj_type` names) |
+| `mp4: esds box missing from mp4v sample entry` / `mp4: esds has no DecoderConfigDescriptor` | MPEG-4 decoder configuration unusable |
 | `matroska: no decodable V_VP8 frame near seek target (...)` | Matroska VP8/MJPEG seek or decode failed |
 | `mp3: no embedded cover art` | Audio file without artwork |
 | `<format>: container has no thumbnail decoder in go-media` | Other containers |
+
+MPEG-4 Part 2 gaps use `media: unsupported profile mpeg4 keyframe: ...`, for example `binary shape (video_object_layer_shape=1) not supported`, `sprite coding / GMC (sprite_enable=2) not supported`, `reversible VLC with data partitioning ...`, `sync sample starts with a P-VOP, not an I-VOP ...`, `short video header (H.263 baseline in MPEG-4) not supported`.
 
 H.264 profile gaps use `media: unsupported profile h264: ...` (for example `12-bit luma / 12-bit chroma (profile_idc 244); decoder supports 8, 9 and 10 bits`, `chroma format 2 (need 4:2:0)`).
 
@@ -303,6 +309,15 @@ chroma interpolation, so full-resolution PNGs differ from ffmpeg's direct
 ffmpeg's 8-bit YUV→RGB path at the usual ~44 dB. 4:2:2, 4:4:4 and depths
 above 10 bits still return `ErrUnsupportedProfile` with the exact depth.
 
-## Not supported in this release: MPEG-4 Part 2
-- **MPEG-4 Part 2 (`mp4v`)** returns `ErrUnsupported` with
-  `mp4: video codec mp4v (MPEG-4 Part 2) not supported (go-media has no decoder for this codec)`.
+## MPEG-4 Part 2 (DivX / XviD / mp4v)
+Simple and Advanced Simple Profile I-VOPs decode in pure Go
+(`internal/mpeg4`, see [`MPEG4.md`](MPEG4.md)) from MP4/MOV `mp4v`
+(esds objectTypeIndication 0x20) and Matroska `V_MPEG4/ISO/ASP|SP|AP`.
+Output is bit-exact with ffmpeg's `mpeg4` decoder using `simple_idct`
+(its default for every stream except XviD-built ones, where ffmpeg picks
+the XviD IDCT; those match `-idct simple` bit-exactly and the default to
+~75 dB PSNR). Unsupported coding tools return `ErrUnsupportedProfile`
+naming the tool, for example
+`mpeg4 keyframe: data partitioning (data_partitioned=1) not supported`.
+AVI has no demuxer in go-media, so AVI DivX/XviD still returns
+`ErrUnsupported`.
