@@ -60,6 +60,10 @@ func (m *movieIndex) h264SyncSampleErr(trackIndex int, seekPercent float64) ([]b
 	if err != nil {
 		return nil, err
 	}
+	if tr.fragmented && !tr.st.usable() {
+		b, _, err := m.fragSyncSample(tr, seekPercent)
+		return b, err
+	}
 	k, err := tr.keyframeAt(seekPercent)
 	if err != nil {
 		return nil, err
@@ -91,6 +95,13 @@ func H264SyncTimeSec(r io.ReaderAt, size int64, trackIndex int, seekPercent floa
 	tr, err := idx.track(trackIndex)
 	if err != nil || tr.timescale == 0 {
 		return 0, false
+	}
+	if tr.fragmented && !tr.st.usable() {
+		s, err := idx.fragKeyframe(tr, seekPercent)
+		if err != nil {
+			return 0, false
+		}
+		return float64(s.time) / float64(tr.timescale), true
 	}
 	k, err := tr.keyframeAt(seekPercent)
 	if err != nil {

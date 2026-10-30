@@ -49,6 +49,9 @@ type movieIndex struct {
 	// fragmented is set when moov holds an mvex box, i.e. samples live in
 	// moof fragments. It comes from the moov walk the index already does.
 	fragmented bool
+	// moovEnd is the file offset just past moov; fragmented seeks hop
+	// top-level boxes from here when there is no mfra index.
+	moovEnd int64
 }
 
 // deferredTable is one stts or stsc box left unparsed until first use.
@@ -138,7 +141,11 @@ func openMovieIndex(r io.ReaderAt, size int64) (*movieIndex, error) {
 			if boxSize > maxMoovSize {
 				return nil, errs.Unsup("mp4 index", "moov exceeds 64 MiB")
 			}
-			return indexMoov(r, size, off+hdrLen, off+boxSize)
+			idx, err := indexMoov(r, size, off+hdrLen, off+boxSize)
+			if idx != nil {
+				idx.moovEnd = off + boxSize
+			}
+			return idx, err
 		}
 		off += boxSize
 	}

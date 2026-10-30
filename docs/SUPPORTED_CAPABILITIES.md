@@ -261,7 +261,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | `mp4: no moov box` / `mp4: moov exceeds 64 MiB` / `mp4: "moov" box at offset N: size S invalid (...)` | Container index cannot be built (missing, oversized or truncated moov) |
 | `mp4: moov has no trak boxes` / `mp4: no video track` | Nothing to decode |
 | `mp4: video codec hvc1 (HEVC) not supported` | Video sample entry fourcc and codec name (ffprobe wording) |
-| `mp4: fragmented MP4 (samples in moof, moov sample tables empty)` | `mvex` present and `stbl` empty |
+| `mp4 seek: fragmented MP4: no moof boxes after moov` / `no sync sample for track N in M moof boxes` / `duration unknown ...` | fragmented file whose fragments cannot be located or contain no keyframe |
 | `mp4: avcC box missing from avc1 sample entry` / `mp4: avcC invalid: ...` | H.264 decoder configuration unusable |
 | `mp4: sync sample N unreadable (...)` | Keyframe bytes could not be read |
 | `matroska: no decodable V_VP8 frame near seek target (...)` | Matroska VP8/MJPEG seek or decode failed |
@@ -269,3 +269,15 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | `<format>: container has no thumbnail decoder in go-media` | Other containers |
 
 H.264 profile gaps use `media: unsupported profile h264: ...` (for example `10-bit or deeper luma/chroma`, `chroma format 2 (need 4:2:0)`).
+
+## Fragmented H.264 MP4
+
+Fragmented MP4 (`frag_keyframe+empty_moov`, `default_base_moof`, CMAF, ismv)
+H.264 thumbnails are supported. The seek picks the keyframe at or before the
+target decode time, like ffmpeg's fast `-ss`. When `mfra`/`tfra` is present
+the lookup is a binary search (cost independent of file length); otherwise
+top-level box headers are hopped from the end of `moov` and only `moof`
+payloads are read. `tfhd`/`trex` defaults, base-data-offset,
+default-base-is-moof, `first_sample_flags` and non-sync / depends-on flags are
+honored. Black-frame keyframe skipping used for progressive MP4 is not applied
+to fragmented files.
