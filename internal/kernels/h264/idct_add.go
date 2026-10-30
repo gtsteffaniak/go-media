@@ -75,6 +75,7 @@ func addResidual4x4(plane []byte, stride, px0, py0 int, res [16]int32) {
 }
 
 // IDCTAdd16LumaInPlace adds IDCT residuals to plane that already holds intra prediction.
+// blocks and nz are indexed in raster order (by*4+bx), not luma4x4BlkIdx order.
 func IDCTAdd16LumaInPlace(plane []byte, stride, mbX, mbY int, blocks *[16][16]int32, nz []uint8) {
 	for blk := 0; blk < 16; blk++ {
 		bx, by := blk%4, blk/4

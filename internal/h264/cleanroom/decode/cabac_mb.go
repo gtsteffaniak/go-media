@@ -88,16 +88,18 @@ func (sd *sliceDecoder) decodeMB16Cabac(addr int, mb MBType) error {
 	for blk := 0; blk < 16; blk++ {
 		bx, by := luma4x4BlockX[blk], luma4x4BlockY[blk]
 		gx, gy := mbX*4+bx, mbY*4+by
+		// IDCTAdd16LumaInPlace walks blocks in raster order; blk is luma4x4BlkIdx.
+		ri := by*4 + bx
 		if mb.CBPLuma != 0 {
 			ca, cb2 := sd.lumaACCondTerm(mbX, mbY, blk)
 			acScan, tc := residualBlockCABAC(sd, resI16LumaAC, ca, cb2)
 			sd.nzLuma[gy*sd.w4+gx] = uint8(tc)
-			nz[blk] = uint8(tc)
-			blocks[blk] = dequant4x4(buildAC(acScan), qp)
+			nz[ri] = uint8(tc)
+			blocks[ri] = dequant4x4(buildAC(acScan), qp)
 		} else {
 			sd.nzLuma[gy*sd.w4+gx] = 0
 		}
-		blocks[blk][0] = dcVals[by*4+bx]
+		blocks[ri][0] = dcVals[ri]
 	}
 	h264k.IDCTAdd16LumaInPlace(f.Y, f.StrideY, mbX, mbY, &blocks, nz[:])
 

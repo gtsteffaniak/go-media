@@ -31,16 +31,18 @@ func (sd *sliceDecoder) decodeMB16(addr int, mb MBType) error {
 	for blk := 0; blk < 16; blk++ {
 		bx, by := luma4x4BlockX[blk], luma4x4BlockY[blk]
 		gx, gy := mbX*4+bx, mbY*4+by
+		// IDCTAdd16LumaInPlace walks blocks in raster order; blk is luma4x4BlkIdx.
+		ri := by*4 + bx
 		if mb.CBPLuma != 0 { // CBPLuma=15 → all AC are present
 			tc := sd.residualBlockCAVLC(r, sd.lumaNC(mbX, mbY, blk), 15)
 			sd.nzLuma[gy*sd.w4+gx] = uint8(tc)
-			nz[blk] = uint8(tc)
-			blocks[blk] = dequant4x4(buildAC(sd.coeffScratch[:15]), qp)
+			nz[ri] = uint8(tc)
+			blocks[ri] = dequant4x4(buildAC(sd.coeffScratch[:15]), qp)
 		} else {
 			sd.nzLuma[gy*sd.w4+gx] = 0
-			nz[blk] = 0
+			nz[ri] = 0
 		}
-		blocks[blk][0] = dcVals[by*4+bx] // DC from Hadamard (already scaled)
+		blocks[ri][0] = dcVals[ri] // DC from Hadamard (already scaled)
 	}
 	h264k.IDCTAdd16LumaInPlace(f.Y, f.StrideY, mbX, mbY, &blocks, nz[:])
 
