@@ -39,6 +39,8 @@ var ErrNoPicture = errors.New("h264 cleanroom: no decodable picture")
 var ErrIncompletePicture = errors.New("h264 cleanroom: picture is missing macroblocks")
 
 // DecodeIDRAVC decodes the first IDR picture from AVC length-prefixed NALs.
+// Non-IDR intra keyframes from open-GOP streams are accepted too; see
+// openGOPKeyframe.
 // A picture is returned only when every macroblock was decoded; on any error
 // (including a recovered panic) the pooled picture buffer is dropped so stale
 // samples can never surface in a later decode.
@@ -69,6 +71,11 @@ func (d *Decoder) DecodeIDRAVC(data []byte) (frames []*decode.Frame, err error) 
 func (d *Decoder) decodeNALUs(nalus [][]byte, idrOnly bool) (*decode.Frame, error) {
 	var frame *decode.Frame
 	var lastHdr *decode.SliceHeader
+	// Open-GOP keyframes: see openGOPKeyframe. When it holds, the non-IDR
+	// slices of this access unit are decoded exactly like IDR slices. The
+	// probe runs lazily on the first non-IDR slice so IDR access units never
+	// pay for it.
+	allowNonIDR, probed := !idrOnly, !idrOnly
 	for _, nalu := range nalus {
 		if len(nalu) == 0 {
 			continue
@@ -96,7 +103,10 @@ func (d *Decoder) decodeNALUs(nalus [][]byte, idrOnly bool) (*decode.Frame, erro
 			}
 			frame, lastHdr = fr, hdr
 		case nal.TypeNonIDR:
-			if idrOnly {
+			if !probed {
+				allowNonIDR, probed = openGOPKeyframe(nalus), true
+			}
+			if !allowNonIDR {
 				continue
 			}
 			fr, hdr, err := d.decodeSliceUnit(u, frame, lastHdr)
@@ -166,6 +176,97 @@ func (d *Decoder) decodeSliceUnit(u nal.Unit, frame *decode.Frame, lastHdr *deco
 	frame.ColourDescription = sps.ColourDescription
 	frame.MatrixCoefficients = sps.MatrixCoefficients
 	return frame, h, nil
+}
+
+// openGOPKeyframe reports whether an access unit without an IDR slice can
+// still be decoded as a fresh start with an empty DPB.
+//
+// This mirrors ffmpeg's fast seek (-ss before -i): the demuxer lands on any
+// sample flagged as a sync sample (MP4 stss), which for x264 --open-gop and
+// most other encoders includes non-IDR I pictures, and h264dec decodes such a
+// picture without references. We accept the same two signals ffmpeg treats as
+// a keyframe:
+//   - every slice is an I (or SI) slice, so no macroblock can reference
+//     another picture; or
+//   - a recovery point SEI with recovery_frame_cnt 0, which promises the
+//     picture itself is correct (ffmpeg sets key_frame from it).
+//
+// Leading pictures that follow in decode order are never decoded here, so the
+// missing DPB never matters. If a recovery-point picture still contains P or
+// B slices, DecodeSlice returns ErrInterSlice and the seek fails fast as
+// unsupported instead of producing a picture with guessed references.
+func openGOPKeyframe(nalus [][]byte) bool {
+	var hdr [24]byte
+	slices, intra, recovery := 0, true, false
+	for _, nalu := range nalus {
+		if len(nalu) < 2 {
+			continue
+		}
+		switch nal.Type(nalu[0] & 0x1f) {
+		case nal.TypeIDR:
+			return false // a real IDR: the normal path handles it
+		case nal.TypeNonIDR:
+			slices++
+			// first_mb_in_slice and slice_type sit in the first few bytes;
+			// unescape just a prefix so the probe stays cheap.
+			n := min(len(nalu), len(hdr)+1)
+			u, ok := nal.ParseInto(nalu[:n], hdr[:])
+			if !ok {
+				return false
+			}
+			r := bitstream.NewReader(u.RBSP)
+			r.UE() // first_mb_in_slice
+			t := decode.SliceType(r.UE())
+			if r.Err() != nil || !t.IsI() {
+				intra = false
+			}
+		case nal.TypeSEI:
+			if !recovery {
+				recovery = seiRecoveryZero(nal.Parse(nalu))
+			}
+		}
+	}
+	return slices > 0 && (intra || recovery)
+}
+
+// seiRecoveryZero reports whether an SEI NAL carries a recovery point
+// (payloadType 6) with recovery_frame_cnt 0.
+func seiRecoveryZero(u nal.Unit, ok bool) bool {
+	if !ok {
+		return false
+	}
+	b := u.RBSP
+	for len(b) > 1 {
+		pt, ps := 0, 0
+		for len(b) > 0 && b[0] == 0xff {
+			pt += 255
+			b = b[1:]
+		}
+		if len(b) == 0 {
+			return false
+		}
+		pt += int(b[0])
+		b = b[1:]
+		for len(b) > 0 && b[0] == 0xff {
+			ps += 255
+			b = b[1:]
+		}
+		if len(b) == 0 {
+			return false
+		}
+		ps += int(b[0])
+		b = b[1:]
+		if ps > len(b) {
+			return false
+		}
+		if pt == 6 {
+			r := bitstream.NewReader(b[:ps])
+			cnt := r.UE()
+			return r.Err() == nil && cnt == 0
+		}
+		b = b[ps:]
+	}
+	return false
 }
 
 func slicePPSID(rbsp []byte) uint32 {
