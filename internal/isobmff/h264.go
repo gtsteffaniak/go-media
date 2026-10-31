@@ -88,7 +88,7 @@ func (m *movieIndex) h264SyncSampleErr(trackIndex int, seekPercent float64) ([]b
 // H264SyncTimeSec returns the decode time in seconds of the sync sample that
 // H264SyncSample selects for the same seekPercent.
 func H264SyncTimeSec(r io.ReaderAt, size int64, trackIndex int, seekPercent float64) (float64, bool) {
-	idx, err := openMovieIndex(r, size)
+	idx, err := openMovieIndexFor(r, size, trackIndex)
 	if err != nil {
 		return 0, false
 	}

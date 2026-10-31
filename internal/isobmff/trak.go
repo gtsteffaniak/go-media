@@ -4,10 +4,12 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/abema/go-mp4"
 	"github.com/gtsteffaniak/go-media/internal/detect"
+	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
@@ -46,7 +48,7 @@ func listTrakMeta(r io.ReaderAt, size int64) ([]trakMeta, error) {
 	}
 	out := make([]trakMeta, len(traks))
 	for i, trak := range traks {
-		meta, err := readTrakMeta(rs, trak)
+		meta, err := readTrakMeta(rs, r, size, trak)
 		if err != nil {
 			return nil, err
 		}
@@ -55,7 +57,68 @@ func listTrakMeta(r io.ReaderAt, size int64) ([]trakMeta, error) {
 	return out, nil
 }
 
-func readTrakMeta(rs io.ReadSeeker, trak *mp4.BoxInfo) (trakMeta, error) {
+// stsdEntryBoxes returns the sample entry boxes under trak/mdia/minf/stbl/stsd
+// in file order, read from box headers only. Any structural error fails the
+// whole lookup.
+func stsdEntryBoxes(r io.ReaderAt, size int64, trak *mp4.BoxInfo) ([]mp4.BoxInfo, error) {
+	var out []mp4.BoxInfo
+	err := eachChildBox(r, size, int64(trak.Offset+trak.HeaderSize), int64(trak.Offset+trak.Size), func(typ [4]byte, off, hl, bs int64) error {
+		if typ != [4]byte{'m', 'd', 'i', 'a'} {
+			return nil
+		}
+		return eachChildBox(r, size, off+hl, off+bs, func(typ [4]byte, off, hl, bs int64) error {
+			if typ != [4]byte{'m', 'i', 'n', 'f'} {
+				return nil
+			}
+			return eachChildBox(r, size, off+hl, off+bs, func(typ [4]byte, off, hl, bs int64) error {
+				if typ != [4]byte{'s', 't', 'b', 'l'} {
+					return nil
+				}
+				return eachChildBox(r, size, off+hl, off+bs, func(typ [4]byte, off, hl, bs int64) error {
+					if typ != [4]byte{'s', 't', 's', 'd'} {
+						return nil
+					}
+					// stsd is a full box: version/flags and entry_count precede the entries.
+					if bs-hl < 8 {
+						return errs.Unsup("mp4 index", "short stsd")
+					}
+					return eachChildBox(r, size, off+hl+8, off+bs, func(typ [4]byte, off, hl, bs int64) error {
+						out = append(out, mp4.BoxInfo{
+							Type:       mp4.BoxType(typ),
+							Offset:     uint64(off),
+							Size:       uint64(bs),
+							HeaderSize: uint64(hl),
+						})
+						return nil
+					})
+				})
+			})
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// eachChildBox calls fn for each box header in [start,end), with the box's
+// file offset, header length and total size.
+func eachChildBox(r io.ReaderAt, size, start, end int64, fn func(typ [4]byte, off, hdrLen, boxSize int64) error) error {
+	var hdr [16]byte
+	for off := start; off+8 <= end; {
+		typ, hl, bs, err := readBoxHeader(r, size, off, end, hdr[:])
+		if err != nil {
+			return err
+		}
+		if err := fn(typ, off, hl, bs); err != nil {
+			return err
+		}
+		off += bs
+	}
+	return nil
+}
+
+func readTrakMeta(rs io.ReadSeeker, r io.ReaderAt, size int64, trak *mp4.BoxInfo) (trakMeta, error) {
 	var meta trakMeta
 	if _, err := rs.Seek(0, io.SeekStart); err != nil {
 		return meta, err
@@ -107,28 +170,32 @@ func readTrakMeta(rs io.ReadSeeker, trak *mp4.BoxInfo) (trakMeta, error) {
 		}
 	}
 	if meta.SampleFourCC == "" {
-		if boxes, err := mp4.ExtractBox(rs, trak, mp4.BoxPath{
-			mp4.BoxTypeMdia(), mp4.BoxTypeMinf(), mp4.BoxTypeStbl(), mp4.BoxTypeStsd(), mp4.StrToBoxType("tx3g"),
-		}); err == nil && len(boxes) > 0 {
-			meta.SampleFourCC = "tx3g"
-		}
-	}
-	if meta.SampleFourCC == "" {
 		// Sample entries without a payload decoder (AV1, ProRes, PCM, ...) are
-		// found with plain box lookups, which do not decode their contents.
-		// One traversal returns matches in stsd order, so the first entry wins
-		// regardless of candidate order.
-		candidates := sampleEntryCandidates(meta.HandlerType)
-		paths := make([]mp4.BoxPath, 0, len(candidates))
-		for _, fc := range candidates {
-			paths = append(paths, mp4.BoxPath{
-				mp4.BoxTypeMdia(), mp4.BoxTypeMinf(), mp4.BoxTypeStbl(), mp4.BoxTypeStsd(), mp4.StrToBoxType(fc),
-			})
-		}
-		if boxes, err := mp4.ExtractBoxes(rs, trak, paths); err == nil && len(boxes) > 0 {
-			meta.SampleFourCC = boxes[0].Type.String()
-			if detect.IsMP4PCMFourCC(meta.SampleFourCC) {
-				meta.PCMBits, meta.PCMFlags = readPCMSampleEntry(rs, boxes[0])
+		// found by a direct scan of the stsd entry headers, which does not
+		// decode their contents. Entries come back in stsd order: tx3g wins
+		// if present, otherwise the first candidate entry in stsd order.
+		// Any walk error leaves SampleFourCC unset, as the abema lookups did.
+		if entries, err := stsdEntryBoxes(r, size, trak); err == nil {
+			for _, e := range entries {
+				if e.Type == mp4.StrToBoxType("tx3g") {
+					meta.SampleFourCC = "tx3g"
+					break
+				}
+			}
+			if meta.SampleFourCC == "" {
+				candidates := sampleEntryCandidates(meta.HandlerType)
+				for i := range entries {
+					if !slices.ContainsFunc(candidates, func(fc string) bool {
+						return mp4.StrToBoxType(fc) == entries[i].Type
+					}) {
+						continue
+					}
+					meta.SampleFourCC = entries[i].Type.String()
+					if detect.IsMP4PCMFourCC(meta.SampleFourCC) {
+						meta.PCMBits, meta.PCMFlags = readPCMSampleEntry(rs, &entries[i])
+					}
+					break
+				}
 			}
 		}
 	}
