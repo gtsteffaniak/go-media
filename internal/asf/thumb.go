@@ -36,7 +36,7 @@ func (s ThumbSource) WMV3ThumbnailYCbCr(seekPercent float64) (*h264.ThumbYCbCr, 
 	if err != nil {
 		return nil, err
 	}
-	pic, err := vc1.DecodeKeyframe(extra, sample)
+	pic, err := vc1.DecodeKeyframe(extra, sample, s.meta.video.width, s.meta.video.height)
 	if err != nil {
 		return nil, err
 	}

@@ -3,8 +3,9 @@ package vc1
 import "sync"
 
 const (
-	mbIntraBits = 9
-	dcVLCBits   = 9
+	mbIntraBits    = 9
+	mbIntraMaxBits = 13
+	dcVLCBits      = 9
 )
 
 type lutEntry struct {
@@ -13,10 +14,15 @@ type lutEntry struct {
 }
 
 var (
-	vlcOnce     sync.Once
-	mbIntraLUT  [1 << mbIntraBits]lutEntry
-	dcLumaLUT   [2][1 << dcVLCBits]lutEntry
-	dcChromaLUT [2][1 << dcVLCBits]lutEntry
+	vlcOnce      sync.Once
+	mbIntraLUT    [1 << mbIntraBits]lutEntry
+	mbIntraLUT13  [1 << mbIntraMaxBits]lutEntry
+	dcLumaLUT    [2][1 << dcVLCBits]lutEntry
+	dcChromaLUT  [2][1 << dcVLCBits]lutEntry
+	acCoeffLUT   [8][1 << acVLCBits]lutEntry
+	acVLCSorted  [8][]acVLCEntry
+	dcLumaSorted [2][]dcEntry
+	dcChromaSorted [2][]dcEntry
 )
 
 func init() {
@@ -24,18 +30,73 @@ func init() {
 }
 
 func initVLCLUTs() {
-	fillDC(0, dcLuma0[:], dcLumaLUT[0][:])
-	fillDC(0, dcLuma1[:], dcLumaLUT[1][:])
-	fillDC(0, dcChroma0[:], dcChromaLUT[0][:])
-	fillDC(0, dcChroma1[:], dcChromaLUT[1][:])
+	fillDC(dcLuma0[:], dcLumaLUT[0][:])
+	fillDC(dcLuma1[:], dcLumaLUT[1][:])
+	fillDC(dcChroma0[:], dcChromaLUT[0][:])
+	fillDC(dcChroma1[:], dcChromaLUT[1][:])
+	dcLumaSorted[0] = append([]dcEntry(nil), dcLuma0[:]...)
+	dcLumaSorted[1] = append([]dcEntry(nil), dcLuma1[:]...)
+	dcChromaSorted[0] = append([]dcEntry(nil), dcChroma0[:]...)
+	dcChromaSorted[1] = append([]dcEntry(nil), dcChroma1[:]...)
+	for i := range dcLumaSorted {
+		sortDCVLC(dcLumaSorted[i])
+		sortDCVLC(dcChromaSorted[i])
+	}
 	for i, e := range mbIntraCBP {
 		fillLUT(mbIntraLUT[:], mbIntraBits, e.code, e.bits, int16(i))
+		fillLUT(mbIntraLUT13[:], mbIntraMaxBits, e.code, e.bits, int16(i))
+	}
+	for set := 0; set < 8; set++ {
+		acVLCSorted[set] = append([]acVLCEntry(nil), acVLCTables[set]...)
+		sortACVLC(acVLCSorted[set])
+		for _, e := range acVLCTables[set] {
+			if int(e.bits) <= acVLCBits {
+				fillLUT(acCoeffLUT[set][:], acVLCBits, e.code, e.bits, int16(e.idx))
+			}
+		}
 	}
 }
 
-func fillDC(_ int, tab []dcEntry, lut []lutEntry) {
+func sortACVLC(tab []acVLCEntry) {
+	for i := 1; i < len(tab); i++ {
+		e := tab[i]
+		j := i - 1
+		for j >= 0 && tab[j].bits > e.bits {
+			tab[j+1] = tab[j]
+			j--
+		}
+		tab[j+1] = e
+	}
+}
+
+func sortDCVLC(tab []dcEntry) {
+	for i := 1; i < len(tab); i++ {
+		e := tab[i]
+		j := i - 1
+		for j >= 0 && tab[j].bits > e.bits {
+			tab[j+1] = tab[j]
+			j--
+		}
+		tab[j+1] = e
+	}
+}
+
+func fillDC(tab []dcEntry, lut []lutEntry) {
 	for i, e := range tab {
 		fillLUT(lut, dcVLCBits, e.code, e.bits, int16(i))
+	}
+}
+
+func fillLUTFirst(lut []lutEntry, bits int, code uint32, n uint8, val int16) {
+	if n == 0 || int(n) > bits {
+		return
+	}
+	shift := bits - int(n)
+	base := int(code) << shift
+	for i := 0; i < 1<<shift; i++ {
+		if lut[base+i].len == 0 {
+			lut[base+i] = lutEntry{len: n, val: val}
+		}
 	}
 }
 
@@ -63,6 +124,62 @@ func (r *bitReader) vlc9(lut []lutEntry, bits int) (int16, bool) {
 	return e.val, true
 }
 
+func (r *bitReader) vlcAC(set int) (int, bool) {
+	tab := acVLCSorted[set]
+	for _, e := range tab {
+		nb := int(e.bits)
+		if nb == 0 || r.left() < nb {
+			continue
+		}
+		if r.peek(nb) == e.code {
+			r.skip(nb)
+			return e.idx, true
+		}
+	}
+	return 0, false
+}
+
+func (r *bitReader) vlcDC(chroma bool, table int) (int16, bool) {
+	var tab []dcEntry
+	if chroma {
+		tab = dcChromaSorted[table]
+	} else {
+		tab = dcLumaSorted[table]
+	}
+	for _, e := range tab {
+		nb := int(e.bits)
+		if nb == 0 || r.left() < nb {
+			continue
+		}
+		if r.peek(nb) == e.code {
+			r.skip(nb)
+			return e.val, true
+		}
+	}
+	return 0, false
+}
+
+func (r *bitReader) vlcMBIntra() (int, bool) {
+	if r.left() < mbIntraMaxBits {
+		return 0, false
+	}
+	w := int(r.peek(mbIntraMaxBits))
+	e := mbIntraLUT13[w]
+	if e.len == 0 {
+		return 0, false
+	}
+	r.skip(int(e.len))
+	return int(e.val), true
+}
+
+func esc3UnaryLevelLen(r *bitReader) int {
+	n := 0
+	for n < 6 && r.bit() {
+		n++
+	}
+	return n + 2
+}
+
 func decode012(r *bitReader) int {
 	if !r.bit() {
 		return 0
@@ -71,4 +188,82 @@ func decode012(r *bitReader) int {
 		return 1
 	}
 	return 2
+}
+
+func decode210(r *bitReader) int {
+	if !r.bit() {
+		return 0
+	}
+	if !r.bit() {
+		return 1
+	}
+	return 2
+}
+
+func (r *bitReader) decodeAcCoeff(set int, esc3LevelLen, esc3RunLen *int, pq int, dquantfrm bool) (last bool, skip, value int, ok bool) {
+	idx, ok := r.vlcAC(set)
+	if !ok {
+		return false, 0, 0, false
+	}
+	lastIdx := acLastIndex[set]
+	size := acTableSizes[set]
+	if idx != size-1 {
+		e := acIndexDecode[set][idx]
+		last = idx >= lastIdx || r.over
+		sign := r.bit()
+		v := int(e.level)
+		if sign {
+			v = -v
+		}
+		return last, int(e.skip), v, true
+	}
+	escape := decode210(r)
+	if escape != 2 {
+		idx, ok = r.vlcAC(set)
+		if !ok || idx >= size-1 {
+			return false, 0, 0, false
+		}
+		e := acIndexDecode[set][idx]
+		run := int(e.skip)
+		level := int(e.level)
+		last = idx >= lastIdx
+		if escape == 0 {
+			if last {
+				level += int(acLastDeltaLevel[set][run])
+			} else {
+				level += int(acDeltaLevel[set][run])
+			}
+		} else {
+			if last {
+				run += int(acLastDeltaRun[set][level]) + 1
+			} else {
+				run += int(acDeltaRun[set][level]) + 1
+			}
+		}
+		sign := r.bit()
+		if sign {
+			level = -level
+		}
+		return last, run, level, true
+	}
+	last = r.bit()
+	if *esc3LevelLen == 0 {
+		if pq < 8 || dquantfrm {
+			n := int(r.bits(3))
+			if n == 0 {
+				n = int(r.bits(2)) + 8
+			}
+			*esc3LevelLen = n
+		} else {
+			*esc3LevelLen = esc3UnaryLevelLen(r)
+		}
+		*esc3RunLen = 3 + int(r.bits(2))
+	}
+	run := int(r.bits(*esc3RunLen))
+	sign := r.bit()
+	level := int(r.bits(*esc3LevelLen))
+	if sign {
+		level = -level
+	}
+	return last, run, level, true
 }

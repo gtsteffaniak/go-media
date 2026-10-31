@@ -1,7 +1,8 @@
 // Code generated from SMPTE 421 / ffmpeg vc1_vlc_data.h factual tables. DO NOT EDIT.
 package vc1
+
 const acVLCBits = 9
-var acLastIndex = [...]int{119, 99, 85, 81, 67, 58, 126, 109}
+
 var acTableSizes = [...]int{186, 169, 133, 149, 103, 103, 163, 175}
 type acVLCEntry struct{ code uint32; bits uint8; idx int }
 var acVLCTables = [...][]acVLCEntry{
