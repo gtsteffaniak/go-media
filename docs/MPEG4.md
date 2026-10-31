@@ -1,5 +1,10 @@
 # MPEG-4 Part 2 keyframe decoder
 
+[← Back to README](../README.md) · [Examples](../examples/README.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
+
+> [!NOTE]
+> This page covers decoder internals for contributors. To use thumbnails, see the [examples](../examples/README.md#thumbnails).
+
 `internal/mpeg4` is a clean-room, pure-Go decoder for MPEG-4 Part 2
 (ISO/IEC 14496-2) I-VOPs. go-media uses it only for thumbnails. It is not a
 player: it decodes one intra VOP per call and never runs inter prediction.

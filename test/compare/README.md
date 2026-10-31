@@ -2,7 +2,7 @@
 
 Developer tooling (not part of the library API) that:
 
-1. Downloads the pinned go-ffmpeg seed MP4 (`cmd/gomedia-compare/seed.go`)
+1. Copies the checked-in reference clip `test/data/reference_1080_10s.mp4` (SHA-256 pinned in `cmd/gomedia-compare/seed.go`)
 2. Generates a format matrix with ffmpeg (`cmd/gomedia-compare/generate.go` → `cmd/gomedia-compare/.assets/`, gitignored)
 3. Runs go-media vs ffprobe/ffmpeg for duration, probe, tags, artwork, lyrics, subtitles, and thumbnails (the diff gate below covers tags, artwork, lyrics, and subtitles)
 4. Writes a static dashboard to `report_site/` (`data/report.json` + HTML)

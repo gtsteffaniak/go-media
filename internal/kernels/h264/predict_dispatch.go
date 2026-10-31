@@ -2,7 +2,7 @@ package h264
 
 // PredictIntra4x4Vertical fills a 4×4 block from top neighbors (SIMD when available).
 func PredictIntra4x4Vertical(dst []byte, top []byte) {
-	if KernelSIMD("intra4x4") {
+	if simdIntra4x4 && KernelsUseSIMD {
 		predictIntra4x4VerticalSIMD(dst, top)
 		return
 	}
@@ -11,7 +11,7 @@ func PredictIntra4x4Vertical(dst []byte, top []byte) {
 
 // PredictIntra4x4Horizontal fills a 4×4 block from left neighbors.
 func PredictIntra4x4Horizontal(dst []byte, left []byte) {
-	if KernelSIMD("intra4x4") {
+	if simdIntra4x4 && KernelsUseSIMD {
 		predictIntra4x4HorizontalSIMD(dst, left)
 		return
 	}
@@ -20,7 +20,7 @@ func PredictIntra4x4Horizontal(dst []byte, left []byte) {
 
 // PredictIntra16x16Vertical copies the top row across a 16×16 luma prediction block.
 func PredictIntra16x16Vertical(dst []byte, top []byte) {
-	if KernelSIMD("intra16x16") {
+	if simdIntra16x16 && KernelsUseSIMD {
 		predictIntra16x16VerticalSIMD(dst, top)
 		return
 	}
@@ -29,7 +29,7 @@ func PredictIntra16x16Vertical(dst []byte, top []byte) {
 
 // PredictIntra16x16Horizontal copies the left column across each row.
 func PredictIntra16x16Horizontal(dst []byte, left []byte) {
-	if KernelSIMD("intra16x16") {
+	if simdIntra16x16 && KernelsUseSIMD {
 		predictIntra16x16HorizontalSIMD(dst, left)
 		return
 	}

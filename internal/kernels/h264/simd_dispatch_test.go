@@ -16,11 +16,8 @@ func TestSIMDConsumerExperimentKernelsOn(t *testing.T) {
 	if !KernelsUseSIMD {
 		t.Fatal("expected KernelsUseSIMD true when experiment + CPU hook")
 	}
-	if !SIMDActive() {
-		t.Fatal("expected SIMDActive true when kernels enabled")
-	}
-	if !KernelSIMD("idct4x4") {
-		t.Fatal("expected idct4x4 SIMD dispatch")
+	if SIMDActive() != anyKernelSIMDEnabled() {
+		t.Fatal("SIMDActive must follow the static per-kernel enables")
 	}
 	ResetSIMDTestHooks()
 }

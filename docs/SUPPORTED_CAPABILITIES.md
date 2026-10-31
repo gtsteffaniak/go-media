@@ -1,12 +1,13 @@
 # Supported capabilities
 
+[← Back to README](../README.md) · [Examples](../examples/README.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
+
 What **go-media** implements in pure Go (`CGO_ENABLED=0`). This is **not** a ffmpeg compatibility matrix: it documents library behavior. Where validation or a common fallback exists, the **ffmpeg / ffprobe** equivalent is listed for comparison.
 
-Unsupported inputs should return typed errors (`ErrUnsupported`, `ErrUnsupportedProfile`, …) so callers can use [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) or ffmpeg.
+> [!TIP]
+> Anything marked ❌ returns a typed error (`ErrUnsupported` or `ErrUnsupportedProfile`), so callers can fall back to [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) or ffmpeg. See [the fallback example](../examples/README.md#fall-back-to-ffmpeg-when-go-media-says-no).
 
-**Import:** `github.com/gtsteffaniak/go-media/pkg/media`
-
-Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/README.md`](../test/compare/README.md)).
+**Import:** `github.com/gtsteffaniak/go-media/pkg/media`. **Verified against:** ffmpeg 9.0.2 on every commit ([live report](https://gtsteffaniak.github.io/go-media/), [harness](../test/compare/README.md)).
 
 ## Legend
 
@@ -201,6 +202,8 @@ ffmpeg version notes: go-media follows ffmpeg 9.0.2. ffmpeg 7.1 differs in two p
 
 Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 sync samples may be IDR or open-GOP keyframes: non-IDR ones decode when all slices are intra or a recovery point SEI has `recovery_frame_cnt` 0, otherwise `ErrUnsupportedProfile`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream, including MP4 files with a non-zero display rotation (callers fall back to ffmpeg, which autorotates). Scaled outputs round to the nearest pixel, so their size can differ from the ffmpeg preset by 1 px.
 
+**Keyframe snapping (default) vs exact seek:** by default every video thumbnail is the keyframe at or before the seek time, so only one frame is decoded. The image can therefore come from up to one keyframe interval (GOP) before the requested time: about 1–2 s for phone and most web encodes, up to ~10 s for encoder defaults like x264's 250 frames, and occasionally the first frame for files with a single keyframe. Set `ThumbnailOptions.Exact = true` to decode forward from that keyframe to the frame at the seek time; cost grows with the distance from the keyframe. Only VP8 and VP9 honor `Exact` today; H.264, MPEG-2, MPEG-4 Part 2 and WMV3 always use the keyframe (MJPEG frames are all keyframes). The compare harness checks the default keyframe mode against ffmpeg seeked to the same keyframe.
+
 **Colour (matches ffmpeg):** H.264 honors the SPS VUI range and matrix (MP4 `colr` is not read); untagged video is BT.601 limited at all resolutions; JPEG/WebP output is BT.601 for every source (ffmpeg's YUV→YUV capture drops the matrix tag), PNG keeps the tag; VP8 is BT.601 limited. Residuals: ~5 dB PSNR lower on full-range/BT.709 sources (RGB clipping) and JPEG quantizer differences.
 
 ### By video codec
@@ -208,7 +211,10 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | Codec | Containers | Status | Notes |
 |-------|------------|:------:|-------|
 | **MJPEG** | MP4, MOV, MKV, … | ✅ | Direct frame extract |
-| **VP8** | `.webm`, `.mkv` | ✅ | Pure-Go VP8 decode (`gen2brain/vpx`) |
+| **VP8** | `.webm`, `.mkv` | ✅ | Pure-Go VP8 decode (`gen2brain/vpx`); keyframe by default, `Exact` decodes forward to the seek frame |
+| **MPEG-2** I-picture | MP4/MOV (`mp4v`), MPEG-PS, MPEG-TS | ✅ | Pure-Go intra decode |
+| **WMV3** (VC-1 Simple / Main) | ASF, WMV | ✅ | Intra keyframe decode, bit-exact vs ffmpeg |
+| **WVC1** (VC-1 Advanced) | ASF, WMV | ❌ | `ErrUnsupportedProfile` |
 | **H.264** Baseline CAVLC, 8-bit 4:2:0 intra keyframe (IDR or open-GOP) | MP4, MOV, M4V, … | ✅ | Clean-room intra decoder; H.264 in MKV returns `ErrUnsupportedProfile` |
 | **H.264 `avc3`** (in-band SPS/PPS) | MP4, MOV | ✅ | SPS/PPS read from the keyframe sample; an SPS in the sample wins over avcC, as in ffmpeg. avcC may be absent or empty |
 | **H.264** Main / High CABAC intra | MP4, MOV, M4V, … | ✅ | Not MKV (see above) |
@@ -216,7 +222,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **H.264** interlaced, >10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
 | **MPEG-4 Part 2** SP/ASP I-VOP (DivX, XviD, lavc `mpeg4`) | MP4, MOV (`mp4v`), MKV (`V_MPEG4/ISO/ASP`) | ✅ | H.263 and MPEG quantisation, custom matrices, alternate scan, field DCT, resync markers, DivX packed B-frames; bit-exact with ffmpeg (`simple_idct`). See [`MPEG4.md`](MPEG4.md) |
 | **MPEG-4 Part 2** shape, sprites/GMC, data partitioning, RVLC, NEWPRED, reduced resolution, scalability, Studio, short header (H.263) | — | ❌ | `ErrUnsupportedProfile` naming the tool |
-| **VP9** profile 0, 8-bit 4:2:0 | `.webm`, `.mkv` | ✅ | Pure-Go VP9 decode (`gtsteffaniak/govpx`, a fork of `thesyncim/govpx` with an edge-context fix; BSD-3 libvpx port, via `internal/vp9decode`); bit-exact with libvpx on every frame of the gate fixture |
+| **VP9** profile 0, 8-bit 4:2:0 | `.webm`, `.mkv` | ✅ | Keyframe by default, `Exact` decodes forward to the seek frame. Pure-Go VP9 decode (`gtsteffaniak/go-vpx`, a fork of `thesyncim/govpx` with an edge-context fix; BSD-3 libvpx port, via `internal/vp9decode`); bit-exact with libvpx on every frame of the gate fixture |
 | **AV1**, **HEVC** | — | ❌ | |
 
 ### Cover art instead of video frame
@@ -298,7 +304,6 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | `mp4 seek: fragmented MP4: no moof boxes after moov` / `no sync sample for track N in M moof boxes` / `duration unknown ...` | fragmented file whose fragments cannot be located or contain no keyframe |
 | `mp4: avcC box missing from avc1 sample entry` / `mp4: avcC invalid: ...` | H.264 decoder configuration unusable |
 | `mp4: sync sample N unreadable (...)` | Keyframe bytes could not be read |
-| `mp4: mp4v track carries MPEG-2 video (go-media has no decoder for this codec)` | `mp4v` entry whose esds objectTypeIndication is not MPEG-4 Part 2 (ffmpeg's `ff_mp4_obj_type` names) |
 | `mp4: esds box missing from mp4v sample entry` / `mp4: esds has no DecoderConfigDescriptor` | MPEG-4 decoder configuration unusable |
 | `matroska: no decodable V_VP8 frame near seek target (...)` | Matroska VP8/MJPEG seek or decode failed |
 | `mp3: no embedded cover art` | Audio file without artwork |

@@ -58,8 +58,10 @@ func (d *intraDecoder) parseFrameHeaderSimple() error {
 	if d.seq.multires {
 		r.skip(2)
 	}
-	if d.seq.resX8 {
-		r.skip(1)
+	if d.seq.resX8 && r.bit() {
+		// X8TYPE=1: the picture is coded with the WMV2-style IntraX8 tool,
+		// which this decoder does not implement.
+		return errs.Unsup("wmv3 keyframe", "IntraX8-coded picture")
 	}
 	d.cACTab = decode012(r)
 	d.yACTab = decode012(r)

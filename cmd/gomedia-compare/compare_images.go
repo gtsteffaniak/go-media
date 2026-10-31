@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bytes"
-	"image"
-	"image/color"
-	"image/jpeg"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -12,29 +9,36 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/rawpreview"
 )
 
-func appendImageCompareAssets(outDir string) ([]Asset, error) {
-	j320 := synthCompareJPEG(320, 240)
-	j640 := synthCompareJPEG(640, 480)
-	heic := heifthumb.SynthJPEGHEIF(j320, 2, 1)
-	dng := rawpreview.SynthTIFFJPEG(j640)
-
-	heicPath := filepath.Join(outDir, "image/heic_jpeg_thumb.heic")
-	dngPath := filepath.Join(outDir, "image/raw_dng_preview.dng")
-	heicRef := filepath.Join(outDir, "image/heic_jpeg_thumb_embed.jpg")
-	dngRef := filepath.Join(outDir, "image/raw_dng_preview_embed.jpg")
-	if err := os.MkdirAll(filepath.Dir(heicPath), 0o755); err != nil {
+// appendImageCompareAssets builds the HEIC and DNG fixtures from the reference
+// clip frame (the same seed clip as every video fixture), so all report
+// thumbnails show the same source.
+func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
+	dir := filepath.Join(outDir, "image")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(heicPath, heic, 0o644); err != nil {
+	heicRef := filepath.Join(dir, "heic_jpeg_thumb_embed.jpg")
+	dngRef := filepath.Join(dir, "raw_dng_preview_embed.jpg")
+	if err := seedFrameJPEG(ffmpeg, clip, heicRef, 320, 180); err != nil {
+		return nil, fmt.Errorf("heic seed frame: %w", err)
+	}
+	if err := seedFrameJPEG(ffmpeg, clip, dngRef, 640, 360); err != nil {
+		return nil, fmt.Errorf("dng seed frame: %w", err)
+	}
+	j320, err := os.ReadFile(heicRef)
+	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(dngPath, dng, 0o644); err != nil {
+	j640, err := os.ReadFile(dngRef)
+	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(heicRef, j320, 0o644); err != nil {
+	heicPath := filepath.Join(dir, "heic_jpeg_thumb.heic")
+	dngPath := filepath.Join(dir, "raw_dng_preview.dng")
+	if err := os.WriteFile(heicPath, heifthumb.SynthJPEGHEIF(j320, 2, 1), 0o644); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(dngRef, j640, 0o644); err != nil {
+	if err := os.WriteFile(dngPath, rawpreview.SynthTIFFJPEG(j640), 0o644); err != nil {
 		return nil, err
 	}
 	return []Asset{
@@ -43,14 +47,9 @@ func appendImageCompareAssets(outDir string) ([]Asset, error) {
 	}, nil
 }
 
-func synthCompareJPEG(w, h int) []byte {
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			img.Set(x, y, color.RGBA{uint8(x * 2), uint8(y * 2), 40, 255})
-		}
-	}
-	var buf bytes.Buffer
-	_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 82})
-	return buf.Bytes()
+// seedFrameJPEG writes one baseline 4:2:0 JPEG frame from the seed clip.
+func seedFrameJPEG(ffmpeg, clip, out string, w, h int) error {
+	return runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+		"-ss", "2", "-i", clip, "-frames:v", "1",
+		"-vf", fmt.Sprintf("scale=%d:%d,format=yuvj420p", w, h), "-q:v", "3", out)
 }

@@ -12,10 +12,28 @@ func IDCTDCAdd4x4(plane []byte, stride, px0, py0 int, pred []byte, predStride, l
 		}
 		return
 	}
-	var d [16]int32
-	d[0] = dcCoeff
-	res := inverseTransform4x4Residual(d)
-	WriteBlock4x4(plane, stride, px0, py0, pred, predStride, lx, ly, res)
+	// DC-only: every residual sample is (dc+32)>>6, exactly what the full
+	// transform produces, so skip the transform.
+	r := int(dcCoeff+32) >> 6
+	for yy := 0; yy < 4; yy++ {
+		row := (py0+yy)*stride + px0
+		poff := (ly+yy)*predStride + lx
+		p := pred[poff : poff+4 : poff+4]
+		o := plane[row : row+4 : row+4]
+		for xx := 0; xx < 4; xx++ {
+			o[xx] = clip255(int(p[xx]) + r)
+		}
+	}
+}
+
+func clip255(v int) byte {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return byte(v)
 }
 
 // IDCTAdd4x4Luma reconstructs one 4×4 luma block; tc is TotalCoeff for AC (0 = no AC parsed).
@@ -42,6 +60,16 @@ func IDCTAdd4Chroma420(plane []byte, stride, px0, py0 int, pred []byte, predStri
 
 // IDCTAdd4Chroma420InPlace adds residuals; plane already holds intra prediction.
 func IDCTAdd4Chroma420InPlace(plane []byte, stride, px0, py0 int, blocks *[4][16]int32, nz []uint8) {
+	if simdIDCTAddPair && KernelsUseSIMD {
+		for by := 0; by < 2; by++ {
+			i := by * 2
+			if nz[i] == 0 && blocks[i][0] == 0 && nz[i+1] == 0 && blocks[i+1][0] == 0 {
+				continue
+			}
+			idctAdd4x4PairSIMD(plane, (py0+by*4)*stride+px0, stride, &blocks[i], &blocks[i+1])
+		}
+		return
+	}
 	for blk := 0; blk < 4; blk++ {
 		bx, by := blk%2, blk/2
 		d := blocks[blk]
@@ -55,6 +83,10 @@ func IDCTAdd4Chroma420InPlace(plane []byte, stride, px0, py0 int, blocks *[4][16
 
 // IDCTAdd4x4Block runs full 4×4 IDCT on dequantized coeffs d and adds to pred at (lx,ly).
 func IDCTAdd4x4Block(plane []byte, stride, px0, py0 int, pred []byte, predStride, lx, ly int, d [16]int32) {
+	if simdIDCTAddBlock && KernelsUseSIMD {
+		idctAdd4x4BlockSIMD(plane, py0*stride+px0, stride, pred, ly*predStride+lx, predStride, &d)
+		return
+	}
 	res := inverseTransform4x4Residual(d)
 	WriteBlock4x4(plane, stride, px0, py0, pred, predStride, lx, ly, res)
 }
@@ -77,6 +109,26 @@ func addResidual4x4(plane []byte, stride, px0, py0 int, res [16]int32) {
 // IDCTAdd16LumaInPlace adds IDCT residuals to plane that already holds intra prediction.
 // blocks and nz are indexed in raster order (by*4+bx), not luma4x4BlkIdx order.
 func IDCTAdd16LumaInPlace(plane []byte, stride, mbX, mbY int, blocks *[16][16]int32, nz []uint8) {
+	if simdIDCTAddQuad && KernelsUseAVX512 {
+		for by := 0; by < 4; by++ {
+			i := by * 4
+			if nz[i]|nz[i+1]|nz[i+2]|nz[i+3] == 0 && blocks[i][0]|blocks[i+1][0]|blocks[i+2][0]|blocks[i+3][0] == 0 {
+				continue
+			}
+			idctAdd4x4QuadAVX512(plane, (mbY*16+by*4)*stride+mbX*16, stride, (*[4][16]int32)(blocks[i:i+4]))
+		}
+		return
+	}
+	if simdIDCTAddPair && KernelsUseSIMD {
+		for i := 0; i < 16; i += 2 {
+			if nz[i] == 0 && blocks[i][0] == 0 && nz[i+1] == 0 && blocks[i+1][0] == 0 {
+				continue
+			}
+			bx, by := i%4, i/4
+			idctAdd4x4PairSIMD(plane, (mbY*16+by*4)*stride+mbX*16+bx*4, stride, &blocks[i], &blocks[i+1])
+		}
+		return
+	}
 	for blk := 0; blk < 16; blk++ {
 		bx, by := blk%4, blk/4
 		px0, py0 := mbX*16+bx*4, mbY*16+by*4
@@ -124,6 +176,30 @@ func IDCT8x8Add(plane []byte, stride, px0, py0 int, pred []byte, res [64]int32) 
 				v = 255
 			}
 			plane[row+xx] = byte(v)
+		}
+	}
+}
+
+// idctAdd4x4PairPortable is the reference for idctAdd4x4PairSIMD.
+func idctAdd4x4PairPortable(plane []byte, off, stride int, a, b *[16]int32) {
+	ra := inverseTransform4x4ResidualPortable(*a)
+	rb := inverseTransform4x4ResidualPortable(*b)
+	addResidual4x4(plane, stride, off, 0, ra)
+	addResidual4x4(plane, stride, off+4, 0, rb)
+}
+
+// idctAdd4x4QuadPortable is the reference for idctAdd4x4QuadAVX512.
+func idctAdd4x4QuadPortable(plane []byte, off, stride int, q *[4][16]int32) {
+	idctAdd4x4PairPortable(plane, off, stride, &q[0], &q[1])
+	idctAdd4x4PairPortable(plane, off+8, stride, &q[2], &q[3])
+}
+
+// idctAdd4x4BlockPortable is the reference for idctAdd4x4BlockSIMD.
+func idctAdd4x4BlockPortable(plane []byte, off, stride int, pred []byte, predOff, predStride int, d *[16]int32) {
+	res := inverseTransform4x4ResidualPortable(*d)
+	for yy := 0; yy < 4; yy++ {
+		for xx := 0; xx < 4; xx++ {
+			plane[off+yy*stride+xx] = clip255(int(pred[predOff+yy*predStride+xx]) + int(res[yy*4+xx]))
 		}
 	}
 }
