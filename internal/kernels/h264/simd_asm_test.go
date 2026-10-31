@@ -17,14 +17,14 @@ func TestSIMDBinaryContainsVectorOps(t *testing.T) {
 		t.Skip("requires GOEXPERIMENT=simd build")
 	}
 	SetSIMDEnabledForTest(true)
-	SetKernelSIMDForTest("idct4x4", true)
-	if !KernelSIMD("idct4x4") {
+	defer ResetSIMDTestHooks()
+	if !KernelsUseSIMD {
 		t.Skip("CPU lacks AVX2/ASIMD")
 	}
 	tmp := t.TempDir()
 	bin := filepath.Join(tmp, "h264k.test")
 	cmd := exec.Command("go", "test", "-c", "-o", bin, ".")
-	cmd.Env = append(os.Environ(), "GOEXPERIMENT=simd", "CGO_ENABLED=0")
+	cmd.Env = append(os.Environ(), "GOEXPERIMENT=simd", "CGO_ENABLED=0", "GOFLAGS=")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go test -c: %v\n%s", err, out)
 	}

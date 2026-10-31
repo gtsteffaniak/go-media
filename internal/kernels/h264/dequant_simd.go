@@ -5,7 +5,6 @@ package h264
 import "simd"
 
 func dequant4x4SIMD(coef [16]int32, qp int) [16]int32 {
-	recordSIMD(ProbeDequant4x4)
 	m := qp % 6
 	shift := qp / 6
 	var d [16]int32

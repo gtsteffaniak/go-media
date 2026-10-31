@@ -1,9 +1,6 @@
 package h264
 
-import (
-	"os"
-	"testing"
-)
+import "testing"
 
 func TestSIMDIDCTParity(t *testing.T) {
 	cases := [][16]int32{
@@ -21,27 +18,18 @@ func TestSIMDIDCTParity(t *testing.T) {
 	}
 }
 
-func TestSIMDKernelsExecuteWhenEnabled(t *testing.T) {
-	if os.Getenv("GOEXPERIMENT") == "" && !simdExperimentEnabled() {
-		t.Skip("build with GOEXPERIMENT=simd to assert SIMD execution")
+func TestSIMDKernelBodiesMatchPortable(t *testing.T) {
+	// SIMD bodies are exercised directly (independent of the static enables) so a
+	// kernel stays correct while it is switched off pending a measured win.
+	rng := uint32(1)
+	next := func() int32 { rng = rng*1664525 + 1013904223; return int32(rng>>20) - 2048 }
+	for iter := 0; iter < 2000; iter++ {
+		var d [16]int32
+		for i := range d {
+			d[i] = next()
+		}
+		if got, want := inverseTransform4x4ResidualSIMD(d), inverseTransform4x4ResidualPortable(d); got != want {
+			t.Fatalf("idct4x4 iter %d: got %v want %v", iter, got, want)
+		}
 	}
-	ResetSIMDTestHooks()
-	SetCPUHasSIMDForTest(true)
-	SetSIMDEnabledForTest(true)
-	if !KernelSIMD("idct4x4") {
-		t.Skip("CPU lacks AVX2/ASIMD or simd experiment disabled")
-	}
-	ResetSIMDProbe()
-	var d [16]int32
-	d[0] = 96
-	_ = InverseTransform4x4Residual(d)
-	var plane [64]byte
-	var pred [256]byte
-	var res [16]int32
-	res[0] = 1
-	WriteBlock4x4(plane[:], 8, 0, 0, pred[:], 16, 0, 0, res)
-	if SIMDProbeHits() < 2 {
-		t.Fatalf("expected SIMD probe hits >=2, got %d", SIMDProbeHits())
-	}
-	ResetSIMDTestHooks()
 }

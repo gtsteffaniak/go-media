@@ -5,7 +5,6 @@ package h264
 import "simd"
 
 func writeBlock4x4SIMD(plane []byte, stride, px0, py0 int, pred []byte, predStride, lx, ly int, res [16]int32) {
-	recordSIMD(ProbeRecon4x4)
 	zero := simd.BroadcastInt32s(0)
 	max255 := simd.BroadcastInt32s(255)
 	for yy := 0; yy < 4; yy++ {
