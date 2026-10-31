@@ -39,7 +39,9 @@ func TestMP4FirstKeyframeMatchesFFmpeg(t *testing.T) {
 	}
 }
 
-func firstSyncSample(r interface{ ReadAt([]byte, int64) (int, error) }, size int64) (*mp4.AVCDecoderConfiguration, []byte, error) {
+func firstSyncSample(r interface {
+	ReadAt([]byte, int64) (int, error)
+}, size int64) (*mp4.AVCDecoderConfiguration, []byte, error) {
 	info, err := mp4.Probe(ioat.New(r, size))
 	if err != nil {
 		return nil, nil, err

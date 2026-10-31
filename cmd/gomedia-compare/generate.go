@@ -27,11 +27,37 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ogg_vorbis fixture: %w", err)
 	}
+	mpeg4Enc, err := pickEncoder(encoders, "libxvid", "mpeg4")
+	if err != nil {
+		return nil, fmt.Errorf("avi_mpeg4 fixture: %w", err)
+	}
+	h264Enc, err := pickEncoder(encoders, "libx264", "h264", "libopenh264")
+	if err != nil {
+		return nil, fmt.Errorf("h264 fixtures: %w", err)
+	}
+	vp8Enc, err := pickEncoder(encoders, "libvpx", "vp8")
+	if err != nil {
+		return nil, fmt.Errorf("vp8 fixtures: %w", err)
+	}
+	vp9Enc, err := pickEncoder(encoders, "libvpx-vp9", "vp9")
+	if err != nil {
+		return nil, fmt.Errorf("webm_vp9 fixture: %w", err)
+	}
+	mpeg2Enc, err := pickEncoder(encoders, "mpeg2video")
+	if err != nil {
+		return nil, fmt.Errorf("mpegts_mpeg2 fixture: %w", err)
+	}
+	wmv3Enc := firstEncoder(encoders, "wmv3", "vc1")
 
 	clip := filepath.Join(outDir, "_seed_clip.mp4")
 	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
 		"-i", seedPath, "-t", "5", "-c", "copy", clip); err != nil {
 		return nil, fmt.Errorf("seed clip: %w", err)
+	}
+
+	aviMPEG4Args := []string{"-i", clip, "-c:v", mpeg4Enc, "-g", "30", "-q:v", "3", "-an", "-f", "avi"}
+	if mpeg4Enc == "mpeg4" {
+		aviMPEG4Args = []string{"-i", clip, "-c:v", "mpeg4", "-vtag", "XVID", "-g", "30", "-q:v", "3", "-an", "-f", "avi"}
 	}
 	// Seed is video-only; audio fixtures use a short synthetic tone.
 	audioSrc := "sine=frequency=440:duration=5"
@@ -56,21 +82,33 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		{"mp4_h264", "video", "MP4 H.264/AAC", "video/mp4_h264.mp4",
 			[]string{"-i", clip, "-c", "copy"}, nil},
 		{"mp4_h264_baseline_1080", "video", "MP4 H.264 Baseline 1080p", "video/mp4_h264_baseline_1080.mp4",
-			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "18", "-an"}, nil},
+			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", h264Enc, "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "18", "-an"}, nil},
 		{"mp4_h264_main_1080", "video", "MP4 H.264 Main CABAC 1080p", "video/mp4_h264_main_1080.mp4",
-			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "18", "-an"}, nil},
+			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", h264Enc, "-profile:v", "main", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "18", "-an"}, nil},
 		{"mp4_h264_high_1080", "video", "MP4 H.264 High 8x8 1080p", "video/mp4_h264_high_1080.mp4",
-			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "18", "-an"}, nil},
+			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", h264Enc, "-profile:v", "high", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "18", "-an"}, nil},
 		{"mov_h264", "video", "MOV H.264", "video/mov_h264.mov",
 			[]string{"-i", clip, "-c", "copy", "-f", "mov"}, nil},
 		{"mkv_h264", "video", "MKV H.264", "video/mkv_h264.mkv",
 			[]string{"-i", clip, "-c", "copy", "-f", "matroska"}, nil},
 		{"mkv_vp8", "video", "MKV VP8", "video/mkv_vp8.mkv",
-			[]string{"-i", clip, "-c:v", "libvpx", "-g", "30", "-keyint_min", "30", "-crf", "10", "-b:v", "1M", "-an", "-f", "matroska"}, nil},
+			[]string{"-i", clip, "-c:v", vp8Enc, "-g", "30", "-keyint_min", "30", "-crf", "10", "-b:v", "1M", "-an", "-f", "matroska"}, nil},
 		{"webm_vp8", "video", "WebM VP8", "video/webm_vp8.webm",
-			[]string{"-i", clip, "-c:v", "libvpx", "-g", "30", "-keyint_min", "30", "-crf", "10", "-b:v", "1M", "-an"}, nil},
-		{"webm_vp9", "video", "WebM VP9 (thumbnail unsupported)", "video/webm_vp9.webm",
-			[]string{"-i", clip, "-c:v", "libvpx-vp9", "-g", "30", "-crf", "30", "-an"}, nil},
+			[]string{"-i", clip, "-c:v", vp8Enc, "-g", "30", "-keyint_min", "30", "-crf", "10", "-b:v", "1M", "-an"}, nil},
+		{"webm_vp9", "video", "WebM VP9", "video/webm_vp9.webm",
+			[]string{"-i", clip, "-c:v", vp9Enc, "-g", "30", "-crf", "30", "-an"}, nil},
+		{"avi_mjpeg", "video", "AVI MJPEG", "video/avi_mjpeg.avi",
+			[]string{"-i", clip, "-c:v", "mjpeg", "-q:v", "3", "-an", "-f", "avi"}, nil},
+		{"avi_mpeg4", "video", "AVI MPEG-4 Part 2", "video/avi_mpeg4.avi",
+			aviMPEG4Args, nil},
+		{"avi_h264", "video", "AVI H.264", "video/avi_h264.avi",
+			[]string{"-i", clip, "-c:v", h264Enc, "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-g", "30", "-an", "-f", "avi"}, nil},
+		{"asf_wmv3", "video", "ASF WMV3", "video/asf_wmv3.wmv",
+			asfWMV3Args(clip, wmv3Enc), nil},
+		{"mpegts_mpeg2", "video", "MPEG-TS MPEG-2", "video/mpegts_mpeg2.ts",
+			[]string{"-i", clip, "-c:v", mpeg2Enc, "-g", "30", "-an", "-f", "mpegts"}, nil},
+		{"mpegts_h264", "video", "MPEG-TS H.264", "video/mpegts_h264.ts",
+			[]string{"-i", clip, "-c:v", h264Enc, "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-g", "30", "-an", "-f", "mpegts"}, nil},
 		{"mjpeg_mp4", "video", "MJPEG in MP4", "video/mjpeg.mp4",
 			[]string{"-i", clip, "-vf", "scale=960:-2", "-c:v", "mjpeg", "-q:v", "3", "-an"}, nil},
 		{"mp3_cbr", "audio", "MP3 CBR + ID3", "audio/mp3_cbr.mp3",
@@ -103,8 +141,18 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		}
 		args := append([]string{"-y", "-hide_banner", "-loglevel", "error"}, s.args...)
 		args = append(args, out)
-		if err := runFF(ffmpeg, args...); err != nil {
-			return nil, fmt.Errorf("%s: %w", s.id, err)
+		if s.id == "asf_wmv3" && wmv3Enc == "" {
+			if err := copyASFWMV3Fallback(out); err != nil {
+				return nil, fmt.Errorf("%s: no wmv3/vc1 encoder in ffmpeg and fallback: %w", s.id, err)
+			}
+		} else if err := runFF(ffmpeg, args...); err != nil {
+			if s.id == "asf_wmv3" {
+				if err2 := copyASFWMV3Fallback(out); err2 != nil {
+					return nil, fmt.Errorf("%s: %w (fallback: %v)", s.id, err, err2)
+				}
+			} else {
+				return nil, fmt.Errorf("%s: %w", s.id, err)
+			}
 		}
 		assets = append(assets, Asset{ID: s.id, Path: out, Category: s.cat, Description: s.desc, Sidecars: s.sidecars})
 	}
@@ -192,7 +240,29 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	}
 
 	os.Remove(clip)
+	imgAssets, err := appendImageCompareAssets(outDir)
+	if err != nil {
+		return nil, err
+	}
+	assets = append(assets, imgAssets...)
 	return assets, nil
+}
+
+// copyASFWMV3Fallback installs a pinned WMV3 sample when ffmpeg lacks wmv3 encoder.
+func copyASFWMV3Fallback(dst string) error {
+	src := filepath.Join(findRepoRoot("."), "testdata", "asf_wmv3_360x288.wmv")
+	in, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, in, 0o644)
+}
+
+func asfWMV3Args(clip, enc string) []string {
+	if enc == "" {
+		enc = "wmv3"
+	}
+	return []string{"-i", clip, "-c:v", enc, "-g", "30", "-an", "-f", "asf"}
 }
 
 // writeSampleSubtitles creates minimal subtitle fixtures.
@@ -243,6 +313,11 @@ func pickEncoder(set map[string]bool, names ...string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no encoder among %v", names)
+}
+
+func firstEncoder(set map[string]bool, names ...string) string {
+	name, _ := pickEncoder(set, names...)
+	return name
 }
 
 // runFF executes ffmpeg with the given arguments.

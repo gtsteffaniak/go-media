@@ -8,6 +8,7 @@ import (
 
 	gvp8 "github.com/gen2brain/vpx/vp8"
 	"github.com/gtsteffaniak/go-media/internal/vp8decode"
+	"github.com/gtsteffaniak/go-media/internal/vp9decode"
 )
 
 // videoFrame is one demuxed video sample with a Matroska timecode in milliseconds.
@@ -77,21 +78,28 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, h *Header, p ThumbnailParams) (*im
 	if err != nil {
 		return nil, false
 	}
-	track, codec, ok := videoTrackNumber(ix.tracks, "V_VP8", "V_MJPEG")
+	track, codec, ok := videoTrackNumber(ix.tracks, "V_VP8", "V_VP9", "V_MJPEG")
 	if !ok {
 		return nil, false
 	}
-	vp8 := codec == "V_VP8"
-	frames, err := collectSeekFrames(r, ix, track, scale, targetMs, vp8)
+	chain := codec == "V_VP8" || codec == "V_VP9"
+	frames, err := collectSeekFrames(r, ix, track, scale, targetMs, chain)
 	if err != nil {
 		return nil, false
 	}
-	if vp8 {
+	if codec == "V_VP8" {
 		pic := decodeVP8SeekPicture(frames, targetMs)
 		if pic == nil {
 			return nil, false
 		}
 		return vp8decode.PictureRGBAScaled(pic, p.MaxWidth, p.MaxHeight, p.Scaler), true
+	}
+	if codec == "V_VP9" {
+		pic, err := decodeVP9SeekPicture(frames, targetMs)
+		if err != nil || pic == nil {
+			return nil, false
+		}
+		return vp9decode.PictureRGBAScaled(pic, p.MaxWidth, p.MaxHeight, p.Scaler), true
 	}
 	return decodeMJPEGSeek(frames, targetMs)
 }

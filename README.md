@@ -18,24 +18,25 @@ thumb, err := media.ThumbnailLarge(r, size, 10) // ~10% into the timeline
 
 | Area | Coverage |
 |------|----------|
-| **Containers** | MP4/MOV/M4A/M4V/3GP, MKV/WebM, WAV, FLAC, OGG (Vorbis/Opus), MP3 |
+| **Containers** | MP4/MOV/M4A/M4V/3GP, MKV/WebM, **AVI**, **MPEG-TS/M2TS**, **MPEG-PS**, WAV, FLAC, OGG (Vorbis/Opus), MP3; **HEIC/HEIF/AVIF** stills; common **camera RAW** (embedded JPEG preview) |
 | **Probe & duration** | Stream layout, codecs, tags summary; duration from headers (MP3 CBR estimate where needed; WebM when `Duration` is present) |
 | **Tags & artwork** | ID3, MP4 `ilst`, Vorbis comments ([dhowden/tag](https://github.com/dhowden/tag)); APIC / `covr` / FLAC `PICTURE` |
 | **Subtitles** | Sidecar SRT/VTT/ASS/SSA and embedded MKV (SRT, ASS/SSA, WebVTT) and MP4 (`tx3g`, `wvtt`) text tracks → WebVTT, byte-identical to `ffmpeg -f webvtt` (golden-tested against ffmpeg 9.0.2); bitmap tracks (PGS, VobSub, DVB) return a typed unsupported error; external track discovery |
-| **Thumbnails** | MJPEG, VP8 (WebM/MKV), H.264 intra IDR (Baseline CAVLC + Main/High/High 10 CABAC, 8/9/10-bit 4:2:0; `avc1`/`avc3`, progressive or fragmented MP4), MPEG-4 Part 2 / DivX / XviD I-VOP (MP4 `mp4v`, MKV; [`docs/MPEG4.md`](docs/MPEG4.md)); embedded cover when `PreferEmbedded` |
+| **Thumbnails** | MJPEG, **VP9** (WebM/MKV, profile 0 8-bit 4:2:0, bit-exact with libvpx), VP8 (WebM/MKV), H.264 intra IDR (Baseline CAVLC + Main/High/High 10 CABAC, 8/9/10-bit 4:2:0; MP4/MOV/**AVI**/**MPEG-TS** `avc1`/`avc3`), **MPEG-2** I-pictures (MP4 `mp4v`/esds, MPEG-PS, **MPEG-TS**), MPEG-4 Part 2 / DivX / XviD I-VOP (MP4, MKV, **AVI**), **WMV3** (VC-1 Simple/Main) keyframes in ASF/WMV, **HEIC/HEIF embedded JPEG**, **RAW embedded JPEG**; embedded cover when `PreferEmbedded` |
 | **H.264 decode** | Clean-room intra-only decoder for thumbnail keyframes ([`docs/H264.md`](docs/H264.md))—not a general player |
+| **VC-1 decode** | Intra-only WMV3 (Simple/Main profile) keyframe decoder, bit-exact with ffmpeg; VC-1 Advanced Profile (WVC1) returns a typed unsupported error |
 | **MPEG-4 Part 2 decode** | Clean-room I-VOP decoder (Simple / Advanced Simple), bit-exact with ffmpeg ([`docs/MPEG4.md`](docs/MPEG4.md)) |
 
 Capability reference (by feature, with ffmpeg equivalents where useful): **[`docs/SUPPORTED_CAPABILITIES.md`](docs/SUPPORTED_CAPABILITIES.md)**.
 
-**Not in scope:** transcoding, HLS, inter-frame playback, WMV/AVI/FLV/MPEG-TS, VP9/AV1/HEVC thumbnails, or full ffmpeg parity. Use **[go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)** for that; go-media is the **fast path** in front of it.
+**Not in scope:** transcoding, HLS, inter-frame playback, VC-1 Advanced Profile, full HEVC/AV1 video decode, or full ffmpeg parity. Use **[go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)** for that; go-media is the **fast path** in front of it.
 
 ## Quality and CI
 
 Regression safety is built into the repo, not ad hoc manual testing.
 
 - **`go test ./...`** with `CGO_ENABLED=0` on **linux/amd64 and linux/arm64**, with and without the checked-in PGO profile.
-- **ffmpeg 9.0.2 comparison gate** (`make compare-gate`): generated corpus of **20 assets** (phone/camera-style encodes), **162** manifest cases in [`test/compare/expectations.json`](test/compare/expectations.json)—**72** must match ffmpeg/ffprobe as **supported** (duration, probe, tags, artwork, lyrics, subtitles, thumbnails where applicable). **6** cases must return typed unsupported (MKV H.264 and MKV subtitle thumbnails, WebM VP9 thumbnails). CI uploads the HTML report as an artifact, and every push to `main` regenerates it and publishes it to the `gh-pages` branch: **[latest comparison report](https://gtsteffaniak.github.io/go-media/)**.
+- **ffmpeg 9.0.2 comparison gate** (`make compare-gate`): generated corpus of **28 assets** (phone/camera-style encodes plus HEIC and DNG stills), **226** manifest cases in [`test/compare/expectations.json`](test/compare/expectations.json)—**102** must match ffmpeg/ffprobe as **supported** (duration, probe, tags, artwork, lyrics, subtitles, thumbnails where applicable). **4** cases must return typed unsupported (MKV H.264 and MKV subtitle thumbnails). CI uploads the HTML report as an artifact, and every push to `main` regenerates it and publishes it to the `gh-pages` branch: **[latest comparison report](https://gtsteffaniak.github.io/go-media/)**.
 - **Thumbnail timing:** supported thumb paths are gated on the **production build** (`CGO_ENABLED=0` + `-pgo=default.pgo`) to stay within **50%** of ffmpeg 9.0.2 wall time on the same fixture (stricter **10%** documented as the long-term target). Visual parity uses PSNR/SSIM vs `ffmpeg -frames:v 1` on keyframe decodes.
 - **Fuzzing:** subtitle parsers and H.264 CABAC engine (`go test -fuzz`); CI runs a fuzz smoke on subtitles.
 

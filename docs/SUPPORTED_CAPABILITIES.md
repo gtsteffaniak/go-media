@@ -43,8 +43,13 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 | M4A AAC (in MP4) | — | ✅ | 🟡 | Container yes; AAC ADTS elementary ❌ |
 | AIFF / `.aiff` | — | ✅ | 📋 | |
 | AU / `.sun` | — | ✅ | 📋 | |
-| MPEG-TS, AVI, FLV, WMV, ASF | ✅ | ✅ | ❌ | |
-| HEIC / HEIF | ✅ | — | ❌ | 🔬 embedded thumb research only |
+| MPEG-TS / `.ts`, M2TS / `.m2ts` | ✅ | ✅ | ✅ | PSI probe, duration from PTS; H.264 Annex B and MPEG-2 I-picture thumbnails (PTS seek to the keyframe at or before the target) |
+| MPEG-PS / `.mpg` | ✅ | — | 🟡 | Pack-header duration; MPEG-2 I-picture thumbnails |
+| AVI / `.avi` | ✅ | 🟡 | ✅ | RIFF `idx1`/OpenDML; MJPEG, MPEG-4 Part 2, H.264 thumbnails |
+| FLV | — | — | ❌ | No demux/thumbnail (ffmpeg fallback) |
+| WMV / ASF | ✅ | — | ✅ | Probe, duration, WMV3 (Simple/Main) keyframe thumbnails, bit-exact vs ffmpeg; WVC1 Advanced Profile returns `ErrUnsupportedProfile` |
+| HEIC / HEIF / AVIF | ✅ | — | ✅ | Embedded JPEG via `iinf`/`iref thmb`/`iloc`; coded HEVC/AV1 thumbs ❌ |
+| Camera RAW (CR2, CR3, NEF, …) | ✅ | — | ✅ | Embedded JPEG preview extraction |
 
 ---
 
@@ -63,7 +68,9 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 | OGG (Vorbis / Opus) | ✅ | Last page granule position |
 | MP3 | 🟡 | Xing / Info / VBRI; else CBR frame-header estimate |
 | AIFF, AU | 📋 | |
-| AAC (ADTS), TS, AVI, FLV, WMV, ASF | ❌ | |
+| MPEG-TS, M2TS, MPEG-PS | 🟡 | Bounded PTS / pack scan |
+| AVI | 🟡 | `avih` / stream header |
+| AAC (ADTS), FLV, WMV, ASF | ❌ | |
 
 ---
 
@@ -79,7 +86,9 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 |-----------|:------:|----------------|
 | `.mp4`, `.m4v`, `.mov`, `.3gp` | ✅ | H.264, MJPEG, … via `stsd` / `tkhd` |
 | `.mkv`, `.webm` | ✅ | Codecs via `Tracks`, named with ffprobe codec names |
-| TS, AVI, FLV, WMV | ❌ | |
+| `.ts`, `.m2ts`, `.mpg` | 🟡 | PAT/PMT bounded scan |
+| `.avi` | 🟡 | `strh`/`strf` video stream |
+| FLV, WMV, ASF | ❌ | |
 
 ### Audio containers
 
@@ -122,7 +131,7 @@ MP4 sample entries (AV1, ProRes, PCM, AC-3, E-AC-3, Opus, FLAC) and MKV codec ID
 | FLAC `PICTURE` | `.flac` | ✅ |
 | Vorbis cover (METADATA_BLOCK_PICTURE) | `.ogg` | 🟡 |
 | MKV attachments | `.mkv`, `.webm` | 📋 |
-| HEIC/AVIF embedded preview | `.heic` | 🔬 |
+| HEIC/HEIF/AVIF embedded JPEG (thumbnail API) | `.heic`, `.heif`, `.avif` | ✅ | Not `EmbeddedArtwork()`; use `Thumbnail()` |
 
 ---
 
@@ -207,7 +216,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **H.264** interlaced, >10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
 | **MPEG-4 Part 2** SP/ASP I-VOP (DivX, XviD, lavc `mpeg4`) | MP4, MOV (`mp4v`), MKV (`V_MPEG4/ISO/ASP`) | ✅ | H.263 and MPEG quantisation, custom matrices, alternate scan, field DCT, resync markers, DivX packed B-frames; bit-exact with ffmpeg (`simple_idct`). See [`MPEG4.md`](MPEG4.md) |
 | **MPEG-4 Part 2** shape, sprites/GMC, data partitioning, RVLC, NEWPRED, reduced resolution, scalability, Studio, short header (H.263) | — | ❌ | `ErrUnsupportedProfile` naming the tool |
-| **VP9** | `.webm`, `.mkv` | ❌ | Typed unsupported in gate |
+| **VP9** profile 0, 8-bit 4:2:0 | `.webm`, `.mkv` | ✅ | Pure-Go VP9 decode (`gtsteffaniak/govpx`, a fork of `thesyncim/govpx` with an edge-context fix; BSD-3 libvpx port, via `internal/vp9decode`); bit-exact with libvpx on every frame of the gate fixture |
 | **AV1**, **HEVC** | — | ❌ | |
 
 ### Cover art instead of video frame
@@ -341,5 +350,5 @@ the XviD IDCT; those match `-idct simple` bit-exactly and the default to
 ~75 dB PSNR). Unsupported coding tools return `ErrUnsupportedProfile`
 naming the tool, for example
 `mpeg4 keyframe: data partitioning (data_partitioned=1) not supported`.
-AVI has no demuxer in go-media, so AVI DivX/XviD still returns
-`ErrUnsupported`.
+AVI uses `internal/avi` (RIFF, `idx1`/OpenDML) for MJPEG, MPEG-4 Part 2, and H.264
+thumbnail paths; other VFW fourccs return typed unsupported errors.

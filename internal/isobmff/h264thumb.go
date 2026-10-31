@@ -9,8 +9,8 @@ import (
 )
 
 type h264ThumbCtx struct {
-	track int
-	avcc  *mp4.AVCDecoderConfiguration
+	track  int
+	avcc   *mp4.AVCDecoderConfiguration
 	sample []byte
 }
 

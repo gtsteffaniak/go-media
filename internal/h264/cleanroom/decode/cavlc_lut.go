@@ -45,7 +45,7 @@ func buildVLCLUT(entries []vlcEntry) [1 << cavlcPeekBits]vlcSlot {
 	return lut
 }
 
-func decodeCoeffTokenLUT(r *bitstream.Reader, lut *[1<<cavlcPeekBits]ctSlot) (int, int) {
+func decodeCoeffTokenLUT(r *bitstream.Reader, lut *[1 << cavlcPeekBits]ctSlot) (int, int) {
 	peek := r.PeekBits(cavlcPeekBits)
 	e := lut[peek]
 	if e.bits == 0 {
@@ -55,7 +55,7 @@ func decodeCoeffTokenLUT(r *bitstream.Reader, lut *[1<<cavlcPeekBits]ctSlot) (in
 	return int(e.t0), int(e.tc)
 }
 
-func decodeVLCLUT(r *bitstream.Reader, lut *[1<<cavlcPeekBits]vlcSlot) int {
+func decodeVLCLUT(r *bitstream.Reader, lut *[1 << cavlcPeekBits]vlcSlot) int {
 	peek := r.PeekBits(cavlcPeekBits)
 	e := lut[peek]
 	if e.bits == 0 {

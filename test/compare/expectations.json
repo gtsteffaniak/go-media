@@ -680,12 +680,12 @@
     {
       "assetId": "webm_vp9",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "webm_vp9",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mp4_h264_baseline_1080",
@@ -818,6 +818,326 @@
     },
     {
       "assetId": "mp4_h264_high_1080",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_mjpeg",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_mjpeg",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_mjpeg",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_mjpeg",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_mjpeg",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_mjpeg",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_mjpeg",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_mjpeg",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_mpeg4",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_mpeg4",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_mpeg4",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_mpeg4",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_mpeg4",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_mpeg4",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_mpeg4",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_mpeg4",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_h264",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_h264",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_h264",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_h264",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_h264",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_h264",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avi_h264",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avi_h264",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mpegts_h264",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mpegts_h264",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mpegts_h264",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mpegts_h264",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mpegts_h264",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mpegts_h264",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mpegts_h264",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mpegts_h264",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mpegts_mpeg2",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mpegts_mpeg2",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mpegts_mpeg2",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mpegts_mpeg2",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mpegts_mpeg2",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mpegts_mpeg2",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mpegts_mpeg2",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mpegts_mpeg2",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "heic_jpeg_thumb",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_jpeg_thumb",
+      "check": "duration",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_jpeg_thumb",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_jpeg_thumb",
+      "check": "probe",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_jpeg_thumb",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_jpeg_thumb",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_jpeg_thumb",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "heic_jpeg_thumb",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "raw_dng_preview",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "raw_dng_preview",
+      "check": "duration",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "raw_dng_preview",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "raw_dng_preview",
+      "check": "probe",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "raw_dng_preview",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "raw_dng_preview",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "raw_dng_preview",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "raw_dng_preview",
       "check": "thumbnail_small",
       "expect": "supported"
     }

@@ -14,8 +14,8 @@ const maxTimingRegressionPct = 0.50
 const targetTimingRegressionPct = 0.10
 
 type thumbTimingSample struct {
-	GoMS    float64
-	WriteMS float64
+	GoMS     float64
+	WriteMS  float64
 	FFmpegMS float64
 }
 
@@ -42,7 +42,7 @@ func benchmarkThumbnail(a Asset, opt media.ThumbnailOptions, preset thumbnailPre
 	for i := 0; i < thumbTimingWarmup+thumbTimingRuns; i++ {
 		start := time.Now()
 		kf := assetH264KeyframeOnly(a)
-		_ = ffmpegThumbnailPreset(a.Path, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
+		_ = ffmpegThumbnailPreset(a, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
 		ffSamples = append(ffSamples, msSince(start))
 	}
 	return thumbTimingSample{

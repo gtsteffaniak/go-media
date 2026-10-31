@@ -110,8 +110,8 @@ func halve420(p *gvp8.Picture) *gvp8.Picture {
 	}
 	for y := 0; y < nh; y++ {
 		for x := 0; x < nw; x++ {
-			y0 := 2*y
-			x0 := 2*x
+			y0 := 2 * y
+			x0 := 2 * x
 			out.Y[y*out.YStride+x] = byte((int(p.Y[y0*p.YStride+x0]) + int(p.Y[y0*p.YStride+x0+1]) +
 				int(p.Y[(y0+1)*p.YStride+x0]) + int(p.Y[(y0+1)*p.YStride+x0+1]) + 2) / 4)
 		}

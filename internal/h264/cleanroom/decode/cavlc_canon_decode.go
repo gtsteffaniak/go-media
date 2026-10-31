@@ -64,7 +64,7 @@ func decodeCoeffToken(r *bitstream.Reader, nC int) (int, int) {
 	return decodeCoeffTokenLUT(r, lut)
 }
 
-func decodeVLC(r *bitstream.Reader, lut *[1<<cavlcPeekBits]vlcSlot) int {
+func decodeVLC(r *bitstream.Reader, lut *[1 << cavlcPeekBits]vlcSlot) int {
 	return decodeVLCLUT(r, lut)
 }
 

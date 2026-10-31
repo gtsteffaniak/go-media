@@ -8,8 +8,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gtsteffaniak/go-media/pkg/media"
 	"github.com/gtsteffaniak/go-media/internal/h264"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 func main() {

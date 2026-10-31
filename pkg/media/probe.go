@@ -4,11 +4,15 @@ import (
 	"io"
 	"strings"
 
+	"github.com/gtsteffaniak/go-media/internal/asf"
+	"github.com/gtsteffaniak/go-media/internal/avi"
 	"github.com/gtsteffaniak/go-media/internal/flac"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/mp3"
+	ps "github.com/gtsteffaniak/go-media/internal/mpegps"
+	ts "github.com/gtsteffaniak/go-media/internal/mpegts"
 	"github.com/gtsteffaniak/go-media/internal/ogg"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
@@ -79,8 +83,30 @@ func probeOther(r io.ReaderAt, size int64, id format.ID, info *ProbeInfo) (*Prob
 		info.FormatName = "ogg"
 	case format.MP3:
 		info.FormatName = "mp3"
+	case format.AVI:
+		info.FormatName = "avi"
+	case format.ASF, format.WMV:
+		info.FormatName = "asf"
+	case format.MPEGTS:
+		info.FormatName = "mpegts"
+	case format.M2TS:
+		info.FormatName = "m2ts"
+	case format.MPEGPS:
+		info.FormatName = "mpeg"
+	case format.HEIC:
+		info.FormatName = "heic"
+	case format.HEIF:
+		info.FormatName = "heif"
+	case format.AVIF:
+		info.FormatName = "avif"
+	case format.CR2, format.CR3, format.NEF, format.ARW, format.DNG, format.ORF, format.RW2, format.RAF, format.PEF:
+		info.FormatName = string(id)
 	default:
 		info.FormatName = string(id)
+	}
+
+	if format.IsHEIFImage(id) || format.IsCameraRAW(id) {
+		return info, nil
 	}
 
 	if dr, err := Duration(r, size); err == nil {
@@ -129,6 +155,24 @@ func streamsForFormat(r io.ReaderAt, size int64, id format.ID) ([]Stream, error)
 	case format.MP3:
 		s, err := mp3.Streams(r, size)
 		return mapStreams(s), mapErr(err)
+	case format.AVI:
+		s, err := avi.Streams(r, size)
+		return mapStreams(s), mapErr(err)
+	case format.ASF, format.WMV:
+		s, err := asf.Streams(r, size)
+		return mapStreams(s), mapErr(err)
+	case format.MPEGTS, format.M2TS:
+		meta, err := ts.Probe(r, size)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		return mapStreams(ts.Streams(meta)), nil
+	case format.MPEGPS:
+		meta, err := ps.Probe(r, size)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		return mapStreams(ps.Streams(meta)), nil
 	default:
 		return nil, Unsupported("streams", string(id))
 	}

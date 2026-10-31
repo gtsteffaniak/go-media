@@ -37,6 +37,13 @@ func detect(t *testing.T, data []byte) format.ID {
 	return id
 }
 
+func TestDetectAVI(t *testing.T) {
+	data := []byte("RIFF\x00\x00\x00\x00AVI \x00")
+	if got := detect(t, data); got != format.AVI {
+		t.Errorf("got %v want AVI", got)
+	}
+}
+
 func TestDetectEBMLDocType(t *testing.T) {
 	if got := detect(t, ebmlFile("webm", 0)); got != format.WebM {
 		t.Errorf("webm doctype = %v, want WebM", got)

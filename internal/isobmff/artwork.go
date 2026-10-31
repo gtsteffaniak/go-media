@@ -3,8 +3,8 @@ package isobmff
 import (
 	"io"
 
-	"github.com/gtsteffaniak/go-media/internal/tagread"
 	"github.com/gtsteffaniak/go-media/internal/format"
+	"github.com/gtsteffaniak/go-media/internal/tagread"
 )
 
 // HasCover reports ilst/covr metadata or a dedicated attached-picture video track.

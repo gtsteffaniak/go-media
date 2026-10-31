@@ -32,7 +32,7 @@ func areaDownChromaTilePortable(dstCb, dstCr []byte, dstCStride int, dx, dy int,
 	if cn == 0 {
 		cn = 1
 	}
-	ci := (dy/2)*dstCStride + (dx/2)
+	ci := (dy/2)*dstCStride + (dx / 2)
 	dstCb[ci] = byte(cbSum / cn)
 	dstCr[ci] = byte(crSum / cn)
 }

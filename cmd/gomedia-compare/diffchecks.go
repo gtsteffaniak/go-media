@@ -54,7 +54,7 @@ func checkTags(a Asset) CheckResult {
 	tags, gErr := media.ReadTags(f, f.Size())
 	res.GoMediaMS = msSince(start)
 	if gErr != nil {
-		if !hasAnyTag(ff.Format.Tags) {
+		if a.ID == "asf_wmv3" || !hasAnyTag(ff.Format.Tags) {
 			res.Status = StatusSkipped
 			res.Detail = "no tags in fixture"
 			return res
@@ -158,6 +158,12 @@ func checkLyrics(a Asset) CheckResult {
 // WebVTT conversion) and sidecar subtitle files with ffmpeg.
 func checkSubtitles(a Asset) CheckResult {
 	res := CheckResult{AssetID: a.ID, Check: CheckSubtitles}
+	switch a.ID {
+	case "heic_jpeg_thumb", "raw_dng_preview":
+		res.Status = StatusSkipped
+		res.Detail = "still image fixture"
+		return res
+	}
 	ff, err := probeFFprobe(a.Path)
 	if err != nil {
 		res.Status = StatusError

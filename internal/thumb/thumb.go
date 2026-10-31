@@ -26,12 +26,18 @@ import (
 	"strings"
 
 	"github.com/gen2brain/vpx/webp"
+	"github.com/gtsteffaniak/go-media/internal/asf"
+	"github.com/gtsteffaniak/go-media/internal/avi"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/h264"
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
+	"github.com/gtsteffaniak/go-media/internal/heifthumb"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
+	ps "github.com/gtsteffaniak/go-media/internal/mpegps"
+	ts "github.com/gtsteffaniak/go-media/internal/mpegts"
+	"github.com/gtsteffaniak/go-media/internal/rawpreview"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
 	"github.com/gtsteffaniak/go-media/internal/vp8decode"
@@ -141,6 +147,11 @@ func decodeSource(r interface {
 		} else if yimg != nil {
 			return yimg, "decode", nil
 		}
+		if yimg, err := src.MPEG2ThumbnailYCbCr(opt.SeekPercent); err != nil {
+			return nil, "", err
+		} else if yimg != nil {
+			return yimg, "decode", nil
+		}
 		// MPEG-4 Part 2 (mp4v) I-VOP.
 		if yimg, err := src.MPEG4ThumbnailYCbCr(opt.SeekPercent); err != nil {
 			return nil, "", err
@@ -148,6 +159,48 @@ func decodeSource(r interface {
 			return yimg, "decode", nil
 		}
 		// No MJPEG, H.264 or MPEG-4 track: name the codec from the index (no I/O).
+		return nil, "", src.UnsupportedReason()
+	case format.AVI:
+		src, err := avi.OpenThumbSourceErr(r, size)
+		if err != nil {
+			return nil, "", err
+		}
+		opt = fitOptions(opt, 0)
+		if b, ok := src.MJPEGFrame(opt.SeekPercent); ok {
+			img, err := decodeBytes(b, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
+			if err != nil {
+				return nil, "", err
+			}
+			return img, "decode", nil
+		}
+		if useH264RGBPipeline(opt) {
+			if rgba, err := src.H264ThumbnailRGBA(opt.SeekPercent, true); err != nil {
+				return nil, "", err
+			} else if rgba != nil {
+				return rgba, "decode", nil
+			}
+		} else if yimg, err := src.H264ThumbnailYCbCr(opt.SeekPercent, true); err != nil {
+			return nil, "", err
+		} else if yimg != nil {
+			return yimg, "decode", nil
+		}
+		if yimg, err := src.MPEG4ThumbnailYCbCr(opt.SeekPercent); err != nil {
+			return nil, "", err
+		} else if yimg != nil {
+			return yimg, "decode", nil
+		}
+		return nil, "", src.UnsupportedReason()
+	case format.ASF, format.WMV:
+		src, err := asf.OpenThumbSourceErr(r, size)
+		if err != nil {
+			return nil, "", err
+		}
+		opt = fitOptions(opt, 0)
+		if yimg, err := src.WMV3ThumbnailYCbCr(opt.SeekPercent); err != nil {
+			return nil, "", err
+		} else if yimg != nil {
+			return yimg, "decode", nil
+		}
 		return nil, "", src.UnsupportedReason()
 	case format.MKV, format.WebM:
 		// Probe the bounded header once and decide from it before any demux pass.
@@ -216,15 +269,57 @@ func decodeSource(r interface {
 			return nil, "", errs.Unsup("thumbnail", string(fmtID)+": embedded cover art ("+mime+") not decodable")
 		}
 		return img, "embedded", nil
+	case format.MPEGTS, format.M2TS:
+		meta, err := ts.Probe(r, size)
+		if err != nil {
+			return nil, "", err
+		}
+		yimg, err := ts.ThumbnailYCbCr(r, size, meta, opt.SeekPercent, opt.Fast)
+		if err != nil {
+			return nil, "", err
+		}
+		return yimg, "decode", nil
+	case format.MPEGPS:
+		meta, err := ps.Probe(r, size)
+		if err != nil {
+			return nil, "", err
+		}
+		yimg, err := ps.ThumbnailYCbCr(r, size, meta, opt.SeekPercent, opt.Fast)
+		if err != nil {
+			return nil, "", err
+		}
+		return yimg, "decode", nil
+	case format.HEIC, format.HEIF, format.AVIF:
+		data, err := heifthumb.JPEGPreview(r, size, opt.MaxWidth, opt.MaxHeight)
+		if err != nil {
+			return nil, "", err
+		}
+		img, err := decodeBytes(data, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
+		if err != nil {
+			return nil, "", err
+		}
+		return img, "embedded", nil
+	default:
+		if format.IsCameraRAW(fmtID) {
+			data, err := rawpreview.JPEGPreview(r, size, fmtID, opt.MaxWidth, opt.MaxHeight)
+			if err != nil {
+				return nil, "", err
+			}
+			img, err := decodeBytes(data, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
+			if err != nil {
+				return nil, "", err
+			}
+			return img, "embedded", nil
+		}
 	}
 	return nil, "", errs.Unsup("thumbnail", string(fmtID)+": container has no thumbnail decoder in go-media")
 }
 
 // hasThumbCodec reports whether any Matroska video codec is one the thumbnail
-// path decodes (VP8 or MJPEG).
+// path decodes (VP8, VP9, or MJPEG).
 func hasThumbCodec(ids []string) bool {
 	for _, id := range ids {
-		if id == "V_VP8" || id == "V_MJPEG" {
+		if id == "V_VP8" || id == "V_VP9" || id == "V_MJPEG" {
 			return true
 		}
 	}

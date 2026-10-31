@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -19,15 +20,15 @@ type FFProbeFormat struct {
 
 // FFProbeStream is a simplified stream entry from ffprobe JSON.
 type FFProbeStream struct {
-	Index        int
-	Tags         map[string]string
-	CodecType    string
-	CodecName    string
-	Width        int
-	Height       int
-	SampleRate   string
-	Channels     int
-	AttachedPic  int
+	Index       int
+	Tags        map[string]string
+	CodecType   string
+	CodecName   string
+	Width       int
+	Height      int
+	SampleRate  string
+	Channels    int
+	AttachedPic int
 }
 
 // FFProbeResult aggregates ffprobe output for one file.
@@ -59,14 +60,14 @@ func probeFFprobe(path string) (FFProbeResult, error) {
 			Tags       map[string]string `json:"tags"`
 		} `json:"format"`
 		Streams []struct {
-			Index      int               `json:"index"`
-			Tags       map[string]string `json:"tags"`
-			CodecType  string            `json:"codec_type"`
-			CodecName  string `json:"codec_name"`
-			Width      int    `json:"width"`
-			Height     int    `json:"height"`
-			SampleRate string `json:"sample_rate"`
-			Channels   int    `json:"channels"`
+			Index       int               `json:"index"`
+			Tags        map[string]string `json:"tags"`
+			CodecType   string            `json:"codec_type"`
+			CodecName   string            `json:"codec_name"`
+			Width       int               `json:"width"`
+			Height      int               `json:"height"`
+			SampleRate  string            `json:"sample_rate"`
+			Channels    int               `json:"channels"`
 			Disposition struct {
 				AttachedPic int `json:"attached_pic"`
 			} `json:"disposition"`
@@ -212,13 +213,19 @@ func ffmpegThumbScaleFlags(preset thumbnailPresetConfig, keyframeOnly bool) stri
 	return preset.FFScale
 }
 
-func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
+func ffmpegThumbnailPreset(a Asset, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
 	}
+	inputPath, cleanup, err := ffmpegThumbInput(a.Path, a.ID)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	path := inputPath
 	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
-	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s",
 		preset.MaxWidth, preset.MaxHeight, scaleFlags)
 	qv := ffmpegQScale(preset.Quality)
 	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
@@ -226,30 +233,57 @@ func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailP
 		args = append(args, "-skip_frame", "nokey", "-skip_loop_filter", "all")
 	}
 	args = append(args, "-threads", "1")
-	if seekSec > 0.001 {
+	inputFirst := tsLikeContainer(a.Path)
+	if seekSec > 0.001 && !inputFirst {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
 	}
-	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
+	args = append(args, "-i", path)
+	if seekSec > 0.001 && inputFirst {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
+	}
+	args = append(args, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
 	return exec.Command(ffmpeg, args...).Run()
 }
 
+func tsLikeContainer(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".ts", ".m2ts", ".mts":
+		return true
+	default:
+		return false
+	}
+}
+
 // ffmpegRasterPNG writes a lossless PNG frame using the same seek/scale as thumbnails.
-func ffmpegRasterPNG(path, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
+func ffmpegRasterPNG(a Asset, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
 	}
+	inputPath, cleanup, err := ffmpegThumbInput(a.Path, a.ID)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	path := inputPath
 	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
-	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s",
 		preset.MaxWidth, preset.MaxHeight, scaleFlags)
 	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
 	if keyframeOnly {
 		args = append(args, "-skip_frame", "nokey")
 	}
-	if seekSec > 0.001 {
+	// Same seek placement as ffmpegThumbnailPreset: TS fixtures are fed as
+	// raw elementary streams, which need an output-side (decoding) seek.
+	inputFirst := tsLikeContainer(a.Path)
+	if seekSec > 0.001 && !inputFirst {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
 	}
-	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, dest)
+	args = append(args, "-i", path)
+	if seekSec > 0.001 && inputFirst {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
+	}
+	args = append(args, "-frames:v", "1", "-vf", vf, dest)
 	return exec.Command(ffmpeg, args...).Run()
 }
 
@@ -347,4 +381,87 @@ func imageSSIM(a, b string) (float64, error) {
 		}
 	}
 	return 0, fmt.Errorf("ssim not found in ffmpeg output: %s", text)
+}
+
+// ffprobeKeyframeAtOrBefore returns the time (relative to the container
+// start) of the last keyframe at or before sec, as ffprobe reports it. Assets
+// whose go-media thumbnail decodes only intra pictures are compared against
+// ffmpeg at that keyframe rather than at the exact seek time.
+func ffprobeKeyframeAtOrBefore(path string, sec float64) (float64, bool) {
+	ffprobe, err := lookFFprobe()
+	if err != nil {
+		return 0, false
+	}
+	out, err := exec.Command(ffprobe, "-v", "error", "-select_streams", "v:0",
+		"-skip_frame", "nokey", "-show_entries", "frame=pts_time:format=start_time",
+		"-read_intervals", fmt.Sprintf("%%+%.3f", sec+1),
+		"-of", "csv=p=0", path).Output()
+	if err != nil {
+		return 0, false
+	}
+	start := 0.0
+	var times []float64
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSuffix(strings.TrimSpace(line), ",")
+		v, err := strconv.ParseFloat(line, 64)
+		if err != nil {
+			continue
+		}
+		times = append(times, v)
+	}
+	if len(times) < 2 {
+		return aviKeyframeAtOrBefore(ffprobe, path, sec)
+	}
+	// The format section (start_time) is printed after the frames.
+	start, times = times[len(times)-1], times[:len(times)-1]
+	best, ok := 0.0, false
+	for _, t := range times {
+		if rel := t - start; rel <= sec+1e-6 {
+			best, ok = rel, true
+		}
+	}
+	return best, ok
+}
+
+// assetIntraSeekOnly reports assets whose go-media thumbnail decodes the
+// keyframe at or before the seek point instead of the exact frame.
+func assetIntraSeekOnly(id string) bool {
+	switch id {
+	case "mpegts_mpeg2", "mpegts_h264", "avi_h264", "avi_mpeg4":
+		return true
+	}
+	return false
+}
+
+// aviKeyframeAtOrBefore handles AVI, where ffprobe reports no frame
+// timestamps: keyframe time is packet index / frame rate.
+func aviKeyframeAtOrBefore(ffprobe, path string, sec float64) (float64, bool) {
+	if strings.ToLower(filepath.Ext(path)) != ".avi" {
+		return 0, false
+	}
+	out, err := exec.Command(ffprobe, "-v", "error", "-select_streams", "v:0",
+		"-show_entries", "stream=r_frame_rate:packet=flags", "-of", "csv=p=0", path).Output()
+	if err != nil {
+		return 0, false
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) < 2 {
+		return 0, false
+	}
+	var num, den float64
+	if _, err := fmt.Sscanf(strings.TrimSuffix(lines[len(lines)-1], ","), "%f/%f", &num, &den); err != nil || num <= 0 || den <= 0 {
+		return 0, false
+	}
+	fps := num / den
+	best, ok := 0.0, false
+	for i, l := range lines[:len(lines)-1] {
+		t := float64(i) / fps
+		if t > sec+1e-6 {
+			break
+		}
+		if strings.HasPrefix(l, "K") {
+			best, ok = t, true
+		}
+	}
+	return best, ok
 }
