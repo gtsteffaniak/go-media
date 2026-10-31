@@ -147,6 +147,8 @@ func loadAssetManifest(assetsDir string) ([]Asset, error) {
 		{"avi_h264", "video/avi_h264.avi", "video", "AVI H.264", nil},
 		{"mpegts_mpeg2", "video/mpegts_mpeg2.ts", "video", "MPEG-TS MPEG-2", nil},
 		{"mpegts_h264", "video/mpegts_h264.ts", "video", "MPEG-TS H.264", nil},
+		{"heic_jpeg_thumb", "image/heic_jpeg_thumb.heic", "video", "HEIC embedded JPEG thumb", nil},
+		{"raw_dng_preview", "image/raw_dng_preview.dng", "video", "RAW DNG embedded JPEG preview", nil},
 		{"mjpeg_mp4", "video/mjpeg.mp4", "video", "MJPEG in MP4", nil},
 		{"mp3_cbr", "audio/mp3_cbr.mp3", "audio", "MP3 CBR", nil},
 		{"mp3_vbr", "audio/mp3_vbr.mp3", "audio", "MP3 VBR", nil},

@@ -202,6 +202,11 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	}
 
 	os.Remove(clip)
+	imgAssets, err := appendImageCompareAssets(outDir)
+	if err != nil {
+		return nil, err
+	}
+	assets = append(assets, imgAssets...)
 	return assets, nil
 }
 

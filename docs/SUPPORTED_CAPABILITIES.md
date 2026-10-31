@@ -43,10 +43,12 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 | M4A AAC (in MP4) | — | ✅ | 🟡 | Container yes; AAC ADTS elementary ❌ |
 | AIFF / `.aiff` | — | ✅ | 📋 | |
 | AU / `.sun` | — | ✅ | 📋 | |
-| MPEG-TS / `.ts`, M2TS / `.m2ts` | ✅ | ✅ | 🟡 | PSI probe, duration from PTS; MPEG-2 and H.264 (Annex B) thumbnails |
+| MPEG-TS / `.ts`, M2TS / `.m2ts` | ✅ | ✅ | 🟡 | PSI probe, duration from PTS; H.264 Annex B thumbnails; MPEG-2 TS demux in progress |
 | MPEG-PS / `.mpg` | ✅ | — | 🟡 | Pack-header duration; MPEG-2 I-picture thumbnails |
-| AVI, FLV, WMV, ASF | ✅ | ✅ | ❌ | |
-| HEIC / HEIF | ✅ | — | ❌ | 🔬 embedded thumb research only |
+| AVI / `.avi` | ✅ | 🟡 | ✅ | RIFF `idx1`/OpenDML; MJPEG, MPEG-4 Part 2, H.264 thumbnails |
+| FLV, WMV, ASF | — | — | ❌ | No demux/thumbnail (ffmpeg fallback) |
+| HEIC / HEIF / AVIF | ✅ | — | ✅ | Embedded JPEG via `iinf`/`iref thmb`/`iloc`; coded HEVC/AV1 thumbs ❌ |
+| Camera RAW (CR2, CR3, NEF, …) | ✅ | — | ✅ | Embedded JPEG preview extraction |
 
 ---
 
@@ -343,5 +345,5 @@ the XviD IDCT; those match `-idct simple` bit-exactly and the default to
 ~75 dB PSNR). Unsupported coding tools return `ErrUnsupportedProfile`
 naming the tool, for example
 `mpeg4 keyframe: data partitioning (data_partitioned=1) not supported`.
-AVI has no demuxer in go-media, so AVI DivX/XviD still returns
-`ErrUnsupported`.
+AVI uses `internal/avi` (RIFF, `idx1`/OpenDML) for MJPEG, MPEG-4 Part 2, and H.264
+thumbnail paths; other VFW fourccs return typed unsupported errors.
