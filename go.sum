@@ -16,8 +16,8 @@ github.com/go-test/deep v1.1.0/go.mod h1:5C2ZWiW0ErCdrYzpqxLbTX7MG14M9iiw8DgHncV
 github.com/google/uuid v1.1.2/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/gtsteffaniak/govpx v0.0.0-20261031164625-20546eba000f h1:S/ExKs3mFzwbh94/A6HCvhTXmTIcSjNUthVhAE+PUDc=
-github.com/gtsteffaniak/govpx v0.0.0-20261031164625-20546eba000f/go.mod h1:UuG0LM1p7V7qJvKHouFGVwntaBOqgLzUtG2ZyuLvu1U=
+github.com/gtsteffaniak/go-vpx v1.0.1-0.20261031171633-6e4a2dba95a0 h1:0clZN/fzqQiEjXWMnN/5wO6NWU00PCQh2zH4cWS9f18=
+github.com/gtsteffaniak/go-vpx v1.0.1-0.20261031171633-6e4a2dba95a0/go.mod h1:tRCdDZ15oZZTsiwmQAwyH56PTt1jn1C1O0P03oOkoJ8=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/pty v1.1.8/go.mod h1:O1sed60cT9XZ5uDucP5qwvh+TE3NnUj51EiZO/lmSfw=

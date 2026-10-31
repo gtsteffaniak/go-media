@@ -2,7 +2,7 @@ package matroska
 
 import (
 	"github.com/gtsteffaniak/go-media/internal/vp9decode"
-	"github.com/gtsteffaniak/govpx/pkg/govpx"
+	"github.com/gtsteffaniak/go-vpx/pkg/govpx"
 )
 
 // VP9PictureAtSeek demuxes and decodes the VP9 frame at seekPercent without RGB conversion.
