@@ -16,6 +16,8 @@ const (
 	AIFF ID = "aiff"
 	AU   ID = "au"
 	AVI  ID = "avi"
+	ASF  ID = "asf"
+	WMV  ID = "wmv"
 
 	MPEGTS ID = "mpegts"
 	M2TS   ID = "m2ts"

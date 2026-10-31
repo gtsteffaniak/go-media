@@ -40,6 +40,8 @@ func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 		return format.WAV, nil
 	case bytes.Equal(buf[:4], []byte("RIFF")) && len(buf) >= 12 && bytes.Equal(buf[8:12], []byte("AVI ")):
 		return format.AVI, nil
+	case len(buf) >= 16 && bytes.Equal(buf[:4], []byte{0x30, 0x26, 0xB2, 0x75}):
+		return format.ASF, nil
 	case bytes.Equal(buf[:4], []byte(".snd")) || (len(buf) >= 4 && buf[0] == 0x2e && buf[1] == 's' && buf[2] == 'n' && buf[3] == 'd'):
 		return format.AU, nil
 	case len(buf) >= 12 && bytes.Equal(buf[4:8], []byte("ftyp")):

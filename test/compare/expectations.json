@@ -942,6 +942,48 @@
       "expect": "supported"
     },
     {
+      "assetId": "asf_wmv3",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "thumbnail_large",
+      "expect": "typed_unsupported",
+      "note": "VC-1/WMV3 intra decode in progress (ErrUnsupportedProfile until decoder lands)"
+    },
+    {
+      "assetId": "asf_wmv3",
+      "check": "thumbnail_small",
+      "expect": "typed_unsupported",
+      "note": "VC-1/WMV3 intra decode in progress (ErrUnsupportedProfile until decoder lands)"
+    },
+    {
       "assetId": "mpegts_h264",
       "check": "artwork",
       "expect": "skipped"

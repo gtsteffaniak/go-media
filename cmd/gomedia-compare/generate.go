@@ -77,6 +77,8 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 			[]string{"-i", clip, "-c:v", "libxvid", "-g", "30", "-q:v", "3", "-an", "-f", "avi"}, nil},
 		{"avi_h264", "video", "AVI H.264", "video/avi_h264.avi",
 			[]string{"-i", clip, "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-g", "30", "-an", "-f", "avi"}, nil},
+		{"asf_wmv3", "video", "ASF WMV3", "video/asf_wmv3.wmv",
+			[]string{"-i", clip, "-c:v", "wmv3", "-g", "30", "-an", "-f", "asf"}, nil},
 		{"mpegts_mpeg2", "video", "MPEG-TS MPEG-2", "video/mpegts_mpeg2.ts",
 			[]string{"-i", clip, "-c:v", "mpeg2video", "-g", "30", "-an", "-f", "mpegts"}, nil},
 		{"mpegts_h264", "video", "MPEG-TS H.264", "video/mpegts_h264.ts",
@@ -114,7 +116,13 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		args := append([]string{"-y", "-hide_banner", "-loglevel", "error"}, s.args...)
 		args = append(args, out)
 		if err := runFF(ffmpeg, args...); err != nil {
-			return nil, fmt.Errorf("%s: %w", s.id, err)
+			if s.id == "asf_wmv3" {
+				if err2 := copyASFWMV3Fallback(out); err2 != nil {
+					return nil, fmt.Errorf("%s: %w (fallback: %v)", s.id, err, err2)
+				}
+			} else {
+				return nil, fmt.Errorf("%s: %w", s.id, err)
+			}
 		}
 		assets = append(assets, Asset{ID: s.id, Path: out, Category: s.cat, Description: s.desc, Sidecars: s.sidecars})
 	}
@@ -208,6 +216,16 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	}
 	assets = append(assets, imgAssets...)
 	return assets, nil
+}
+
+// copyASFWMV3Fallback installs a pinned WMV3 sample when ffmpeg lacks wmv3 encoder.
+func copyASFWMV3Fallback(dst string) error {
+	src := filepath.Join("testdata", "asf_wmv3_360x288.wmv")
+	in, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, in, 0o644)
 }
 
 // writeSampleSubtitles creates minimal subtitle fixtures.

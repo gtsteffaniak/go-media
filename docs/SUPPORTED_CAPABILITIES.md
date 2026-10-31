@@ -46,7 +46,8 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 | MPEG-TS / `.ts`, M2TS / `.m2ts` | ✅ | ✅ | 🟡 | PSI probe, duration from PTS; H.264 Annex B thumbnails; MPEG-2 TS demux in progress |
 | MPEG-PS / `.mpg` | ✅ | — | 🟡 | Pack-header duration; MPEG-2 I-picture thumbnails |
 | AVI / `.avi` | ✅ | 🟡 | ✅ | RIFF `idx1`/OpenDML; MJPEG, MPEG-4 Part 2, H.264 thumbnails |
-| FLV, WMV, ASF | — | — | ❌ | No demux/thumbnail (ffmpeg fallback) |
+| FLV | — | — | ❌ | No demux/thumbnail (ffmpeg fallback) |
+| WMV / ASF | ✅ | — | 🟡 | Probe, duration, WMV3 payload demux; VC-1 intra thumbnails gated (`ErrUnsupportedProfile`) until decoder completes |
 | HEIC / HEIF / AVIF | ✅ | — | ✅ | Embedded JPEG via `iinf`/`iref thmb`/`iloc`; coded HEVC/AV1 thumbs ❌ |
 | Camera RAW (CR2, CR3, NEF, …) | ✅ | — | ✅ | Embedded JPEG preview extraction |
 

@@ -27,6 +27,7 @@ import (
 
 	"github.com/gen2brain/vpx/webp"
 	"github.com/gtsteffaniak/go-media/internal/avi"
+	"github.com/gtsteffaniak/go-media/internal/asf"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/h264"
@@ -184,6 +185,18 @@ func decodeSource(r interface {
 			return yimg, "decode", nil
 		}
 		if yimg, err := src.MPEG4ThumbnailYCbCr(opt.SeekPercent); err != nil {
+			return nil, "", err
+		} else if yimg != nil {
+			return yimg, "decode", nil
+		}
+		return nil, "", src.UnsupportedReason()
+	case format.ASF, format.WMV:
+		src, err := asf.OpenThumbSourceErr(r, size)
+		if err != nil {
+			return nil, "", err
+		}
+		opt = fitOptions(opt, 0)
+		if yimg, err := src.WMV3ThumbnailYCbCr(opt.SeekPercent); err != nil {
 			return nil, "", err
 		} else if yimg != nil {
 			return yimg, "decode", nil

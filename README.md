@@ -28,7 +28,7 @@ thumb, err := media.ThumbnailLarge(r, size, 10) // ~10% into the timeline
 
 Capability reference (by feature, with ffmpeg equivalents where useful): **[`docs/SUPPORTED_CAPABILITIES.md`](docs/SUPPORTED_CAPABILITIES.md)**.
 
-**Not in scope:** transcoding, HLS, inter-frame playback, **VC-1/WMV (ASF) thumbnails** (typed unsupported until intra decoder lands), full HEVC/AV1 video decode, or full ffmpeg parity. Use **[go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)** for that; go-media is the **fast path** in front of it.
+**Not in scope:** transcoding, HLS, inter-frame playback, **VC-1/WMV3 thumbnails** (ASF probe/duration yes; intra decode landing), full HEVC/AV1 video decode, or full ffmpeg parity. Use **[go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)** for that; go-media is the **fast path** in front of it.
 
 ## Quality and CI
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gtsteffaniak/go-media/internal/avi"
+	"github.com/gtsteffaniak/go-media/internal/asf"
 	"github.com/gtsteffaniak/go-media/internal/flac"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
@@ -84,6 +85,8 @@ func probeOther(r io.ReaderAt, size int64, id format.ID, info *ProbeInfo) (*Prob
 		info.FormatName = "mp3"
 	case format.AVI:
 		info.FormatName = "avi"
+	case format.ASF, format.WMV:
+		info.FormatName = "asf"
 	case format.MPEGTS:
 		info.FormatName = "mpegts"
 	case format.M2TS:
@@ -154,6 +157,9 @@ func streamsForFormat(r io.ReaderAt, size int64, id format.ID) ([]Stream, error)
 		return mapStreams(s), mapErr(err)
 	case format.AVI:
 		s, err := avi.Streams(r, size)
+		return mapStreams(s), mapErr(err)
+	case format.ASF, format.WMV:
+		s, err := asf.Streams(r, size)
 		return mapStreams(s), mapErr(err)
 	case format.MPEGTS, format.M2TS:
 		meta, err := ts.Probe(r, size)
