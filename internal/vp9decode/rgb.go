@@ -3,7 +3,7 @@ package vp9decode
 import (
 	"image"
 
-	"github.com/gtsteffaniak/govpx"
+	"github.com/gtsteffaniak/govpx/pkg/govpx"
 	"golang.org/x/image/draw"
 )
 
