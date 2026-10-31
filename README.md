@@ -24,8 +24,6 @@ Built for file browsers and indexers (e.g. [FileBrowser Quantum](https://github.
 > **[📊 View the live comparison report →](https://gtsteffaniak.github.io/go-media/)**
 > Interactive charts, side-by-side thumbnails and per-format timing, regenerated from the latest `main`.
 
-Every push to `main` runs go-media and **ffmpeg 9.0.2** side by side on a generated corpus of real-world encodes (phones, cameras, screen captures, HEIC and RAW stills). The results are published as an interactive report.
-
 | Report section | Shows |
 |---|---|
 | 🖼️ **Side-by-side thumbnails** | go-media and ffmpeg output for every format, with PSNR and SSIM |
