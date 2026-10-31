@@ -49,7 +49,7 @@ What **go-media** implements in pure Go (`CGO_ENABLED=0`). This is **not** a ffm
 | AVI / `.avi` | ✅ | 🟡 | ✅ | RIFF `idx1`/OpenDML; MJPEG, MPEG-4 Part 2, H.264 thumbnails |
 | FLV | — | — | ❌ | No demux/thumbnail (ffmpeg fallback) |
 | WMV / ASF | ✅ | — | ✅ | Probe, duration, WMV3 (Simple/Main) keyframe thumbnails, bit-exact vs ffmpeg; WVC1 Advanced Profile returns `ErrUnsupportedProfile` |
-| HEIC / HEIF / AVIF | ✅ | — | ✅ | Embedded JPEG via `iinf`/`iref thmb`/`iloc`; coded HEVC/AV1 thumbs ❌ |
+| HEIC / HEIF / AVIF | ✅ | — | ✅ | Embedded JPEG via `iinf`/`iref thmb`/`iloc`; coded HEVC primary image when no JPEG thumb |
 | Camera RAW (CR2, CR3, NEF, …) | ✅ | — | ✅ | Embedded JPEG preview extraction |
 
 ---
@@ -223,7 +223,8 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **MPEG-4 Part 2** SP/ASP I-VOP (DivX, XviD, lavc `mpeg4`) | MP4, MOV (`mp4v`), MKV (`V_MPEG4/ISO/ASP`) | ✅ | H.263 and MPEG quantisation, custom matrices, alternate scan, field DCT, resync markers, DivX packed B-frames; bit-exact with ffmpeg (`simple_idct`). See [`MPEG4.md`](MPEG4.md) |
 | **MPEG-4 Part 2** shape, sprites/GMC, data partitioning, RVLC, NEWPRED, reduced resolution, scalability, Studio, short header (H.263) | — | ❌ | `ErrUnsupportedProfile` naming the tool |
 | **VP9** profile 0, 8-bit 4:2:0 | `.webm`, `.mkv` | ✅ | Keyframe by default, `Exact` decodes forward to the seek frame. Pure-Go VP9 decode (`gtsteffaniak/go-vpx`, a fork of `thesyncim/govpx` with an edge-context fix; BSD-3 libvpx port, via `internal/vp9decode`); bit-exact with libvpx on every frame of the gate fixture |
-| **AV1**, **HEVC** | — | ❌ | |
+| **HEVC** Main / Main 10 / Main Still Picture, 4:2:0 (8–10-bit) intra IRAP/IDR | MP4/MOV (`hvc1`/`hev1`), MKV (`V_MPEGH/ISO/HEVC`), HEIC/HEIF primary image | ✅ | `gen2brain/h265` via `internal/hevcdecode`; keyframe snap by default; Main 10 decoded to 8-bit thumbs; 4:2:2/4:4:4/monochrome per h265 decoder |
+| **AV1** | — | ❌ | |
 
 ### Cover art instead of video frame
 

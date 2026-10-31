@@ -30,3 +30,7 @@ tests.
 Thumbnail VP9 decode uses **[gtsteffaniak/go-vpx](https://github.com/gtsteffaniak/go-vpx)**, a fork of [thesyncim/govpx](https://github.com/thesyncim/govpx) carrying a VP9 frame-edge entropy-context fix (BSD-3-Clause; libvpx-derived), for profile 0, 8-bit 4:2:0 packets. Non-profile-0 streams return `ErrUnsupportedProfile`.
 
 **Why a direct dependency (not vendored):** A clean-room VP9 decoder would duplicate thousands of lines of bitstream and loop-filter code already maintained as pure Go in govpx. The module is **CGO-free**, has **no WASM**, and is the same class of dependency as abema/go-mp4 for containers — one focused library for one codec. go-media wraps it in `internal/vp9decode` (BT.601 limited-range thumb output, error mapping, superframe handling) so the public API stays stable if the backend ever changes.
+
+## HEVC keyframe decode (`internal/hevcdecode`)
+
+Thumbnail HEVC decode uses **[gen2brain/h265](https://github.com/gen2brain/h265)** (MIT), a pure-Go HEVC/HEIC codec with amd64/arm64/riscv64 assembly tiers (AVX2/AVX-512 on capable x86). go-media wraps it for MP4/MKV sync-sample seek and HEIF primary items when no embedded JPEG thumbnail exists. Inter prediction is decoded when required to reach an IRAP keyframe; thumbnail mode always snaps to the keyframe at or before the seek time on video. See **`docs/DECODER_PATTERNS.md`** and **`THIRD_PARTY_NOTICES.md`** (rust_h265 / oxideav-h265 lineage in upstream h265).

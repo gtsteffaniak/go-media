@@ -33,6 +33,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/h264"
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 	"github.com/gtsteffaniak/go-media/internal/heifthumb"
+	"github.com/gtsteffaniak/go-media/internal/hevcdecode"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	ps "github.com/gtsteffaniak/go-media/internal/mpegps"
@@ -151,6 +152,11 @@ func decodeSource(r interface {
 		} else if yimg != nil {
 			return yimg, "decode", nil
 		}
+		if yimg, err := src.HEVCThumbnailYCbCr(opt.SeekPercent); err != nil {
+			return nil, "", err
+		} else if yimg != nil {
+			return yimg, "decode", nil
+		}
 		if yimg, err := src.MPEG2ThumbnailYCbCr(opt.SeekPercent); err != nil {
 			return nil, "", err
 		} else if yimg != nil {
@@ -217,7 +223,7 @@ func decodeSource(r interface {
 		if len(hdr.VideoCodecIDs) == 0 {
 			return nil, "", errs.Unsup("thumbnail", "matroska: no video track in bounded header (unknown-size cluster, truncated, or no Segment)")
 		}
-		if slices.ContainsFunc(hdr.VideoCodecIDs, matroska.IsMPEG4CodecID) && !hasThumbCodec(hdr.VideoCodecIDs) {
+		if slices.ContainsFunc(hdr.VideoCodecIDs, matroska.IsMPEG4CodecID) && !hasThumbCodec(hdr.VideoCodecIDs) && !slices.Contains(hdr.VideoCodecIDs, matroska.CodecHEVC) {
 			pic, err := matroska.MPEG4PictureAtSeek(r, size, hdr, opt.SeekPercent)
 			if err != nil {
 				return nil, "", err
@@ -226,7 +232,7 @@ func decodeSource(r interface {
 				return isobmff.PictureYCbCr(pic), "decode", nil
 			}
 		}
-		if !hasThumbCodec(hdr.VideoCodecIDs) {
+		if !hasThumbCodec(hdr.VideoCodecIDs) && !slices.Contains(hdr.VideoCodecIDs, matroska.CodecHEVC) {
 			if slices.Contains(hdr.VideoCodecIDs, "V_MPEG4/ISO/AVC") {
 				return nil, "", errs.UnsupProfile("thumbnail", "h264 in matroska")
 			}
@@ -237,6 +243,18 @@ func decodeSource(r interface {
 			return nil, "", errs.Unsup("thumbnail", "matroska: no duration, seek impossible")
 		}
 		jpegOut := opt.Format == "" || opt.Format == "jpeg"
+		if slices.Contains(hdr.VideoCodecIDs, matroska.CodecHEVC) {
+			pic, err := matroska.HEVCPictureAtSeek(r, size, hdr, opt.SeekPercent)
+			if err != nil {
+				return nil, "", err
+			}
+			if pic != nil {
+				defer pic.Release()
+				if ycc := hevcdecode.PictureThumbYCbCr(pic); ycc != nil {
+					return ycc, "decode", nil
+				}
+			}
+		}
 		if jpegOut {
 			if pic, ok := matroska.VP8PictureAtSeek(r, size, hdr, opt.SeekPercent, opt.Exact); ok {
 				if ycc := vp8decode.PictureYCbCr(pic); ycc != nil {
@@ -305,14 +323,23 @@ func decodeSource(r interface {
 		return yimg, "decode", nil
 	case format.HEIC, format.HEIF, format.AVIF:
 		data, err := heifthumb.JPEGPreview(r, size, opt.MaxWidth, opt.MaxHeight)
-		if err != nil {
+		if err == nil {
+			img, err := decodeBytes(data, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
+			if err != nil {
+				return nil, "", err
+			}
+			return img, "embedded", nil
+		}
+		var ue *errs.UnsupportedError
+		if !errors.As(err, &ue) {
 			return nil, "", err
 		}
-		img, err := decodeBytes(data, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
-		if err != nil {
+		if yimg, err := heifthumb.CodedPrimaryYCbCr(r, size); err != nil {
 			return nil, "", err
+		} else if yimg != nil {
+			return yimg, "decode", nil
 		}
-		return img, "embedded", nil
+		return nil, "", err
 	default:
 		if format.IsCameraRAW(fmtID) {
 			data, err := rawpreview.JPEGPreview(r, size, fmtID, opt.MaxWidth, opt.MaxHeight)

@@ -108,7 +108,6 @@ func TestUnsupportedMatroskaThumbnailFailsFast(t *testing.T) {
 		path    func(*testing.T) string
 		wantErr error
 	}{
-		{"hevc mkv", hevcMKV, ErrUnsupported},
 		{"h264 mkv", h264MKV, ErrUnsupportedProfile},
 	}
 	for _, tc := range cases {
@@ -130,7 +129,6 @@ func TestUnsupportedMatroskaProbeFailsFast(t *testing.T) {
 		name string
 		path func(*testing.T) string
 	}{
-		{"hevc mkv", hevcMKV},
 		{"h264 mkv", h264MKV},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
