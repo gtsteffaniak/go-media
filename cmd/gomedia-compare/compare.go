@@ -221,7 +221,7 @@ func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetCo
 	goPNG := filepath.Join(thumbDir, base+"_go.png")
 	ffPNG := filepath.Join(thumbDir, base+"_ff.png")
 
-	ffErr := ffmpegThumbnailPreset(a.Path, ffPath, seekSec, preset, kfOnly)
+	ffErr := ffmpegThumbnailPreset(a, ffPath, seekSec, preset, kfOnly)
 
 	if gErr != nil {
 		res.goErr = gErr
@@ -270,7 +270,7 @@ func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetCo
 		if err == nil {
 			if goRaw, err := media.ThumbnailRasterPNG(f2, f2.Size(), decOpt); err == nil {
 				if err := os.WriteFile(goPNG, goRaw, 0o644); err == nil {
-					if err := ffmpegRasterPNG(a.Path, ffPNG, seekSec, rasterPreset, false); err == nil {
+					if err := ffmpegRasterPNG(a, ffPNG, seekSec, rasterPreset, false); err == nil {
 						if dPSNR, dSSIM, err := imagePSNRSSIM(ffPNG, goPNG); err == nil {
 							res.PSNRDecode = dPSNR
 							res.SSIMDecode = dSSIM

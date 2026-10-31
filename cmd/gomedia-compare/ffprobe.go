@@ -213,15 +213,17 @@ func ffmpegThumbScaleFlags(preset thumbnailPresetConfig, keyframeOnly bool) stri
 	return preset.FFScale
 }
 
-func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
+func ffmpegThumbnailPreset(a Asset, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
 	}
-	// Pinned ffmpeg 9.0.2 static build segfaults on -ss with MPEG-TS; decode from start.
-	if tsLikeContainer(path) {
-		seekSec = 0
+	inputPath, cleanup, err := ffmpegThumbInput(a.Path, a.ID)
+	if err != nil {
+		return err
 	}
+	defer cleanup()
+	path := inputPath
 	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
 		preset.MaxWidth, preset.MaxHeight, scaleFlags)
@@ -231,7 +233,7 @@ func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailP
 		args = append(args, "-skip_frame", "nokey", "-skip_loop_filter", "all")
 	}
 	args = append(args, "-threads", "1")
-	inputFirst := tsLikeContainer(path)
+	inputFirst := tsLikeContainer(a.Path)
 	if seekSec > 0.001 && !inputFirst {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
 	}
@@ -253,11 +255,17 @@ func tsLikeContainer(path string) bool {
 }
 
 // ffmpegRasterPNG writes a lossless PNG frame using the same seek/scale as thumbnails.
-func ffmpegRasterPNG(path, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
+func ffmpegRasterPNG(a Asset, dest string, seekSec float64, preset thumbnailPresetConfig, keyframeOnly bool) error {
 	ffmpeg, err := lookFFmpeg()
 	if err != nil {
 		return err
 	}
+	inputPath, cleanup, err := ffmpegThumbInput(a.Path, a.ID)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	path := inputPath
 	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
 		preset.MaxWidth, preset.MaxHeight, scaleFlags)

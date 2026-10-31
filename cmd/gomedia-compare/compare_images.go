@@ -14,11 +14,14 @@ import (
 
 func appendImageCompareAssets(outDir string) ([]Asset, error) {
 	j320 := synthCompareJPEG(320, 240)
+	j640 := synthCompareJPEG(640, 480)
 	heic := heifthumb.SynthJPEGHEIF(j320, 2, 1)
-	dng := rawpreview.SynthTIFFJPEG(synthCompareJPEG(640, 480))
+	dng := rawpreview.SynthTIFFJPEG(j640)
 
 	heicPath := filepath.Join(outDir, "image/heic_jpeg_thumb.heic")
 	dngPath := filepath.Join(outDir, "image/raw_dng_preview.dng")
+	heicRef := filepath.Join(outDir, "image/heic_jpeg_thumb_embed.jpg")
+	dngRef := filepath.Join(outDir, "image/raw_dng_preview_embed.jpg")
 	if err := os.MkdirAll(filepath.Dir(heicPath), 0o755); err != nil {
 		return nil, err
 	}
@@ -26,6 +29,12 @@ func appendImageCompareAssets(outDir string) ([]Asset, error) {
 		return nil, err
 	}
 	if err := os.WriteFile(dngPath, dng, 0o644); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(heicRef, j320, 0o644); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(dngRef, j640, 0o644); err != nil {
 		return nil, err
 	}
 	return []Asset{

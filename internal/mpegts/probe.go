@@ -82,6 +82,11 @@ type Meta struct {
 	VideoTyp byte
 }
 
+// VideoES concatenates PES payloads for the primary video PID (Annex B for H.264).
+func VideoES(r io.ReaderAt, size int64, meta *Meta) ([]byte, error) {
+	return concatVideoES(r, size, meta)
+}
+
 // Probe parses PAT/PMT and estimates duration from the highest video PTS seen.
 func Probe(r io.ReaderAt, size int64) (*Meta, error) {
 	lay, ok := DetectLayout(r, size)
@@ -92,8 +97,6 @@ func Probe(r io.ReaderAt, size int64) (*Meta, error) {
 	var pmtPID uint16
 	var videoPID uint16
 	var videoType byte
-	var maxPTS uint64
-	var havePTS bool
 
 	pktBuf := make([]byte, packetSize)
 	br := bitreader.NewReader(nil)
@@ -131,22 +134,52 @@ func Probe(r io.ReaderAt, size int64) (*Meta, error) {
 				}
 			}
 		}
-		if videoPID != 0 && uint16(p.PID) == videoPID && p.PayloadUnitStartIndicator {
-			if pts, ok := peekPESPTS(p.Payload); ok && pts >= maxPTS {
-				maxPTS = pts
-				havePTS = true
-			}
-		}
 	}
 	if len(m.Streams) == 0 {
 		return nil, errs.Unsup("probe", "mpegts: no program map in bounded scan")
 	}
 	m.VideoPID = videoPID
 	m.VideoTyp = videoType
-	if havePTS {
-		m.Duration = float64(maxPTS) / 90000.0
+	if videoPID != 0 {
+		if minPTS, maxPTS, ok := scanVideoPTSRange(r, size, lay, videoPID); ok {
+			m.Duration = float64(maxPTS-minPTS) / 90000.0
+		}
 	}
 	return m, nil
+}
+
+func scanVideoPTSRange(r io.ReaderAt, size int64, lay Layout, videoPID uint16) (minPTS, maxPTS uint64, ok bool) {
+	pktBuf := make([]byte, packetSize)
+	br := bitreader.NewReader(nil)
+	p := &Packet{}
+	for off := int64(0); off+int64(lay.Stride) <= size; off += int64(lay.Stride) {
+		rec := make([]byte, lay.Stride)
+		n, _ := ioat.ReadRange(r, size, off, rec)
+		if n < lay.Stride {
+			break
+		}
+		copy(pktBuf, rec[lay.Offset:lay.Offset+packetSize])
+		if pktBuf[0] != SyncByte {
+			continue
+		}
+		br = bitreader.NewReader(bytes.NewReader(pktBuf))
+		if err := p.Next(br); err != nil {
+			continue
+		}
+		if uint16(p.PID) != videoPID || !p.PayloadUnitStartIndicator {
+			continue
+		}
+		if pts, ok2 := peekPESPTS(p.Payload); ok2 {
+			if !ok || pts < minPTS {
+				minPTS = pts
+			}
+			if !ok || pts >= maxPTS {
+				maxPTS = pts
+			}
+			ok = true
+		}
+	}
+	return minPTS, maxPTS, ok
 }
 
 type program struct {
@@ -163,7 +196,7 @@ func parsePAT(payload []byte) []program {
 	if secLen+3 > len(p) {
 		return nil
 	}
-	body := p[8 : 8+secLen-5]
+	body := p[8 : len(p)-4]
 	var out []program
 	for i := 0; i+4 <= len(body); i += 4 {
 		pn := uint16(body[i])<<8 | uint16(body[i+1])
@@ -184,13 +217,18 @@ func parsePMT(payload []byte) []Stream {
 	}
 	progInfoLen := int(p[10]&0x0f)<<8 | int(p[11])
 	off := 12 + progInfoLen
-	end := 8 + secLen - 4
+	end := len(p) - 4
 	var streams []Stream
 	for off+5 <= end && off+5 <= len(p) {
 		st := p[off]
 		pid := uint16(p[off+1]&0x1f)<<8 | uint16(p[off+2])
 		esInfoLen := int(p[off+3]&0x0f)<<8 | int(p[off+4])
-		streams = append(streams, Stream{PID: pid, StreamType: st, Codec: streamTypeName(st)})
+		codec := streamTypeName(st)
+		if len(codec) >= 2 && codec[0] == '0' && codec[1] == 'x' {
+			off += 5 + esInfoLen
+			continue
+		}
+		streams = append(streams, Stream{PID: pid, StreamType: st, Codec: codec})
 		off += 5 + esInfoLen
 	}
 	return streams

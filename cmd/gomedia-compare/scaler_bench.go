@@ -58,7 +58,7 @@ func medianFFmpegThumb(a Asset, preset thumbnailPresetConfig) float64 {
 	for i := 0; i < timingWarmup+timingRuns; i++ {
 		start := time.Now()
 		kf := assetH264KeyframeOnly(a)
-		_ = ffmpegThumbnailPreset(a.Path, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
+		_ = ffmpegThumbnailPreset(a, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
 		samples = append(samples, msSince(start))
 	}
 	sort.Float64s(samples)
@@ -124,7 +124,7 @@ func scalerQuality(a Asset, preset thumbnailPresetConfig, filter media.Thumbnail
 	ffPath := filepath.Join(thumbDir, base+"_ff.jpg")
 	_ = os.WriteFile(goPath, tr.Data, 0o644)
 	kf := assetH264KeyframeOnly(a)
-	_ = ffmpegThumbnailPreset(a.Path, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
+	_ = ffmpegThumbnailPreset(a, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
 	psnr, ssim, err := imagePSNRSSIM(ffPath, goPath)
 	if err != nil {
 		return 0, 0

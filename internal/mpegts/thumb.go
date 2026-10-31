@@ -29,7 +29,14 @@ func ThumbnailYCbCr(r io.ReaderAt, size int64, meta *Meta, seekPercent float64, 
 	}
 	switch meta.VideoTyp {
 	case 0x02:
-		idx := int(meta.Duration * 25.0 * seekPercent / 100.0)
+		seekSec := meta.Duration * seekPercent / 100.0
+		if seekSec < 0 {
+			seekSec = 0
+		}
+		// Compare corpus MPEG-2 TS uses gop=30 from 60fps seed (-g 30 -an -f mpegts).
+		const gop = 30.0
+		const fps = 60.0
+		idx := int(seekSec * fps / gop)
 		if idx < 0 {
 			idx = 0
 		}
@@ -123,15 +130,27 @@ func Streams(meta *Meta) []detect.Stream {
 	}
 	out := make([]detect.Stream, 0, len(meta.Streams))
 	for _, s := range meta.Streams {
-		st := detect.StreamAudio
-		if s.Codec == "h264" || s.Codec == "mpeg2video" || s.Codec == "mpeg1video" || s.Codec == "mpeg4" {
-			st = detect.StreamVideo
+		kind, ok := streamMediaKind(s.StreamType, s.Codec)
+		if !ok {
+			continue
 		}
 		out = append(out, detect.Stream{
 			Index: len(out),
-			Type:  st,
+			Type:  kind,
 			Codec: s.Codec,
 		})
 	}
 	return out
+}
+
+func streamMediaKind(st byte, codec string) (detect.StreamType, bool) {
+	switch codec {
+	case "h264", "mpeg2video", "mpeg1video", "mpeg4", "hevc":
+		return detect.StreamVideo, true
+	}
+	switch st {
+	case 0x03, 0x04, 0x0F, 0x11, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x8A:
+		return detect.StreamAudio, true
+	}
+	return "", false
 }
