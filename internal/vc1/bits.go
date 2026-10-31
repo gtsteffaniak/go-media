@@ -23,7 +23,11 @@ func (r *bitReader) peek(n int) uint32 {
 			}
 		}
 	}
-	return uint32((v << uint(r.pos&7)) >> uint(64-n))
+	w := (v << uint(r.pos&7)) >> uint(64-n)
+	if n < 32 {
+		w &= (1 << uint(n)) - 1
+	}
+	return uint32(w)
 }
 
 func (r *bitReader) skip(n int) {

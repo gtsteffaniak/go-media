@@ -57,7 +57,7 @@ func (d *intraDecoder) decodeIBlock(n int, coded, acPred bool, cs int, block *[6
 		zz := acZZTables(d.seq.resFastTX, acPred, dir == 0)
 		i := 1
 		for {
-			last, skip, val, ok := d.r.decodeAcCoeff(cs, &d.esc3LevelLen, &d.esc3RunLen, d.pq, d.dquantFrm)
+			last, skip, val, ok := d.r.decodeAcCoeff(cs, i, &d.esc3LevelLen, &d.esc3RunLen, d.pq, d.dquantFrm)
 			if !ok {
 				return errs.Corrupt
 			}

@@ -31,6 +31,7 @@ func init() {
 }
 
 func initVLCLUTs() {
+	ensureVLC2()
 	fillDC(dcLuma0[:], dcLumaLUT[0][:])
 	fillDC(dcLuma1[:], dcLumaLUT[1][:])
 	fillDC(dcChroma0[:], dcChromaLUT[0][:])
@@ -123,9 +124,6 @@ func fillLUT(lut []lutEntry, bits int, code uint32, n uint8, val int16) {
 }
 
 func (r *bitReader) vlc9(lut []lutEntry, bits int) (int16, bool) {
-	if r.left() < bits {
-		return 0, false
-	}
 	w := int(r.peek(bits))
 	e := lut[w]
 	if e.len == 0 {
@@ -136,50 +134,31 @@ func (r *bitReader) vlc9(lut []lutEntry, bits int) (int16, bool) {
 }
 
 func (r *bitReader) vlcAC(set int) (int, bool) {
-	if r.left() < acVLCBits {
+	ensureVLC2()
+	sym, ok := r.getVLC2(acVLC2[set], acVLCBits, 3)
+	if !ok {
 		return 0, false
 	}
-	w := int(r.peek(acVLCBits))
-	e := acCoeffLUT[set][w]
-	if e.len != 0 {
-		r.skip(int(e.len))
-		return int(e.val), true
-	}
-	for _, ent := range acVLCSorted[set] {
-		nb := int(ent.bits)
-		if nb <= acVLCBits || r.left() < nb {
-			continue
-		}
-		if r.peek(nb) == ent.code {
-			r.skip(nb)
-			return ent.idx, true
-		}
-	}
-	return 0, false
+	return int(sym), true
 }
 
 func (r *bitReader) vlcDC(chroma bool, table int) (int16, bool) {
-	tab := dcLumaSorted[table]
+	ensureVLC2()
+	ch := 0
 	if chroma {
-		tab = dcChromaSorted[table]
+		ch = 1
 	}
-	for _, ent := range tab {
-		nb := int(ent.bits)
-		if nb == 0 || r.left() < nb {
-			continue
-		}
-		if r.peek(nb) == ent.code {
-			r.skip(nb)
-			return ent.val, true
-		}
+	sym, ok := r.getVLC2(dcVLC2[table][ch], dcVLCBits, 3)
+	if !ok {
+		return 0, false
 	}
-	return 0, false
+	return sym, true
 }
 
 func (r *bitReader) vlcMBIntra() (int, bool) {
 	for _, ent := range mbIntraSorted {
 		nb := int(ent.bits)
-		if nb == 0 || r.left() < nb {
+		if nb == 0 {
 			continue
 		}
 		if r.peek(nb) == ent.code {
@@ -218,28 +197,35 @@ func decode210(r *bitReader) int {
 	return 2
 }
 
-func (r *bitReader) decodeAcCoeff(set int, esc3LevelLen, esc3RunLen *int, pq int, dquantfrm bool) (last bool, skip, value int, ok bool) {
+func (r *bitReader) decodeAcCoeff(set int, scanIdx int, esc3LevelLen, esc3RunLen *int, pq int, dquantfrm bool) (last bool, skip, value int, ok bool) {
 	idx, ok := r.vlcAC(set)
 	if !ok {
 		return false, 0, 0, false
 	}
 	lastIdx := acLastIndex[set]
 	size := acTableSizes[set]
-	if idx != size-1 {
-		e := acIndexDecode[set][idx]
-		skip = int(e.skip)
-		last = idx >= lastIdx || r.left() < 0
-		v := int(e.level)
-		sign := r.bit()
-		if sign {
-			v = -v
-		}
-		return last, skip, v, true
+	if idx == size-1 {
+		return r.decodeAcCoeffEscape(set, scanIdx, esc3LevelLen, esc3RunLen, pq, dquantfrm)
 	}
-	return r.decodeAcCoeffEscape(set, esc3LevelLen, esc3RunLen, pq, dquantfrm)
+	e := acIndexDecode[set][idx]
+	skip = int(e.skip)
+	last = idx >= lastIdx || r.left() < 0
+	level := int(e.level)
+	if !(last && scanIdx+skip > 63) {
+		sign := r.bit()
+		level = (level ^ -b2i(sign)) + b2i(sign)
+	}
+	return last, skip, level, true
 }
 
-func (r *bitReader) decodeAcCoeffEscape(set int, esc3LevelLen, esc3RunLen *int, pq int, dquantfrm bool) (last bool, skip, value int, ok bool) {
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func (r *bitReader) decodeAcCoeffEscape(set int, scanIdx int, esc3LevelLen, esc3RunLen *int, pq int, dquantfrm bool) (last bool, skip, value int, ok bool) {
 	lastIdx := acLastIndex[set]
 	size := acTableSizes[set]
 	escape := decode210(r)
@@ -265,9 +251,9 @@ func (r *bitReader) decodeAcCoeffEscape(set int, esc3LevelLen, esc3RunLen *int, 
 				run += int(acDeltaRun[set][level]) + 1
 			}
 		}
-		sign := r.bit()
-		if sign {
-			level = -level
+		if !(last && scanIdx+run > 63) {
+			sign := r.bit()
+			level = (level ^ -b2i(sign)) + b2i(sign)
 		}
 		return last, run, level, true
 	}
