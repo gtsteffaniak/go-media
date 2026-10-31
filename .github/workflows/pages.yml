@@ -2,7 +2,7 @@ name: Publish comparison report
 
 # Regenerates the go-media vs ffmpeg comparison report on every push to main
 # and publishes it to the gh-pages branch, which GitHub Pages serves.
-# The gate itself runs in ci.yml; this job always publishes fresh numbers,
+# The gate itself runs in ci.yml on pull requests only; this job always publishes fresh numbers,
 # even when a case regresses, so the site shows the current state of main.
 
 on:
