@@ -32,3 +32,22 @@ func TestMPEG2TSThumbnail(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestMPEG2PSThumbnail(t *testing.T) {
+	f, err := os.Open("../../testdata/mpeg2_64x48.mpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := media.ThumbnailSmall(f, st.Size(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Width != 64 || res.Height != 48 || len(res.Data) == 0 {
+		t.Fatalf("got %dx%d, %d bytes", res.Width, res.Height, len(res.Data))
+	}
+}
