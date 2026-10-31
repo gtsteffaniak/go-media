@@ -2,7 +2,6 @@ package media
 
 import (
 	"io"
-	"strings"
 
 	"github.com/gtsteffaniak/go-media/internal/asf"
 	"github.com/gtsteffaniak/go-media/internal/avi"
@@ -129,14 +128,17 @@ func probeOther(r io.ReaderAt, size int64, id format.ID, info *ProbeInfo) (*Prob
 		info.Streams = streams
 	}
 
-	if tags, err := tagread.ReadTags(r, size, id); err == nil {
+	// One metadata read yields tags, lyrics presence and artwork presence.
+	// (Previously ReadTags, HasEmbeddedLyrics and HasArtwork each re-read it.)
+	tags, hasArt, hasLyrics, tagErr := tagread.InspectTags(r, size, id)
+	if tagErr == nil {
 		info.Tags = mapTags(tags)
 	}
-	info.HasLyrics = strings.TrimSpace(info.Tags.Raw["lyrics"]) != "" || tagread.HasEmbeddedLyrics(r, size, id)
+	info.HasLyrics = tagErr == nil && hasLyrics
 	if id == format.MP4 {
 		info.HasArtwork = isobmff.HasCover(r, size)
 	} else {
-		info.HasArtwork = tagread.HasArtwork(r, size, id)
+		info.HasArtwork = tagErr == nil && hasArt
 	}
 
 	if isMKV {
