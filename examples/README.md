@@ -7,7 +7,7 @@ import "github.com/gtsteffaniak/go-media/pkg/media"
 ```
 
 > [!NOTE]
-> Every function takes an [`io.ReaderAt`](https://pkg.go.dev/io#ReaderAt) and the file size, so it works on an `*os.File`, a `bytes.Reader`, or anything that can read at an offset (S3 range reads, `mmap`, and so on). go-media reads only what it needs, never the whole file.
+> Media parsing and thumbnail functions take an [`io.ReaderAt`](https://pkg.go.dev/io#ReaderAt) and the file size, so they work on an `*os.File`, a `bytes.Reader`, or anything that can read at an offset (S3 range reads, `mmap`, and so on). Most formats read only headers and a keyframe; MPEG-TS and MPEG-PS may scan much of the file, which matters for remote range reads.
 
 ## Contents
 
@@ -84,7 +84,9 @@ func explain(err error) {
 	var ue *media.UnsupportedError
 	if errors.As(err, &ue) {
 		log.Printf("unsupported %s: %s", ue.Op, ue.Reason)
+		return
 	}
+	log.Printf("go-media: %v", err) // includes ErrUnsupportedProfile, which names the rejected tool
 }
 ```
 
@@ -244,7 +246,7 @@ func presets(path string) error {
 | `ThumbnailPresetLarge` | 1280 × 720 | 90 | Full quality | Preview panes and lightboxes |
 
 > [!NOTE]
-> The third argument is how far into the video to look, as a percentage (0 to 100). go-media seeks to the nearest keyframe at or before that point, like `ffmpeg -ss`.
+> The third argument is how far into the video to look, as a percentage (0 to 100); `0` or less means the default of 10%. go-media seeks to the nearest keyframe at or before that point, like `ffmpeg -ss`.
 
 ### Choose size, format, quality and scaler
 

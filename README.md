@@ -28,7 +28,7 @@ Built for go programs that value speed and efficiency as the primary concern (e.
 |---|---|
 | 🖼️ **Side-by-side thumbnails** | go-media and ffmpeg output for every format, with PSNR and SSIM |
 | ⏱️ **Timing per build tier** | pure Go, pure Go + PGO (production), and PGO + SIMD |
-| ✅ **Correctness gate** | duration, probe, tags, artwork, lyrics and subtitles must match ffprobe or the build fails |
+| ✅ **Correctness gate** | Supported results must match ffmpeg or ffprobe, and unsupported cases must return a typed error, or the build fails |
 
 To build the same report locally, run `make compare` (see [`test/compare/README.md`](test/compare/README.md)).
 
@@ -40,7 +40,7 @@ To build the same report locally, run `make compare` (see [`test/compare/README.
 | ⏱️ **Duration** | From headers, with a `Source` (`header`, `estimate`, `scan`) for cache provenance |
 | 🏷️ **Tags & artwork** | ID3, MP4 `ilst`, Vorbis comments; APIC, `covr` and FLAC `PICTURE` cover art |
 | 💬 **Subtitles** | SRT, VTT, ASS/SSA sidecars plus embedded MKV and MP4 text tracks, converted to WebVTT byte-identical to `ffmpeg -f webvtt` |
-| 🖼️ **Thumbnails** | One keyframe decoded in pure Go, scaled and encoded to JPEG, PNG or lossless WebP |
+| 🖼️ **Thumbnails** | Video: one keyframe decoded in pure Go. Photos and RAW: the embedded JPEG preview. Audio: cover art. Output as JPEG, PNG or lossless WebP |
 | 🎵 **Lyrics** | Embedded lyrics and `.lrc` / `.elrc` sidecars |
 
 ### Thumbnail codecs
@@ -66,16 +66,43 @@ go get github.com/gtsteffaniak/go-media
 ```
 
 ```go
-import "github.com/gtsteffaniak/go-media/pkg/media"
+package main
 
-f, _ := os.Open("clip.mp4")
-st, _ := f.Stat()
+import (
+	"errors"
+	"fmt"
+	"log"
+	"os"
 
-info, err := media.Probe(f, st.Size())              // format, streams, tags
-thumb, err := media.ThumbnailLarge(f, st.Size(), 10) // JPEG ~10% into the video
+	"github.com/gtsteffaniak/go-media/pkg/media"
+)
 
-if errors.Is(err, media.ErrUnsupported) || errors.Is(err, media.ErrUnsupportedProfile) {
-    // hand the file to ffmpeg instead
+func main() {
+	f, err := os.Open("clip.mp4")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	info, err := media.Probe(f, st.Size()) // format, streams, tags
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(info.FormatName, info.Duration)
+
+	thumb, err := media.ThumbnailLarge(f, st.Size(), 10) // JPEG ~10% into the video
+	if errors.Is(err, media.ErrUnsupported) || errors.Is(err, media.ErrUnsupportedProfile) {
+		return // hand the file to ffmpeg instead
+	} else if err != nil {
+		log.Fatal(err)
+	}
+	if err := os.WriteFile("thumb.jpg", thumb.Data, 0o644); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 
@@ -99,9 +126,9 @@ go run . thumb clip.mkv --large thumb.jpg
 ## Design principles
 
 - **Pure Go.** `CGO_ENABLED=0`, no WASM and no bundled binaries, so it cross-compiles anywhere.
-- **Bounded work.** It reads headers and sync samples and decodes one keyframe, never the whole file.
+- **Bounded work.** For most formats it reads headers and sync samples and decodes one keyframe. MPEG-TS and MPEG-PS may scan packets across the file.
 - **Fast or honest.** A format that can't stay close to ffmpeg's speed returns `ErrUnsupported` or `ErrUnsupportedProfile` rather than being slow.
-- **Provenance.** Results carry a `Source`, so they can be cached next to ffprobe output.
+- **Provenance.** `DurationResult.Source`, `ProbeInfo.DurationSrc` and `ThumbnailResult.Source` say how a value was found, so it can be cached next to ffprobe output.
 
 > [!NOTE]
 > **Not in scope:** transcoding, streaming, playback and full HEVC/AV1 decode. Use [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) for those; go-media is the fast path in front of it.

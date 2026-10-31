@@ -3,7 +3,7 @@
 [← Back to README](../README.md) · [Examples](../examples/README.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
 
 > [!TIP]
-> The live report at [gtsteffaniak.github.io/go-media](https://gtsteffaniak.github.io/go-media/) shows all three build tiers side by side for every format.
+> The live report at [gtsteffaniak.github.io/go-media](https://gtsteffaniak.github.io/go-media/) compares the three build tiers side by side for each video fixture with timing data.
 
 End-to-end latency is gated in `test/compare` against **ffmpeg 9.0.2**. Stage detail: pprof on `internal/thumb` and `internal/h264` benches.
 

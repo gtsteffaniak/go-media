@@ -14,7 +14,7 @@ go-media's regression safety lives in the repo: every pull request is tested on 
 | 🧪 **Unit and golden tests** | `ci.yml` › `test` | `go test ./...` with `CGO_ENABLED=0` on linux/amd64 and linux/arm64, with and without `default.pgo` |
 | 🔍 **Vet** | `ci.yml` › `test` | `go vet ./...` on every matrix entry |
 | 🎲 **Fuzz smoke** | `ci.yml` › `test` (amd64, production) | SRT parser, H.264 SPS parser and IDR decode |
-| ⚡ **SIMD smoke** | `ci.yml` | `GOEXPERIMENT=simd` kernels build and pass on the latest Go |
+| ⚡ **SIMD smoke** | `ci.yml` › `test-go-latest` | Early warning that `GOEXPERIMENT=simd` kernels still build on the latest Go (non-blocking, `continue-on-error`) |
 | 📊 **ffmpeg comparison gate** | `ci.yml` › `ffmpeg comparison gate` | Correctness and timing against ffmpeg 9.0.2 ([details](#ffmpeg-comparison-gate)) |
 | 🧭 **PGO freshness** | `ci.yml` › `ffmpeg comparison gate` | `make check-pgo` warns when `default.pgo` is stale |
 | 🌐 **Report publishing** | `pages.yml` | Regenerates the report on every push to `main` and publishes it to `gh-pages` |
@@ -95,7 +95,7 @@ CI runs the first three briefly as a smoke test. Run the relevant target for lon
 Ship with the checked-in profile. It's tier 2 in the report and the build the timing gate enforces.
 
 ```sh
-CGO_ENABLED=0 go build -pgo=default.pgo ./...
+CGO_ENABLED=0 go build -pgo=default.pgo -o go-media .
 # or: export GOFLAGS=-pgo=$PWD/default.pgo
 ```
 
