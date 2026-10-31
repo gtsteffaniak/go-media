@@ -10,6 +10,8 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/mp3"
+	ts "github.com/gtsteffaniak/go-media/internal/mpegts"
+	ps "github.com/gtsteffaniak/go-media/internal/mpegps"
 	"github.com/gtsteffaniak/go-media/internal/ogg"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
@@ -82,6 +84,12 @@ func probeOther(r io.ReaderAt, size int64, id format.ID, info *ProbeInfo) (*Prob
 		info.FormatName = "mp3"
 	case format.AVI:
 		info.FormatName = "avi"
+	case format.MPEGTS:
+		info.FormatName = "mpegts"
+	case format.M2TS:
+		info.FormatName = "m2ts"
+	case format.MPEGPS:
+		info.FormatName = "mpeg"
 	case format.HEIC:
 		info.FormatName = "heic"
 	case format.HEIF:
@@ -147,6 +155,18 @@ func streamsForFormat(r io.ReaderAt, size int64, id format.ID) ([]Stream, error)
 	case format.AVI:
 		s, err := avi.Streams(r, size)
 		return mapStreams(s), mapErr(err)
+	case format.MPEGTS, format.M2TS:
+		meta, err := ts.Probe(r, size)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		return mapStreams(ts.Streams(meta)), nil
+	case format.MPEGPS:
+		meta, err := ps.Probe(r, size)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		return mapStreams(ps.Streams(meta)), nil
 	default:
 		return nil, Unsupported("streams", string(id))
 	}

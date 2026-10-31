@@ -15,6 +15,20 @@ const (
 	FormatMP3  Format = "mp3"
 	FormatAIFF Format = "aiff"
 	FormatAU   Format = "au"
+
+	FormatHEIC Format = "heic"
+	FormatHEIF Format = "heif"
+	FormatAVIF Format = "avif"
+
+	FormatCR2 Format = "cr2"
+	FormatCR3 Format = "cr3"
+	FormatNEF Format = "nef"
+	FormatARW Format = "arw"
+	FormatDNG Format = "dng"
+	FormatORF Format = "orf"
+	FormatRW2 Format = "rw2"
+	FormatRAF Format = "raf"
+	FormatPEF Format = "pef"
 )
 
 // StreamType is audio or video.

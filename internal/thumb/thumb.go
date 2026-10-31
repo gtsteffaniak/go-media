@@ -231,15 +231,6 @@ func decodeSource(r interface {
 					return &h264.ThumbYCbCr{YCbCr: ycc, CS: yuv.BT601, RNG: yuv.LimitedRange}, "decode", nil
 				}
 			}
-			if slices.Contains(hdr.VideoCodecIDs, "V_VP9") {
-				if pic, err := matroska.VP9PictureAtSeek(r, size, hdr, opt.SeekPercent); err != nil {
-					return nil, "", err
-				} else if pic != nil {
-					if ycc := vp9decode.PictureThumbYCbCr(pic); ycc != nil {
-						return ycc, "decode", nil
-					}
-				}
-			}
 		}
 		tp := matroska.ThumbnailParams{
 			SeekPercent: opt.SeekPercent,

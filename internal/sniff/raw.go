@@ -10,7 +10,7 @@ import (
 func sniffCameraRaw(r interface {
 	ReadAt([]byte, int64) (int, error)
 }, size int64) (format.ID, bool) {
-	if size < 16 {
+	if size < 8 {
 		return "", false
 	}
 	head := make([]byte, 512)
