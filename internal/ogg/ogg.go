@@ -3,6 +3,7 @@
 package ogg
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"time"
@@ -46,20 +47,32 @@ func sampleRateFromHead(buf []byte) int {
 	return 0
 }
 
+var (
+	vorbisIDPrefix = []byte("\x01vorbis")
+	opusHeadMagic  = []byte("OpusHead")
+)
+
 // vorbisSampleRate reads sample rate from the first Vorbis identification header.
+// bytes.Index uses a vectorized search for the 7-byte marker.
 func vorbisSampleRate(buf []byte) int {
 	limit := len(buf)
 	if limit > 64*1024 {
 		limit = 64 * 1024
 	}
-	for i := 0; i+16 <= limit; i++ {
-		if buf[i] != 0x01 || buf[i+1] != 'v' || buf[i+2] != 'o' || buf[i+3] != 'r' || buf[i+4] != 'b' || buf[i+5] != 'i' || buf[i+6] != 's' {
-			continue
+	for i := 0; i+16 <= limit; {
+		j := bytes.Index(buf[i:limit], vorbisIDPrefix)
+		if j < 0 {
+			return 0
+		}
+		i += j
+		if i+16 > limit {
+			return 0
 		}
 		sr := int(binary.LittleEndian.Uint32(buf[i+12 : i+16]))
 		if sr >= 8000 && sr <= 384000 {
 			return sr
 		}
+		i++
 	}
 	return 0
 }
@@ -68,13 +81,18 @@ func vorbisSampleRate(buf []byte) int {
 func opusSampleRate(buf []byte) int {
 	i := 0
 	for i+8 < len(buf) {
-		if buf[i] == 'O' && buf[i+1] == 'p' && buf[i+2] == 'u' && buf[i+3] == 's' && buf[i+4] == 'H' && buf[i+5] == 'e' && buf[i+6] == 'a' && buf[i+7] == 'd' {
-			if i+16 <= len(buf) {
-				return int(binary.LittleEndian.Uint32(buf[i+12 : i+16]))
-			}
-			return 48000
+		j := bytes.Index(buf[i:], opusHeadMagic)
+		if j < 0 {
+			return 0
 		}
-		i++
+		i += j
+		if i+8 >= len(buf) {
+			return 0
+		}
+		if i+16 <= len(buf) {
+			return int(binary.LittleEndian.Uint32(buf[i+12 : i+16]))
+		}
+		return 48000
 	}
 	return 0
 }
