@@ -29,7 +29,7 @@ Production: portable DSP + `-pgo=default.pgo`. Tier 3 (diagnostic): `GOEXPERIMEN
 | MKV | Cluster walk to keyframe ≤ target time | `CodecPrivate` (hvcC) | Length-prefixed or lace demux |
 | HEIC | Primary item (no seek) | `hvcC` on item | `iloc` extent; JPEG `thmb` first |
 
-Default thumbnail mode: **keyframe at or before** seek time (same as ffmpeg `-ss` before `-i`). `ThumbnailOptions.Exact` remains VP8/VP9-only unless forward decode is cheap.
+Default thumbnail mode: **keyframe at or before** seek time (one IRAP/IDR decode). That matches go-media’s sync-sample / Matroska keyframe pick, not a naive `ffmpeg -ss` before `-i` (accurate seek decodes forward from the preceding keyframe). The compare harness aligns ffmpeg with `ffprobe` keyframe time for intra assets (`assetIntraSeekOnly`). `ThumbnailOptions.Exact` remains VP8/VP9-only unless forward decode is cheap.
 
 ## Compare gate
 

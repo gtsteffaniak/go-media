@@ -27,10 +27,13 @@ func CodedPrimaryYCbCr(r io.ReaderAt, size int64) (*h264.ThumbYCbCr, error) {
 		return &h264.ThumbYCbCr{YCbCr: v, CS: colorFromCI(ci), RNG: rangeFromCI(ci)}, nil
 	case *image.Gray:
 		ycc := image.NewYCbCr(v.Rect, image.YCbCrSubsampleRatio420)
-		for i := range ycc.Y {
-			ycc.Y[i] = v.Pix[i]
-			ycc.Cb[i/4] = 128
-			ycc.Cr[i/4] = 128
+		w, h := v.Rect.Dx(), v.Rect.Dy()
+		for y := 0; y < h; y++ {
+			copy(ycc.Y[y*ycc.YStride:y*ycc.YStride+w], v.Pix[y*v.Stride:y*v.Stride+w])
+		}
+		for i := range ycc.Cb {
+			ycc.Cb[i] = 128
+			ycc.Cr[i] = 128
 		}
 		return &h264.ThumbYCbCr{YCbCr: ycc, CS: colorFromCI(ci), RNG: rangeFromCI(ci)}, nil
 	default:
