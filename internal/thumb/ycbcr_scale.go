@@ -9,6 +9,7 @@ import (
 
 	"github.com/gtsteffaniak/go-media/internal/h264"
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
+	"github.com/gtsteffaniak/go-media/internal/kernels"
 )
 
 type yccRGB func(yy, cb, cr byte) (r, g, b byte)
@@ -38,6 +39,9 @@ func scaleYCbCrArea(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccA
 		for cur.Bounds().Dx() > dstW*2 && cur.Bounds().Dy() > dstH*2 {
 			cur = halveYCbCr(cur)
 		}
+	}
+	if rgbTile && lut != nil && cur.SubsampleRatio == image.YCbCrSubsampleRatio420 && cur.Rect.Min.X%2 == 0 {
+		return scaleYCbCrAreaRGBRows(cur, dstW, dstH, lut)
 	}
 	if dstW*dstH <= 512*512 {
 		return scaleYCbCrAreaSerial(cur, dstW, dstH, toRGB, rgbTile, lut)
@@ -152,6 +156,77 @@ func writeAreaTilePixel(dst *image.RGBA, di int, src *image.YCbCr, sx0, sx1, sy0
 		dst.Pix[di+0], dst.Pix[di+1], dst.Pix[di+2] = toRGB(yy, cb, cr)
 	}
 	dst.Pix[di+3] = 255
+}
+
+// scaleYCbCrAreaRGBRows is the 4:2:0 RGB-tile area scaler restructured by rows:
+// each source row is converted to RGB once and summed into per-column
+// accumulators (kernels.RGBAccumRow420, AVX2 when enabled), then every output
+// pixel reduces its tile's columns. Output is identical to writeAreaTilePixel.
+func scaleYCbCrAreaRGBRows(src *image.YCbCr, dstW, dstH int, lut *yuv.RGBLUT) *image.RGBA {
+	sb := src.Bounds()
+	sw, sh := sb.Dx(), sb.Dy()
+	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+	workers := 1
+	if dstW*dstH > 512*512 {
+		workers = runtime.GOMAXPROCS(0)
+		if workers > dstH {
+			workers = dstH
+		}
+	}
+	rowsPer := (dstH + workers - 1) / workers
+	run := func(yStart, yEnd int) {
+		acc := make([]int32, 3*sw)
+		accR, accG, accB := acc[:sw], acc[sw:2*sw], acc[2*sw:]
+		r0 := src.Rect.Min
+		for dy := yStart; dy < yEnd; dy++ {
+			sy0 := sb.Min.Y + (dy*sh)/dstH
+			sy1 := sb.Min.Y + ((dy+1)*sh)/dstH
+			if sy1 <= sy0 {
+				sy1 = sy0 + 1
+			}
+			clear(acc)
+			for sy := sy0; sy < sy1; sy++ {
+				yo := (sy-r0.Y)*src.YStride + (sb.Min.X - r0.X)
+				co := (sy/2-r0.Y/2)*src.CStride + (sb.Min.X/2 - r0.X/2)
+				kernels.RGBAccumRow420(accR, accG, accB, src.Y[yo:yo+sw], src.Cb[co:], src.Cr[co:], lut)
+			}
+			rows := sy1 - sy0
+			for dx := 0; dx < dstW; dx++ {
+				x0 := (dx * sw) / dstW
+				x1 := ((dx + 1) * sw) / dstW
+				if x1 <= x0 {
+					x1 = x0 + 1
+				}
+				var rs, gs, bs int32
+				for x := x0; x < x1; x++ {
+					rs += accR[x]
+					gs += accG[x]
+					bs += accB[x]
+				}
+				n := int32(rows * (x1 - x0))
+				di := dy*dst.Stride + dx*4
+				dst.Pix[di+0] = byte((rs + n/2) / n)
+				dst.Pix[di+1] = byte((gs + n/2) / n)
+				dst.Pix[di+2] = byte((bs + n/2) / n)
+				dst.Pix[di+3] = 255
+			}
+		}
+	}
+	if workers == 1 {
+		run(0, dstH)
+		return dst
+	}
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		y0, y1 := w*rowsPer, min((w+1)*rowsPer, dstH)
+		if y0 >= y1 {
+			continue
+		}
+		wg.Add(1)
+		go func() { defer wg.Done(); run(y0, y1) }()
+	}
+	wg.Wait()
+	return dst
 }
 
 func scaleYCbCrAreaSerial(src *image.YCbCr, dstW, dstH int, toRGB yccRGB, rgbTile yccAreaMode, lut *yuv.RGBLUT) *image.RGBA {

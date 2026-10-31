@@ -24,6 +24,8 @@ Dispatch (`internal/kernels/h264/simd_cpu.go`, `simd_kernel_flags.go`), modelled
 |--------|------|--------|----------------------|
 | `idct_add_pair` | AVX2 | two adjacent 4×4 blocks per `Int32x8`, one block per 128-bit lane; transpose, butterfly, round, add and clip fused | 11.5 vs 85 portable (7×) |
 | `idct_add_quad_avx512` | AVX-512 | four blocks (one macroblock row) per `Int32x16`; one 16-byte store per row | 18 vs 23 for two AVX2 pairs, 175 portable |
+| `idct_add_block` | AVX2 | one 4×4 block for the sequential I4x4 path; 128-bit transform, two rows per `Int32x8` for add and clip | 9.5 vs 50 portable (5×) |
+| `rgb_area_row` (`internal/kernels`) | AVX2 | 8 pixels per step: YCbCr to RGB by `VPMULLD` (the LUT tables are exactly linear), summed into per-column row accumulators for the area downscaler | 1080p to 320 wide: 2.6 ms vs 7.8 ms pure Go rows, 11.2 ms old per-tile loop |
 | everything else (`idct4x4`, `idct8x8`, `dequant4x4`, `recon4x4`, `intra*`, `idct_add16`, `ycbcr_row`) | off | scalar butterflies around one vector load/store per block; lost to portable | n/a |
 
 arm64 has no kernel: Go 1.27's `archsimd` on arm64 cannot reinterpret `Int32x4` as 64-bit lanes (no `AsInt64x2`), which the 4×4 transpose needs, so M-series chips run the purego+PGO path.
@@ -58,3 +60,15 @@ Report tiers: `make compare-gate` → `report.json` `buildModeTimings`; `bash sc
 
 - [Go simd experiment](https://go.dev/blog/simd) — `GOEXPERIMENT=simd`, `GODEBUG=simd=0`
 - [PROFILING.md](PROFILING.md) — gate vs tiers, pprof commands
+
+## Clear the upper register halves
+
+Every kernel that touches 256- or 512-bit registers ends with
+`archsimd.ClearAVXUpperBits()` (`VZEROUPPER`). Ordinary Go code (memmove, the
+X15 zero register, float math) uses legacy SSE encodings, and dirty upper YMM
+bits make each of those instructions pay a false-dependency penalty until the
+next `VZEROUPPER`. Without it the single-block IDCT kernel was 5× faster in
+isolation but made the whole Baseline decode about 12% slower. The
+`TestSIMDKernelsClearUpperBits` and `TestRGBAccumRow420SIMDAsm` tests check the
+compiled binaries for it.
+
