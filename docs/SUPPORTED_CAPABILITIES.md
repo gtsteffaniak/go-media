@@ -261,7 +261,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | Capability | Containers | Status |
 |------------|------------|:------:|
 | MP4 sync sample index | `.mp4`, `.mov`, `.m4v`, `.3gp` | ✅ |
-| Keyframe (IDR / open-GOP) decode to RGB/YUV | H.264 in MP4/MOV/MKV | ✅ | For MKV, `H264KeyframeTimeSec` returns the keyframe block timestamp |
+| Keyframe (IDR / open-GOP) decode to RGB/YUV (for MKV, `H264KeyframeTimeSec` returns the keyframe block timestamp) | H.264 in MP4/MOV/MKV | ✅ |
 | Gated profiles (`ErrUnsupportedProfile`) | — | — | Profiles that fail timing gate in `gatedProfiles` (`internal/h264/sps.go`); none gated today |
 
 ---
