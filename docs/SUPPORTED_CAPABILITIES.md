@@ -67,7 +67,9 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 | OGG (Vorbis / Opus) | ✅ | Last page granule position |
 | MP3 | 🟡 | Xing / Info / VBRI; else CBR frame-header estimate |
 | AIFF, AU | 📋 | |
-| AAC (ADTS), TS, AVI, FLV, WMV, ASF | ❌ | |
+| MPEG-TS, M2TS, MPEG-PS | 🟡 | Bounded PTS / pack scan |
+| AVI | 🟡 | `avih` / stream header |
+| AAC (ADTS), FLV, WMV, ASF | ❌ | |
 
 ---
 
@@ -83,7 +85,9 @@ Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/READM
 |-----------|:------:|----------------|
 | `.mp4`, `.m4v`, `.mov`, `.3gp` | ✅ | H.264, MJPEG, … via `stsd` / `tkhd` |
 | `.mkv`, `.webm` | ✅ | Codecs via `Tracks`, named with ffprobe codec names |
-| TS, AVI, FLV, WMV | ❌ | |
+| `.ts`, `.m2ts`, `.mpg` | 🟡 | PAT/PMT bounded scan |
+| `.avi` | 🟡 | `strh`/`strf` video stream |
+| FLV, WMV, ASF | ❌ | |
 
 ### Audio containers
 
@@ -126,7 +130,7 @@ MP4 sample entries (AV1, ProRes, PCM, AC-3, E-AC-3, Opus, FLAC) and MKV codec ID
 | FLAC `PICTURE` | `.flac` | ✅ |
 | Vorbis cover (METADATA_BLOCK_PICTURE) | `.ogg` | 🟡 |
 | MKV attachments | `.mkv`, `.webm` | 📋 |
-| HEIC/AVIF embedded preview | `.heic` | 🔬 |
+| HEIC/HEIF/AVIF embedded JPEG (thumbnail API) | `.heic`, `.heif`, `.avif` | ✅ | Not `EmbeddedArtwork()`; use `Thumbnail()` |
 
 ---
 

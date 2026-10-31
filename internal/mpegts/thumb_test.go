@@ -21,7 +21,7 @@ func TestTSProbeFixture(t *testing.T) {
 	t.Logf("video pid=%x type=%x dur=%v streams=%d", meta.VideoPID, meta.VideoTyp, meta.Duration, len(meta.Streams))
 	y, err := ts.ThumbnailYCbCr(f, st.Size(), meta, 10, true)
 	if err != nil {
-		t.Skip(err)
+		t.Fatal(err)
 	}
 	if y == nil {
 		t.Fatal("nil")

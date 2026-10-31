@@ -1014,12 +1014,12 @@
     {
       "assetId": "mpegts_mpeg2",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mpegts_mpeg2",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "heic_jpeg_thumb",

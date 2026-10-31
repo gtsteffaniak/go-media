@@ -29,6 +29,6 @@ func TestMPEG2TSThumbnail(t *testing.T) {
 	st, _ := f.Stat()
 	_, err = media.ThumbnailSmall(f, st.Size(), 10)
 	if err != nil {
-		t.Skip("mpeg2 TS keyframe thumbnail: " + err.Error())
+		t.Fatal(err)
 	}
 }
