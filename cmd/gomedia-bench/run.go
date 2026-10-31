@@ -1,0 +1,149 @@
+package main
+
+import (
+	"bytes"
+	"flag"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
+	"time"
+)
+
+// suites maps a suite name to the packages it runs. "e2e" is the public-API
+// benchmark package in bench/; "internal" holds the per-package micro
+// benchmarks that already live next to the code they measure.
+var suites = map[string][]string{
+	"e2e": {"./bench/"},
+	"internal": {
+		"./internal/thumb/",
+		"./internal/isobmff/",
+		"./internal/matroska/",
+		"./internal/h264/",
+		"./internal/h264/cleanroom/decode/",
+		"./internal/kernels/h264/",
+		"./internal/mpeg4/",
+	},
+}
+
+var labelRE = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// cmdRun runs the selected suites with go test -bench and stores the raw
+// output in <out>/<label>/<suite>.txt, plus a meta.txt describing the host
+// and source revision so results can be compared later.
+func cmdRun(args []string) error {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	label := fs.String("label", "", "result label, e.g. baseline or opt-h264-idct (required)")
+	suite := fs.String("suite", "all", "e2e, internal or all")
+	count := fs.Int("count", 5, "go test -count: repetitions per benchmark")
+	benchtime := fs.String("benchtime", "1s", "go test -benchtime per repetition (e.g. 1s or 20x)")
+	filter := fs.String("bench", ".", "go test -bench regexp")
+	pgo := fs.Bool("pgo", true, "build with -pgo=default.pgo (production profile)")
+	cpu := fs.Int("cpu", 1, "go test -cpu (GOMAXPROCS); 1 matches the compare harness timing")
+	outDir := fs.String("out", "bench/results", "results directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if !labelRE.MatchString(*label) {
+		return fmt.Errorf("-label is required and must match %s", labelRE)
+	}
+	if *count < 1 {
+		return fmt.Errorf("-count must be >= 1")
+	}
+	if _, err := os.Stat("go.mod"); err != nil {
+		return fmt.Errorf("run from the go-media repository root (go.mod not found)")
+	}
+	var names []string
+	switch *suite {
+	case "all":
+		names = []string{"e2e", "internal"}
+	case "e2e", "internal":
+		names = []string{*suite}
+	default:
+		return fmt.Errorf("unknown suite %q", *suite)
+	}
+
+	dir := filepath.Join(*outDir, *label)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	meta := hostMeta(*count, *benchtime, *filter, *pgo, *cpu)
+	if err := os.WriteFile(filepath.Join(dir, "meta.txt"), []byte(meta), 0o644); err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		pkgs := suites[name]
+		argv := []string{"test", "-run", "^$", "-bench", *filter, "-benchmem",
+			"-count", fmt.Sprint(*count), "-benchtime", *benchtime,
+			"-cpu", fmt.Sprint(*cpu), "-timeout", "120m"}
+		if *pgo {
+			argv = append(argv, "-pgo=default.pgo")
+		}
+		argv = append(argv, pkgs...)
+		fmt.Printf("== suite %s: go %s\n", name, strings.Join(argv, " "))
+		var out bytes.Buffer
+		cmd := exec.Command("go", argv...)
+		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+		cmd.Stdout = &out
+		cmd.Stderr = os.Stderr
+		start := time.Now()
+		runErr := cmd.Run()
+		fmt.Printf("   finished in %s\n", time.Since(start).Round(time.Second))
+		path := filepath.Join(dir, name+".txt")
+		if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
+			return err
+		}
+		if runErr != nil {
+			return fmt.Errorf("suite %s failed (%v); partial output kept in %s", name, runErr, path)
+		}
+	}
+	fmt.Printf("results written to %s\n", dir)
+	return nil
+}
+
+// hostMeta records what produced a result set.
+func hostMeta(count int, benchtime, filter string, pgo bool, cpu int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "date: %s\n", time.Now().Format(time.RFC3339))
+	fmt.Fprintf(&b, "go: %s\n", runtime.Version())
+	fmt.Fprintf(&b, "goos/goarch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintf(&b, "cpu: %s\n", cpuModel())
+	fmt.Fprintf(&b, "logical_cpus: %d\n", runtime.NumCPU())
+	fmt.Fprintf(&b, "git: %s\n", gitRev())
+	fmt.Fprintf(&b, "count: %d\nbenchtime: %s\nbench: %s\npgo: %v\ncpu: %d\n", count, benchtime, filter, pgo, cpu)
+	return b.String()
+}
+
+func cpuModel() string {
+	if runtime.GOOS == "darwin" {
+		if out, err := exec.Command("sysctl", "-n", "machdep.cpu.brand_string").Output(); err == nil {
+			return strings.TrimSpace(string(out))
+		}
+	}
+	if runtime.GOOS == "linux" {
+		if b, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+			for _, line := range strings.Split(string(b), "\n") {
+				if k, v, ok := strings.Cut(line, ":"); ok && strings.TrimSpace(k) == "model name" {
+					return strings.TrimSpace(v)
+				}
+			}
+		}
+	}
+	return "unknown"
+}
+
+func gitRev() string {
+	out, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return "unknown"
+	}
+	dirty := ""
+	if st, err := exec.Command("git", "status", "--porcelain").Output(); err == nil && len(bytes.TrimSpace(st)) > 0 {
+		dirty = "+dirty"
+	}
+	return strings.TrimSpace(string(out)) + dirty
+}
