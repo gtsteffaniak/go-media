@@ -9,8 +9,8 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/rawpreview"
 )
 
-// appendImageCompareAssets builds the HEIC and DNG fixtures from a Big Buck
-// Bunny frame (the same seed clip as every video fixture), so all report
+// appendImageCompareAssets builds the HEIC and DNG fixtures from the reference
+// clip frame (the same seed clip as every video fixture), so all report
 // thumbnails show the same source.
 func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 	dir := filepath.Join(outDir, "image")

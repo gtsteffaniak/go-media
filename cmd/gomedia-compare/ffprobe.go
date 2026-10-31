@@ -427,7 +427,7 @@ func ffprobeKeyframeAtOrBefore(path string, sec float64) (float64, bool) {
 // keyframe at or before the seek point instead of the exact frame.
 func assetIntraSeekOnly(id string) bool {
 	switch id {
-	case "mpegts_mpeg2", "mpegts_h264", "avi_h264", "avi_mpeg4":
+	case "mpegts_mpeg2", "mpegts_h264", "avi_h264", "avi_mpeg4", "asf_wmv3":
 		return true
 	}
 	return false
