@@ -16,34 +16,36 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 	if size < 12 {
 		return detect.DurationResult{}, errs.Corrupt
 	}
-	hdr := make([]byte, 12)
-	if _, err := r.ReadAt(hdr, 0); err != nil {
+	// One scratch buffer serves the RIFF header, chunk headers and fmt body.
+	// It is only passed to ReadAt, so a single allocation covers all reads.
+	buf := make([]byte, 16)
+	if _, err := r.ReadAt(buf[:12], 0); err != nil {
 		return detect.DurationResult{}, err
 	}
-	if string(hdr[0:4]) != "RIFF" || string(hdr[8:12]) != "WAVE" {
+	if string(buf[0:4]) != "RIFF" || string(buf[8:12]) != "WAVE" {
 		return detect.DurationResult{}, errs.NotMedia
 	}
 	var byteRate uint32
 	var dataSize int64
 	pos := int64(12)
 	for pos+8 <= size {
-		ch := make([]byte, 8)
+		ch := buf[:8]
 		if _, err := r.ReadAt(ch, pos); err != nil {
 			break
 		}
-		id := string(ch[0:4])
+		isData := string(ch[0:4]) == "data"
 		sz := int64(binary.LittleEndian.Uint32(ch[4:8]))
-		switch id {
-		case "fmt ":
+		switch {
+		case string(ch[0:4]) == "fmt ":
 			if sz >= 16 && pos+8+16 <= size {
-				fmtb := make([]byte, 16)
+				fmtb := buf[:16]
 				_, _ = r.ReadAt(fmtb, pos+8)
 				byteRate = binary.LittleEndian.Uint32(fmtb[8:12])
 			}
-		case "data":
+		case isData:
 			dataSize = sz
 		}
-		if id == "data" {
+		if isData {
 			break
 		}
 		pos += 8 + sz
@@ -65,16 +67,16 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 	}
 	var channels uint16
 	var sampleRate uint32
+	buf := make([]byte, 16)
 	pos := int64(12)
 	for pos+8 <= size {
-		ch := make([]byte, 8)
+		ch := buf[:8]
 		if _, err := r.ReadAt(ch, pos); err != nil {
 			break
 		}
-		id := string(ch[0:4])
 		sz := int64(binary.LittleEndian.Uint32(ch[4:8]))
-		if id == "fmt " && sz >= 16 && pos+8+16 <= size {
-			fmtb := make([]byte, 16)
+		if string(ch[0:4]) == "fmt " && sz >= 16 && pos+8+16 <= size {
+			fmtb := buf[:16]
 			_, _ = r.ReadAt(fmtb, pos+8)
 			channels = binary.LittleEndian.Uint16(fmtb[2:4])
 			sampleRate = binary.LittleEndian.Uint32(fmtb[4:8])
