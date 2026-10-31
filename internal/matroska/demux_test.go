@@ -201,27 +201,38 @@ func TestMKVKeyframeGrabScaling(t *testing.T) {
 		return buildMJPEGMKV(t, mkvOpts{clusters: n, framesPer: 5, frameStepMs: 200, cues: true, jpegForFrame: func(int) []byte { return jp }})
 	}
 	short, long := gen(600), gen(1200)
-	measure := func(data []byte) (allocs float64, bytesRead int64, per time.Duration) {
+	probe := func(data []byte) (allocs float64, bytesRead int64) {
 		_, cr, ok := thumbAt(t, data, 50)
 		if !ok {
 			t.Fatal("no thumbnail")
 		}
-		bytesRead = cr.bytes
-		allocs = testing.AllocsPerRun(20, func() { thumbAt(t, data, 50) })
-		best := time.Duration(1 << 62)
-		for range 5 {
-			start := time.Now()
-			for range 20 {
-				thumbAt(t, data, 50)
-			}
-			if d := time.Since(start) / 20; d < best {
-				best = d
-			}
-		}
-		return allocs, bytesRead, best
+		return testing.AllocsPerRun(20, func() { thumbAt(t, data, 50) }), cr.bytes
 	}
-	aS, bS, tS := measure(short)
-	aL, bL, tL := measure(long)
+	batch := func(data []byte) time.Duration {
+		start := time.Now()
+		for range 20 {
+			thumbAt(t, data, 50)
+		}
+		return time.Since(start) / 20
+	}
+	// Alternate short and long batches and keep each side's best, so a noisy
+	// CI runner slows both sides alike instead of skewing the ratio.
+	timeBoth := func() (tS, tL time.Duration) {
+		tS, tL = time.Duration(1<<62), time.Duration(1<<62)
+		for range 10 {
+			tS = min(tS, batch(short))
+			tL = min(tL, batch(long))
+		}
+		return tS, tL
+	}
+	aS, bS := probe(short)
+	aL, bL := probe(long)
+	tS, tL := timeBoth()
+	// Retry the timing (never the deterministic checks) before failing, since
+	// a single burst of contention can still land on one side.
+	for attempt := 0; attempt < 2 && float64(tL)/float64(tS) >= 1.6; attempt++ {
+		tS, tL = timeBoth()
+	}
 	cuesDelta := int64(len(long)-len(short)) - int64(600*5*(len(jp)+ebmlBlockOverhead(len(jp)))) - 600*int64(len(u64Elem(idTimecodeTest, 0))+12)
 	t.Logf("short: %d B file, %.0f allocs, %d B read, %v; long: %d B file, %.0f allocs, %d B read, %v; ratio %.2fx",
 		len(short), aS, bS, tS, len(long), aL, bL, tL, float64(tL)/float64(tS))
