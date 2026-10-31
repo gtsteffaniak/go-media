@@ -8,7 +8,7 @@ require (
 	github.com/at-wat/ebml-go v0.19.4
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	github.com/gen2brain/vpx v0.2.1
-	github.com/gtsteffaniak/go-vpx v1.0.1-0.20261031171633-6e4a2dba95a0
+	github.com/gtsteffaniak/go-vpx v1.0.1
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
 )
