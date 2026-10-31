@@ -9,6 +9,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8 h1:OtSeLS5y0Uy01jaKK4mA/WVIYtpzVm63vLVAPzJXigg=
 github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8/go.mod h1:apkPC/CR3s48O2D7Y++n1XWEpgPNNCjXYga3PPbJe2E=
+github.com/gen2brain/h265 v0.2.4 h1:JUSbGkRAYZpd7ucCL192yx4ViEo75ZO6OEdm1TQt9qM=
+github.com/gen2brain/h265 v0.2.4/go.mod h1:kefpLxLhGpNCUG/q/aabJcD6GqB9Nhet3fNi9xX9Wzw=
 github.com/gen2brain/vpx v0.2.1 h1:UD6tibcs/zlaIOKNFXeVyZuHBEaW9GYfxKSxvAN9cc8=
 github.com/gen2brain/vpx v0.2.1/go.mod h1:EVIdqguMSiapbtjDm4AWgFgYYJ4d+k8trXqjxYZ/4XE=
 github.com/go-test/deep v1.1.0 h1:WOcxcdHcvdgThNXjw0t76K42FXTU7HpNQWHpA2HHNlg=

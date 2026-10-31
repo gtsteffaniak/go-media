@@ -234,11 +234,11 @@ func parseSeekHeadCues(b []byte) (uint64, bool) {
 
 // pickCueCluster parses a Cues body and returns the cluster position
 // (relative to the Segment data start) of the cue for track whose time is the
-// latest at or before targetTicks, like ffmpeg's fast -ss. When every cue is
-// after the target, the earliest cue is used.
+// latest at or before targetTicks. When every cue is after the target, no cue
+// is returned so seekStartCluster can fall back to cluster-header scan.
 func pickCueCluster(b []byte, track uint64, targetTicks int64) (uint64, bool) {
-	var bestPos, firstPos uint64
-	bestTime, firstTime := int64(-1), int64(-1)
+	var bestPos uint64
+	bestTime := int64(-1)
 	prevTime, sorted := int64(-1), true
 	for len(b) > 0 {
 		id, h, n, ok := bufElem(b)
@@ -302,18 +302,12 @@ func pickCueCluster(b []byte, track uint64, targetTicks int64) (uint64, bool) {
 		if sorted && ti > targetTicks && bestTime >= 0 {
 			break
 		}
-		if firstTime < 0 || ti < firstTime {
-			firstTime, firstPos = ti, pos
-		}
 		if ti <= targetTicks && ti > bestTime {
 			bestTime, bestPos = ti, pos
 		}
 	}
 	if bestTime >= 0 {
 		return bestPos, true
-	}
-	if firstTime >= 0 {
-		return firstPos, true
 	}
 	return 0, false
 }
