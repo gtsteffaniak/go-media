@@ -87,7 +87,7 @@ func cmdRun(args []string) error {
 		fmt.Printf("== suite %s: go %s\n", name, strings.Join(argv, " "))
 		var out bytes.Buffer
 		cmd := exec.Command("go", argv...)
-		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+		cmd.Env = append(internalFixtureEnv(name, dirAbs(*outDir)), "CGO_ENABLED=0")
 		cmd.Stdout = &out
 		cmd.Stderr = os.Stderr
 		start := time.Now()
@@ -176,3 +176,41 @@ func loadAverage() string {
 	}
 	return "unknown"
 }
+
+// internalFixtureEnv points the internal benchmarks at the compare harness
+// assets (cmd/gomedia-compare/.assets, gitignored) when the caller has not
+// set the variables. Without them those benchmarks skip silently, which
+// would make two runs cover different cases.
+func internalFixtureEnv(suite, _ string) []string {
+	env := os.Environ()
+	if suite != "internal" {
+		return env
+	}
+	assets, err := filepath.Abs("cmd/gomedia-compare/.assets/video")
+	if err != nil {
+		return env
+	}
+	defaults := map[string]string{
+		"GOMEDIA_BENCH_MJPEG":     "mjpeg.mp4",
+		"GOMEDIA_BENCH_WEBM":      "webm_vp8.webm",
+		"GOMEDIA_BENCH_MP4_SHORT": "mp4_h264.mp4",
+		"GOMEDIA_BENCH_MP4_LONG":  "mp4_h264_main_1080.mp4",
+	}
+	have := map[string]bool{}
+	for _, kv := range env {
+		if k, _, ok := strings.Cut(kv, "="); ok {
+			have[k] = true
+		}
+	}
+	for k, f := range defaults {
+		p := filepath.Join(assets, f)
+		if !have[k] {
+			if _, err := os.Stat(p); err == nil {
+				env = append(env, k+"="+p)
+			}
+		}
+	}
+	return env
+}
+
+func dirAbs(p string) string { a, _ := filepath.Abs(p); return a }
