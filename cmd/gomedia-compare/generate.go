@@ -239,8 +239,8 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		}
 	}
 
+	imgAssets, err := appendImageCompareAssets(ffmpeg, clip, outDir)
 	os.Remove(clip)
-	imgAssets, err := appendImageCompareAssets(outDir)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +250,7 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 
 // copyASFWMV3Fallback installs a pinned WMV3 sample when ffmpeg lacks wmv3 encoder.
 func copyASFWMV3Fallback(dst string) error {
-	src := filepath.Join(findRepoRoot("."), "testdata", "asf_wmv3_360x288.wmv")
+	src := filepath.Join(findRepoRoot("."), "internal", "asf", "testdata", "wmv3_360x288.wmv")
 	in, err := os.ReadFile(src)
 	if err != nil {
 		return err
