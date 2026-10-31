@@ -101,6 +101,10 @@ func cmdRun(args []string) error {
 			return fmt.Errorf("suite %s failed (%v); partial output kept in %s", name, runErr, path)
 		}
 	}
+	if f, err := os.OpenFile(filepath.Join(dir, "meta.txt"), os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		fmt.Fprintf(f, "load_end: %s\n", loadAverage())
+		f.Close()
+	}
 	fmt.Printf("results written to %s\n", dir)
 	return nil
 }
@@ -114,6 +118,7 @@ func hostMeta(count int, benchtime, filter string, pgo bool, cpu int) string {
 	fmt.Fprintf(&b, "cpu: %s\n", cpuModel())
 	fmt.Fprintf(&b, "logical_cpus: %d\n", runtime.NumCPU())
 	fmt.Fprintf(&b, "git: %s\n", gitRev())
+	fmt.Fprintf(&b, "load_start: %s\n", loadAverage())
 	fmt.Fprintf(&b, "count: %d\nbenchtime: %s\nbench: %s\npgo: %v\ncpu: %d\n", count, benchtime, filter, pgo, cpu)
 	return b.String()
 }
@@ -146,4 +151,19 @@ func gitRev() string {
 		dirty = "+dirty"
 	}
 	return strings.TrimSpace(string(out)) + dirty
+}
+
+// loadAverage returns the 1/5/15-minute load average, so noisy runs can be
+// identified later (a run started while other benchmarks ran is marked by
+// high load).
+func loadAverage() string {
+	if runtime.GOOS == "darwin" {
+		if out, err := exec.Command("sysctl", "-n", "vm.loadavg").Output(); err == nil {
+			return strings.Trim(strings.TrimSpace(string(out)), "{} ")
+		}
+	}
+	if b, err := os.ReadFile("/proc/loadavg"); err == nil {
+		return strings.Join(strings.Fields(string(b))[:3], " ")
+	}
+	return "unknown"
 }
