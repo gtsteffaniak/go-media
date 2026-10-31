@@ -109,7 +109,6 @@ func TestUnsupportedMatroskaThumbnailFailsFast(t *testing.T) {
 		wantErr error
 	}{
 		{"hevc mkv", hevcMKV, ErrUnsupported},
-		{"h264 mkv", h264MKV, ErrUnsupportedProfile},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,6 +149,22 @@ func TestUnsupportedMatroskaProbeFailsFast(t *testing.T) {
 			}
 			assertBudget(t, "Duration", c, size)
 		})
+	}
+}
+
+// TestH264MatroskaDecodes checks that H.264 in MKV, formerly rejected by the
+// codec gate, now produces a thumbnail.
+func TestH264MatroskaDecodes(t *testing.T) {
+	size, c := openCounted(t, h264MKV(t))
+	res, err := Thumbnail(c, size, ThumbnailOptions{MaxWidth: 320, MaxHeight: 320, SeekPercent: 10, Format: "jpeg", Quality: 72})
+	if err != nil {
+		t.Fatalf("Thumbnail error = %v", err)
+	}
+	if len(res.Data) == 0 {
+		t.Fatal("empty thumbnail")
+	}
+	if c.bytes > size/4 {
+		t.Fatalf("read %d of %d bytes for one keyframe", c.bytes, size)
 	}
 }
 

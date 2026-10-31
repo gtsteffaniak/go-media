@@ -215,11 +215,11 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **MPEG-2** I-picture | MP4/MOV (`mp4v`), MPEG-PS, MPEG-TS | ✅ | Pure-Go intra decode |
 | **WMV3** (VC-1 Simple / Main) | ASF, WMV | ✅ | Intra keyframe decode, bit-exact vs ffmpeg |
 | **WVC1** (VC-1 Advanced) | ASF, WMV | ❌ | `ErrUnsupportedProfile` |
-| **H.264** Baseline CAVLC, 8-bit 4:2:0 intra keyframe (IDR or open-GOP) | MP4, MOV, M4V, … | ✅ | Clean-room intra decoder; H.264 in MKV returns `ErrUnsupportedProfile` |
+| **H.264** Baseline CAVLC, 8-bit 4:2:0 intra keyframe (IDR or open-GOP) | MP4, MOV, M4V, MKV (`V_MPEG4/ISO/AVC`), … | ✅ | Clean-room intra decoder; MKV keyframes come from `Cues` with SPS/PPS from `CodecPrivate` (avcC), bit-exact vs ffmpeg |
 | **H.264 `avc3`** (in-band SPS/PPS) | MP4, MOV | ✅ | SPS/PPS read from the keyframe sample; an SPS in the sample wins over avcC, as in ffmpeg. avcC may be absent or empty |
-| **H.264** Main / High CABAC intra | MP4, MOV, M4V, … | ✅ | Not MKV (see above) |
-| **H.264** High 10 (9/10-bit 4:2:0) intra | MP4, MOV, M4V, … | ✅ | CAVLC and CABAC, 4x4/8x8 transforms; reconstruction bit-exact with ffmpeg's 10-bit output, then rounded to 8 bits |
-| **H.264** interlaced, >10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
+| **H.264** Main / High CABAC intra | MP4, MOV, M4V, MKV, … | ✅ | |
+| **H.264** High 10 (9/10-bit 4:2:0) intra | MP4, MOV, M4V, MKV, … | ✅ | CAVLC and CABAC, 4x4/8x8 transforms; reconstruction bit-exact with ffmpeg's 10-bit output, then rounded to 8 bits |
+| **H.264** interlaced, >10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | `ErrUnsupportedProfile`; planned. Inter prediction is also why H.264 does not honor `Exact` |
 | **MPEG-4 Part 2** SP/ASP I-VOP (DivX, XviD, lavc `mpeg4`) | MP4, MOV (`mp4v`), MKV (`V_MPEG4/ISO/ASP`) | ✅ | H.263 and MPEG quantisation, custom matrices, alternate scan, field DCT, resync markers, DivX packed B-frames; bit-exact with ffmpeg (`simple_idct`). See [`MPEG4.md`](MPEG4.md) |
 | **MPEG-4 Part 2** shape, sprites/GMC, data partitioning, RVLC, NEWPRED, reduced resolution, scalability, Studio, short header (H.263) | — | ❌ | `ErrUnsupportedProfile` naming the tool |
 | **VP9** profile 0, 8-bit 4:2:0 | `.webm`, `.mkv` | ✅ | Keyframe by default, `Exact` decodes forward to the seek frame. Pure-Go VP9 decode (`gtsteffaniak/go-vpx`, a fork of `thesyncim/govpx` with an edge-context fix; BSD-3 libvpx port, via `internal/vp9decode`); bit-exact with libvpx on every frame of the gate fixture |
@@ -260,7 +260,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | Capability | Containers | Status |
 |------------|------------|:------:|
 | MP4 sync sample index | `.mp4`, `.mov`, `.m4v`, `.3gp` | ✅ |
-| Keyframe (IDR / open-GOP) decode to RGB/YUV | H.264 in MP4/MOV | ✅ | MKV H.264 thumbnail/decode not supported |
+| Keyframe (IDR / open-GOP) decode to RGB/YUV | H.264 in MP4/MOV/MKV | ✅ | For MKV, `H264KeyframeTimeSec` returns the keyframe block timestamp |
 | Gated profiles (`ErrUnsupportedProfile`) | — | — | Profiles that fail timing gate in `gatedProfiles` (`internal/h264/sps.go`); none gated today |
 
 ---

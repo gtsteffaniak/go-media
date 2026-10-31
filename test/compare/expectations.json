@@ -160,12 +160,12 @@
     {
       "assetId": "mkv_h264",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mkv_h264",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mkv_subtitles",
@@ -200,12 +200,12 @@
     {
       "assetId": "mkv_subtitles",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mkv_subtitles",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported"
+      "expect": "supported"
     },
     {
       "assetId": "mkv_vp8",

@@ -61,40 +61,9 @@ func MPEG4PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float6
 			break
 		}
 	}
-	scale := h.timecodeScale()
-	start, err := seekStartCluster(r, ix, track, msToTicks(targetMs, scale), true)
+	pick, _, err := keyframeAtSeek(r, ix, track, h.timecodeScale(), targetMs, "MPEG-4")
 	if err != nil {
 		return nil, mpeg4ThumbErr(err)
-	}
-	w := clusterWalker{r: r, segEnd: ix.segEnd, off: start}
-	var pick []byte
-	for {
-		bi, err := w.next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, mpeg4ThumbErr(err)
-		}
-		if bi.track != track || bi.payloadLen <= 0 || !bi.keyframe {
-			continue
-		}
-		if timecodeTicksToMs(bi.timecode, scale) > targetMs && pick != nil {
-			break
-		}
-		if bi.payloadLen > maxCollectBytes {
-			return nil, errs.Unsup("matroska", "MPEG-4 keyframe too large")
-		}
-		frames, err := readFrames(r, bi)
-		if err != nil {
-			return nil, mpeg4ThumbErr(err)
-		}
-		if len(frames) > 0 && len(frames[0]) > 0 {
-			pick = frames[0]
-		}
-		if timecodeTicksToMs(bi.timecode, scale) > targetMs {
-			break
-		}
 	}
 	if pick == nil {
 		return nil, errs.Unsup("thumbnail", "matroska: no MPEG-4 Part 2 keyframe found")
@@ -104,6 +73,50 @@ func MPEG4PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float6
 		return nil, mpeg4ThumbErr(err)
 	}
 	return pic, nil
+}
+
+// keyframeAtSeek returns the first frame of the keyframe block for track at
+// or before targetMs (the first keyframe after it when none precede it) and
+// its timestamp in milliseconds. It returns a nil frame when the track has no
+// keyframe from the seek cluster on.
+func keyframeAtSeek(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint64, targetMs int64, codec string) ([]byte, int64, error) {
+	start, err := seekStartCluster(r, ix, track, msToTicks(targetMs, scale), true)
+	if err != nil {
+		return nil, 0, err
+	}
+	w := clusterWalker{r: r, segEnd: ix.segEnd, off: start}
+	var pick []byte
+	var pickMs int64
+	for {
+		bi, err := w.next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, 0, err
+		}
+		if bi.track != track || bi.payloadLen <= 0 || !bi.keyframe {
+			continue
+		}
+		tsMs := timecodeTicksToMs(bi.timecode, scale)
+		if tsMs > targetMs && pick != nil {
+			break
+		}
+		if bi.payloadLen > maxCollectBytes {
+			return nil, 0, errs.Unsup("matroska", codec+" keyframe too large")
+		}
+		frames, err := readFrames(r, bi)
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(frames) > 0 && len(frames[0]) > 0 {
+			pick, pickMs = frames[0], tsMs
+		}
+		if tsMs > targetMs {
+			break
+		}
+	}
+	return pick, pickMs, nil
 }
 
 // mpeg4ThumbErr maps an MPEG-4 Part 2 demux or decoder error to a thumbnail error:

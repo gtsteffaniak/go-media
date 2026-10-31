@@ -115,11 +115,12 @@ func TestMatroskaVP8WithoutDurationFailsFast(t *testing.T) {
 	}
 }
 
-// H.264 keeps its profile error when it is the only video track.
-func TestMatroskaH264OnlyKeepsProfileError(t *testing.T) {
+// An H.264-only file with no clusters is decoded via the H.264 path and
+// fails with a plain ErrUnsupported (no keyframe), not a profile error.
+func TestMatroskaH264WithoutClusters(t *testing.T) {
 	data := gateFile(gateInfo(true), gateVideoTrack("V_MPEG4/ISO/AVC"))
 	_, err := Thumbnail(bytes.NewReader(data), int64(len(data)), thumbOpts())
-	if !errors.Is(err, ErrUnsupportedProfile) {
-		t.Fatalf("Thumbnail error = %v, want ErrUnsupportedProfile", err)
+	if !errors.Is(err, ErrUnsupported) || errors.Is(err, ErrUnsupportedProfile) {
+		t.Fatalf("Thumbnail error = %v, want ErrUnsupported", err)
 	}
 }

@@ -226,10 +226,26 @@ func decodeSource(r interface {
 				return isobmff.PictureYCbCr(pic), "decode", nil
 			}
 		}
-		if !hasThumbCodec(hdr.VideoCodecIDs) {
-			if slices.Contains(hdr.VideoCodecIDs, "V_MPEG4/ISO/AVC") {
-				return nil, "", errs.UnsupProfile("thumbnail", "h264 in matroska")
+		if slices.Contains(hdr.VideoCodecIDs, matroska.CodecAVC) && !hasThumbCodec(hdr.VideoCodecIDs) {
+			// Intra keyframe decode (deblock skipped, as for MP4), then the
+			// shared YCbCr area downscaler. Exact is not honored: H.264 has
+			// no inter prediction yet, so the keyframe is always used.
+			kf, err := matroska.H264KeyframeAtSeek(r, size, hdr, opt.SeekPercent)
+			if err != nil {
+				return nil, "", err
 			}
+			if kf != nil {
+				fr, err := h264.DecodeAVCCFrame(kf.AVCC, kf.Sample, true)
+				if err != nil {
+					return nil, "", err
+				}
+				if fr == nil {
+					return nil, "", errs.UnsupProfile("h264 keyframe", "decoder returned no picture")
+				}
+				return h264.NewThumbYCbCr(fr), "decode", nil
+			}
+		}
+		if !hasThumbCodec(hdr.VideoCodecIDs) {
 			return nil, "", errs.Unsup("thumbnail", "matroska video codec "+strings.Join(hdr.VideoCodecIDs, ","))
 		}
 		// VP8 and MJPEG seeking both map a percentage to time, so they need a Duration.
@@ -267,10 +283,6 @@ func decodeSource(r interface {
 		}
 		if img, ok := matroska.ThumbnailRGBA(r, size, hdr, tp); ok {
 			return img, "decode", nil
-		}
-		// H.264 is decided from the IDs already parsed; no extra header read.
-		if slices.Contains(hdr.VideoCodecIDs, "V_MPEG4/ISO/AVC") {
-			return nil, "", errs.UnsupProfile("thumbnail", "h264 in matroska")
 		}
 		return nil, "", errs.Unsup("thumbnail", "matroska: no decodable "+strings.Join(hdr.VideoCodecIDs, ",")+" frame near seek target (no cues/keyframe or frame decode failed)")
 	case format.MP3, format.FLAC, format.OGG:

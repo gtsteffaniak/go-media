@@ -44,3 +44,59 @@ func appendNAL(dst []byte, nalLen int, nal []byte) []byte {
 	}
 	return append(dst, nal...)
 }
+
+// ParseAVCConfigRecord parses a raw AVCDecoderConfigurationRecord (ISO/IEC
+// 14496-15 §5.3.3.1), the payload of an MP4 avcC box, Matroska
+// V_MPEG4/ISO/AVC CodecPrivate or AVI strf extradata. It returns nil when b
+// is not a version 1 record or a parameter set runs past the end. Trailing
+// High-profile fields (chroma format, bit depths, SPS extensions) are ignored;
+// the decoder reads them from the SPS itself.
+func ParseAVCConfigRecord(b []byte) *mp4.AVCDecoderConfiguration {
+	if len(b) < 6 || b[0] != 1 {
+		return nil
+	}
+	cfg := &mp4.AVCDecoderConfiguration{
+		ConfigurationVersion: b[0],
+		Profile:              b[1],
+		ProfileCompatibility: b[2],
+		Level:                b[3],
+		LengthSizeMinusOne:   b[4] & 3,
+	}
+	p := 5
+	readSets := func(n int) ([]mp4.AVCParameterSet, bool) {
+		sets := make([]mp4.AVCParameterSet, 0, n)
+		for range n {
+			if p+2 > len(b) {
+				return nil, false
+			}
+			l := int(binary.BigEndian.Uint16(b[p:]))
+			p += 2
+			if p+l > len(b) {
+				return nil, false
+			}
+			sets = append(sets, mp4.AVCParameterSet{Length: uint16(l), NALUnit: b[p : p+l : p+l]})
+			p += l
+		}
+		return sets, true
+	}
+	nSPS := int(b[p] & 0x1f)
+	p++
+	sps, ok := readSets(nSPS)
+	if !ok {
+		return nil
+	}
+	if p >= len(b) {
+		return nil
+	}
+	nPPS := int(b[p])
+	p++
+	pps, ok := readSets(nPPS)
+	if !ok {
+		return nil
+	}
+	cfg.NumOfSequenceParameterSets = uint8(nSPS)
+	cfg.SequenceParameterSets = sps
+	cfg.NumOfPictureParameterSets = uint8(nPPS)
+	cfg.PictureParameterSets = pps
+	return cfg
+}
