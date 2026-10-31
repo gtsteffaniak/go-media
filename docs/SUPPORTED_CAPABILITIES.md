@@ -216,7 +216,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **H.264** interlaced, >10-bit, 4:2:2, 4:4:4, inter prediction | — | ❌ | |
 | **MPEG-4 Part 2** SP/ASP I-VOP (DivX, XviD, lavc `mpeg4`) | MP4, MOV (`mp4v`), MKV (`V_MPEG4/ISO/ASP`) | ✅ | H.263 and MPEG quantisation, custom matrices, alternate scan, field DCT, resync markers, DivX packed B-frames; bit-exact with ffmpeg (`simple_idct`). See [`MPEG4.md`](MPEG4.md) |
 | **MPEG-4 Part 2** shape, sprites/GMC, data partitioning, RVLC, NEWPRED, reduced resolution, scalability, Studio, short header (H.263) | — | ❌ | `ErrUnsupportedProfile` naming the tool |
-| **VP9** profile 0, 8-bit 4:2:0 | `.webm`, `.mkv` | 🟡 | Experimental pure-Go VP9 decode (`thesyncim/govpx`, BSD-3 libvpx port, via `internal/vp9decode`); fails on some libvpx keyframes, so the gate expects a typed unsupported error |
+| **VP9** profile 0, 8-bit 4:2:0 | `.webm`, `.mkv` | ✅ | Pure-Go VP9 decode (`gtsteffaniak/govpx`, a fork of `thesyncim/govpx` with an edge-context fix; BSD-3 libvpx port, via `internal/vp9decode`); bit-exact with libvpx on every frame of the gate fixture |
 | **AV1**, **HEVC** | — | ❌ | |
 
 ### Cover art instead of video frame

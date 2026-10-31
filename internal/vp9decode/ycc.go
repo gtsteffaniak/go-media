@@ -5,7 +5,7 @@ import (
 
 	"github.com/gtsteffaniak/go-media/internal/h264"
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
-	"github.com/thesyncim/govpx"
+	"github.com/gtsteffaniak/govpx"
 )
 
 // PictureThumbYCbCr copies a decoded VP9 frame into ThumbYCbCr (BT.601 limited).
