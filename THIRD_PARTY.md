@@ -15,3 +15,16 @@ Decode-only intra path for thumbnails. **No Eyevinn/hi264.** Slice/MB implementa
 Written for go-media against ISO/IEC 14496-2, with ffmpeg's `mpeg4` decoder
 as the behavioural reference (no ffmpeg source copied). The VLC/scan table data
 comes from oxideav-mpeg4video (MIT), see **`THIRD_PARTY_NOTICES.md`**.
+
+## MPEG-2 Video intra decode (`internal/mpeg2video`)
+
+Adapted from **[32bitkid/mpeg](https://github.com/32bitkid/mpeg)** (MIT) into
+`internal/mpeg2video` with go-media error types and I-picture-only entry via
+`DecodeKeyframe`. Transport (`internal/mpegts`) and program stream
+(`internal/mpegps`) demux code comes from the same upstream, integrated for
+probe, duration, and thumbnails. ffmpeg 9.0.2 is the behavioural reference for
+tests.
+
+## VP9 keyframe decode (`internal/vp9decode`)
+
+Thumbnail VP9 decode uses **[thesyncim/govpx](https://github.com/thesyncim/govpx)** (BSD-3-Clause; libvpx-derived) for profile 0, 8-bit 4:2:0 packets. Non-profile-0 streams return `ErrUnsupportedProfile`.

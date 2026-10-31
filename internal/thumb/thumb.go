@@ -34,8 +34,8 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/heifthumb"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
-	"github.com/gtsteffaniak/go-media/internal/mpegps"
-	"github.com/gtsteffaniak/go-media/internal/mpegts"
+	ps "github.com/gtsteffaniak/go-media/internal/mpegps"
+	ts "github.com/gtsteffaniak/go-media/internal/mpegts"
 	"github.com/gtsteffaniak/go-media/internal/rawpreview"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
@@ -231,6 +231,15 @@ func decodeSource(r interface {
 					return &h264.ThumbYCbCr{YCbCr: ycc, CS: yuv.BT601, RNG: yuv.LimitedRange}, "decode", nil
 				}
 			}
+			if slices.Contains(hdr.VideoCodecIDs, "V_VP9") {
+				if pic, err := matroska.VP9PictureAtSeek(r, size, hdr, opt.SeekPercent); err != nil {
+					return nil, "", err
+				} else if pic != nil {
+					if ycc := vp9decode.PictureThumbYCbCr(pic); ycc != nil {
+						return ycc, "decode", nil
+					}
+				}
+			}
 		}
 		tp := matroska.ThumbnailParams{
 			SeekPercent: opt.SeekPercent,
@@ -257,21 +266,21 @@ func decodeSource(r interface {
 		}
 		return img, "embedded", nil
 	case format.MPEGTS, format.M2TS:
-		meta, err := mpegts.Probe(r, size)
+		meta, err := ts.Probe(r, size)
 		if err != nil {
 			return nil, "", err
 		}
-		yimg, err := mpegts.ThumbnailYCbCr(r, size, meta, opt.SeekPercent, opt.Fast)
+		yimg, err := ts.ThumbnailYCbCr(r, size, meta, opt.SeekPercent, opt.Fast)
 		if err != nil {
 			return nil, "", err
 		}
 		return yimg, "decode", nil
 	case format.MPEGPS:
-		meta, err := mpegps.Probe(r, size)
+		meta, err := ps.Probe(r, size)
 		if err != nil {
 			return nil, "", err
 		}
-		yimg, err := mpegps.ThumbnailYCbCr(r, size, meta, opt.SeekPercent, opt.Fast)
+		yimg, err := ps.ThumbnailYCbCr(r, size, meta, opt.SeekPercent, opt.Fast)
 		if err != nil {
 			return nil, "", err
 		}
@@ -306,7 +315,7 @@ func decodeSource(r interface {
 // path decodes (VP8 or MJPEG).
 func hasThumbCodec(ids []string) bool {
 	for _, id := range ids {
-		if id == "V_VP8" || id == "V_MJPEG" {
+		if id == "V_VP8" || id == "V_VP9" || id == "V_MJPEG" {
 			return true
 		}
 	}
