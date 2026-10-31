@@ -3,6 +3,7 @@ package matroska
 import (
 	"bytes"
 	"image"
+	"image/color"
 	_ "image/jpeg"
 	"io"
 
@@ -167,12 +168,40 @@ func decodeMJPEGSeek(frames []videoFrame, targetMs int64) (*image.RGBA, bool) {
 	if rgba, ok := img.(*image.RGBA); ok {
 		return rgba, true
 	}
+	return toRGBA(img), true
+}
+
+// toRGBA converts img to RGBA. JPEG's YCbCr and Gray outputs are converted
+// straight from their planes; the result is identical to the per-pixel
+// colour-model conversion (color.YCbCrToRGB and color.GrayModel), which is
+// the fallback for every other image type. The per-pixel path boxes a color
+// for each pixel and dominated MJPEG thumbnail time.
+func toRGBA(img image.Image) *image.RGBA {
 	b := img.Bounds()
 	out := image.NewRGBA(b)
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			out.Set(x, y, img.At(x, y))
+	switch src := img.(type) {
+	case *image.YCbCr:
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				r, g, bl := color.YCbCrToRGB(src.Y[src.YOffset(x, y)], src.Cb[src.COffset(x, y)], src.Cr[src.COffset(x, y)])
+				o := out.PixOffset(x, y)
+				out.Pix[o], out.Pix[o+1], out.Pix[o+2], out.Pix[o+3] = r, g, bl, 0xff
+			}
+		}
+	case *image.Gray:
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				v := src.Pix[src.PixOffset(x, y)]
+				o := out.PixOffset(x, y)
+				out.Pix[o], out.Pix[o+1], out.Pix[o+2], out.Pix[o+3] = v, v, v, 0xff
+			}
+		}
+	default:
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				out.Set(x, y, img.At(x, y))
+			}
 		}
 	}
-	return out, true
+	return out
 }
