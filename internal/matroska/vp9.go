@@ -6,9 +6,10 @@ import (
 )
 
 // VP9PictureAtSeek demuxes and decodes the VP9 frame at seekPercent without RGB conversion.
+// With exact false it returns the keyframe at or before the seek time.
 func VP9PictureAtSeek(r interface {
 	ReadAt([]byte, int64) (int, error)
-}, size int64, h *Header, seekPercent float64) (*govpx.Image, error) {
+}, size int64, h *Header, seekPercent float64, exact bool) (*govpx.Image, error) {
 	if h == nil || !h.HasDuration() {
 		return nil, nil
 	}
@@ -20,7 +21,7 @@ func VP9PictureAtSeek(r interface {
 	if err != nil || len(frames) == 0 {
 		return nil, err
 	}
-	return decodeVP9SeekPicture(frames, targetMs)
+	return decodeVP9SeekPicture(frames, targetMs, exact)
 }
 
 func collectVP9FramesForSeek(r interface {
@@ -37,7 +38,7 @@ func collectVP9FramesForSeek(r interface {
 	return collectSeekFrames(r, ix, track, scale, targetMs, true)
 }
 
-func decodeVP9SeekPicture(frames []videoFrame, targetMs int64) (*govpx.Image, error) {
+func decodeVP9SeekPicture(frames []videoFrame, targetMs int64, exact bool) (*govpx.Image, error) {
 	if len(frames) == 0 {
 		return nil, nil
 	}
@@ -46,6 +47,10 @@ func decodeVP9SeekPicture(frames []videoFrame, targetMs int64) (*govpx.Image, er
 		if f.keyframe && f.timestampMs <= targetMs {
 			start = i
 		}
+	}
+	if !exact {
+		// Keyframe mode: stop at the keyframe instead of decoding forward.
+		targetMs = frames[start].timestampMs
 	}
 	dec, err := vp9decode.NewFrameDecoder()
 	if err != nil {

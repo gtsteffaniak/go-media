@@ -41,6 +41,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/tagread"
 	"github.com/gtsteffaniak/go-media/internal/vp8decode"
+	"github.com/gtsteffaniak/go-media/internal/vp9decode"
 )
 
 // Options configures thumbnail generation.
@@ -55,6 +56,9 @@ type Options struct {
 	Scaler         ScalerMode
 	Fast           bool
 	PreferEmbedded bool
+	// Exact decodes forward to the frame at the seek time where the codec
+	// supports it (VP8, VP9). Default: keyframe at or before the seek time.
+	Exact bool
 }
 
 // Result is a data type used by this package.
@@ -234,7 +238,7 @@ func decodeSource(r interface {
 		}
 		jpegOut := opt.Format == "" || opt.Format == "jpeg"
 		if jpegOut {
-			if pic, ok := matroska.VP8PictureAtSeek(r, size, hdr, opt.SeekPercent); ok {
+			if pic, ok := matroska.VP8PictureAtSeek(r, size, hdr, opt.SeekPercent, opt.Exact); ok {
 				if ycc := vp8decode.PictureYCbCr(pic); ycc != nil {
 					// VP8 samples are BT.601 limited range (RFC 6386 §9.2,
 					// color_space 0); ffmpeg's vp8 decoder reports the same and
@@ -244,12 +248,22 @@ func decodeSource(r interface {
 					return &h264.ThumbYCbCr{YCbCr: ycc, CS: yuv.BT601, RNG: yuv.LimitedRange}, "decode", nil
 				}
 			}
+			if slices.Contains(hdr.VideoCodecIDs, "V_VP9") {
+				// Hand VP9 frames over as video YCbCr too, so JPEG output uses the
+				// shared YUV area downscaler instead of a full-frame RGB resize.
+				if pic, err := matroska.VP9PictureAtSeek(r, size, hdr, opt.SeekPercent, opt.Exact); err == nil && pic != nil {
+					if ycc := vp9decode.PictureThumbYCbCr(pic); ycc != nil {
+						return ycc, "decode", nil
+					}
+				}
+			}
 		}
 		tp := matroska.ThumbnailParams{
 			SeekPercent: opt.SeekPercent,
 			MaxWidth:    opt.MaxWidth,
 			MaxHeight:   opt.MaxHeight,
 			Scaler:      int(scalerFromOptions(opt)),
+			Exact:       opt.Exact,
 		}
 		if img, ok := matroska.ThumbnailRGBA(r, size, hdr, tp); ok {
 			return img, "decode", nil

@@ -25,11 +25,14 @@ type ThumbnailParams struct {
 	MaxHeight   int
 	// Scaler is internal/thumb.ScalerMode as int (0 = default high).
 	Scaler int
+	// Exact decodes VP8/VP9 forward from the keyframe to the frame at the
+	// seek time. When false, the keyframe at or before the seek time is used.
+	Exact bool
 }
 
 // VP8PictureAtSeek demuxes and decodes the VP8 frame at seekPercent without RGB conversion.
 // h must come from ProbeHeader on the same reader.
-func VP8PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64) (*gvp8.Picture, bool) {
+func VP8PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64, exact bool) (*gvp8.Picture, bool) {
 	if h == nil || !h.HasDuration() {
 		return nil, false
 	}
@@ -41,7 +44,7 @@ func VP8PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64)
 	if err != nil || len(frames) == 0 {
 		return nil, false
 	}
-	pic := decodeVP8SeekPicture(frames, targetMs)
+	pic := decodeVP8SeekPicture(frames, targetMs, exact)
 	if pic == nil {
 		return nil, false
 	}
@@ -88,14 +91,14 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, h *Header, p ThumbnailParams) (*im
 		return nil, false
 	}
 	if codec == "V_VP8" {
-		pic := decodeVP8SeekPicture(frames, targetMs)
+		pic := decodeVP8SeekPicture(frames, targetMs, p.Exact)
 		if pic == nil {
 			return nil, false
 		}
 		return vp8decode.PictureRGBAScaled(pic, p.MaxWidth, p.MaxHeight, p.Scaler), true
 	}
 	if codec == "V_VP9" {
-		pic, err := decodeVP9SeekPicture(frames, targetMs)
+		pic, err := decodeVP9SeekPicture(frames, targetMs, p.Exact)
 		if err != nil || pic == nil {
 			return nil, false
 		}
@@ -109,7 +112,7 @@ func timecodeTicksToMs(ticks int64, timecodeScale uint64) int64 {
 	return ticks * int64(timecodeScale) / 1_000_000
 }
 
-func decodeVP8SeekPicture(frames []videoFrame, targetMs int64) *gvp8.Picture {
+func decodeVP8SeekPicture(frames []videoFrame, targetMs int64, exact bool) *gvp8.Picture {
 	if len(frames) == 0 {
 		return nil
 	}
@@ -118,6 +121,10 @@ func decodeVP8SeekPicture(frames []videoFrame, targetMs int64) *gvp8.Picture {
 		if f.keyframe && f.timestampMs <= targetMs {
 			start = i
 		}
+	}
+	if !exact {
+		// Keyframe mode: stop at the keyframe instead of decoding forward.
+		targetMs = frames[start].timestampMs
 	}
 	var dec gvp8.Decoder
 	var last *gvp8.Picture
@@ -137,7 +144,7 @@ func decodeVP8SeekPicture(frames []videoFrame, targetMs int64) *gvp8.Picture {
 }
 
 func decodeVP8Seek(frames []videoFrame, targetMs int64, maxW, maxH int, scaler int) (*image.RGBA, bool) {
-	last := decodeVP8SeekPicture(frames, targetMs)
+	last := decodeVP8SeekPicture(frames, targetMs, true)
 	if last == nil {
 		return nil, false
 	}
