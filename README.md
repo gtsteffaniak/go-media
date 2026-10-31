@@ -34,14 +34,14 @@ To build the same report locally, run `make compare` (see [`test/compare/README.
 
 ## Features
 
-| | Capability | Highlights |
-|---|---|---|
-| 🔎 | **Probe** | Container, streams, codecs, dimensions, rotation, frame rate, sample rate |
-| ⏱️ | **Duration** | From headers, with a `Source` (`header`, `estimate`, `scan`) for cache provenance |
-| 🏷️ | **Tags & artwork** | ID3, MP4 `ilst`, Vorbis comments; APIC, `covr` and FLAC `PICTURE` cover art |
-| 💬 | **Subtitles** | SRT, VTT, ASS/SSA sidecars plus embedded MKV and MP4 text tracks, converted to WebVTT byte-identical to `ffmpeg -f webvtt` |
-| 🖼️ | **Thumbnails** | One keyframe decoded in pure Go, scaled and encoded to JPEG, PNG or lossless WebP |
-| 🎵 | **Lyrics** | Embedded lyrics and `.lrc` / `.elrc` sidecars |
+| Capability | Highlights |
+|---|---|
+| 🔎 **Probe** | Container, streams, codecs, dimensions, rotation, frame rate, sample rate |
+| ⏱️ **Duration** | From headers, with a `Source` (`header`, `estimate`, `scan`) for cache provenance |
+| 🏷️ **Tags & artwork** | ID3, MP4 `ilst`, Vorbis comments; APIC, `covr` and FLAC `PICTURE` cover art |
+| 💬 **Subtitles** | SRT, VTT, ASS/SSA sidecars plus embedded MKV and MP4 text tracks, converted to WebVTT byte-identical to `ffmpeg -f webvtt` |
+| 🖼️ **Thumbnails** | One keyframe decoded in pure Go, scaled and encoded to JPEG, PNG or lossless WebP |
+| 🎵 **Lyrics** | Embedded lyrics and `.lrc` / `.elrc` sidecars |
 
 ### Thumbnail codecs
 
