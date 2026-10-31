@@ -90,7 +90,6 @@ func TestUnsupportedReasonCodecs(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"hevc", []string{"-c:v", "libx265", "-tag:v", "hvc1"}, "mp4: video codec hvc1 (HEVC) not supported"},
 		{"vp9", []string{"-c:v", "libvpx-vp9"}, "mp4: video codec vp09 (VP9) not supported"},
 		{"audio only", []string{"-f", "lavfi", "-i", "sine=d=1", "-map", "1:a", "-c:a", "aac"}, "mp4: no video track"},
 	}

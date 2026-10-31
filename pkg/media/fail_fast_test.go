@@ -2,7 +2,6 @@ package media
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -100,28 +99,6 @@ func assertBudget(t *testing.T, op string, c *countingReaderAt, size int64) {
 	}
 }
 
-// TestUnsupportedMatroskaThumbnailFailsFast checks that an MKV or WebM whose
-// video codec the thumbnail path cannot decode is rejected from the headers.
-func TestUnsupportedMatroskaThumbnailFailsFast(t *testing.T) {
-	cases := []struct {
-		name    string
-		path    func(*testing.T) string
-		wantErr error
-	}{
-		{"hevc mkv", hevcMKV, ErrUnsupported},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			size, c := openCounted(t, tc.path(t))
-			_, err := Thumbnail(c, size, ThumbnailOptions{MaxWidth: 320, MaxHeight: 320, SeekPercent: 10, Format: "jpeg", Quality: 72})
-			if !errors.Is(err, tc.wantErr) {
-				t.Fatalf("Thumbnail error = %v, want %v", err, tc.wantErr)
-			}
-			assertBudget(t, "Thumbnail", c, size)
-		})
-	}
-}
-
 // TestUnsupportedMatroskaProbeFailsFast checks that metadata reads on the same
 // files use only header bytes.
 func TestUnsupportedMatroskaProbeFailsFast(t *testing.T) {
@@ -129,7 +106,6 @@ func TestUnsupportedMatroskaProbeFailsFast(t *testing.T) {
 		name string
 		path func(*testing.T) string
 	}{
-		{"hevc mkv", hevcMKV},
 		{"h264 mkv", h264MKV},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

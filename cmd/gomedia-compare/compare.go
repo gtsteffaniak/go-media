@@ -376,7 +376,7 @@ func assetH264KeyframeOnly(a Asset) bool {
 	}
 	switch a.ID {
 	case "mpegts_h264", "mpegts_mpeg2", "avi_h264", "avi_mjpeg", "avi_mpeg4",
-		"webm_vp8", "webm_vp9", "mkv_vp8", "asf_wmv3":
+		"webm_vp8", "webm_vp9", "mkv_vp8", "mp4_hevc", "mkv_hevc", "asf_wmv3":
 		return false
 	}
 	if strings.Contains(a.ID, "h264") || strings.HasPrefix(a.ID, "mp4_h264_") {

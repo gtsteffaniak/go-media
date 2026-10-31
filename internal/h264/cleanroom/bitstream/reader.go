@@ -11,6 +11,7 @@ package bitstream
 import (
 	"encoding/binary"
 	"errors"
+	"math"
 	"math/bits"
 )
 
@@ -40,11 +41,11 @@ type Reader struct {
 	nreg int    // valid bits in reg (0..32)
 
 	cache    uint64 // 64 bits MSB-first starting at bit cachePos (byte-aligned)
-	cachePos int    // -1 when invalid
+	cachePos int    // math.MinInt when invalid
 }
 
 // NewReader creates a reader over RBSP.
-func NewReader(data []byte) *Reader { return &Reader{data: data, cachePos: -1 << 40} }
+func NewReader(data []byte) *Reader { return &Reader{data: data, cachePos: math.MinInt} }
 
 // Err returns the first error that occurred (sticky), or nil.
 func (r *Reader) Err() error { return r.err }

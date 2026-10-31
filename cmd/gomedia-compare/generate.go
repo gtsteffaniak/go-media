@@ -43,6 +43,10 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	if err != nil {
 		return nil, fmt.Errorf("webm_vp9 fixture: %w", err)
 	}
+	hevcEnc, err := pickEncoder(encoders, "libx265", "hevc", "x265")
+	if err != nil {
+		return nil, fmt.Errorf("hevc fixtures: %w", err)
+	}
 	mpeg2Enc, err := pickEncoder(encoders, "mpeg2video")
 	if err != nil {
 		return nil, fmt.Errorf("mpegts_mpeg2 fixture: %w", err)
@@ -96,6 +100,10 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 			[]string{"-i", clip, "-c:v", vp8Enc, "-g", "30", "-keyint_min", "30", "-crf", "10", "-b:v", "1M", "-an"}, nil},
 		{"webm_vp9", "video", "WebM VP9", "video/webm_vp9.webm",
 			[]string{"-i", clip, "-c:v", vp9Enc, "-g", "30", "-crf", "30", "-an"}, nil},
+		{"mp4_hevc", "video", "MP4 HEVC Main", "video/mp4_hevc.mp4",
+			[]string{"-i", clip, "-c:v", hevcEnc, "-tag:v", "hvc1", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "28", "-an"}, nil},
+		{"mkv_hevc", "video", "MKV HEVC", "video/mkv_hevc.mkv",
+			[]string{"-i", clip, "-c:v", hevcEnc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "28", "-an", "-f", "matroska"}, nil},
 		{"avi_mjpeg", "video", "AVI MJPEG", "video/avi_mjpeg.avi",
 			[]string{"-i", clip, "-c:v", "mjpeg", "-q:v", "3", "-an", "-f", "avi"}, nil},
 		{"avi_mpeg4", "video", "AVI MPEG-4 Part 2", "video/avi_mpeg4.avi",

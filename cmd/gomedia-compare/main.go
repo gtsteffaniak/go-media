@@ -142,6 +142,8 @@ func loadAssetManifest(assetsDir string) ([]Asset, error) {
 		{"mkv_vp8", "video/mkv_vp8.mkv", "video", "MKV VP8", nil},
 		{"webm_vp8", "video/webm_vp8.webm", "video", "WebM VP8", nil},
 		{"webm_vp9", "video/webm_vp9.webm", "video", "WebM VP9", nil},
+		{"mp4_hevc", "video/mp4_hevc.mp4", "video", "MP4 HEVC Main", nil},
+		{"mkv_hevc", "video/mkv_hevc.mkv", "video", "MKV HEVC", nil},
 		{"avi_mjpeg", "video/avi_mjpeg.avi", "video", "AVI MJPEG", nil},
 		{"avi_mpeg4", "video/avi_mpeg4.avi", "video", "AVI MPEG-4 Part 2", nil},
 		{"avi_h264", "video/avi_h264.avi", "video", "AVI H.264", nil},

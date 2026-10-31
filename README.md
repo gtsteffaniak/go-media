@@ -54,7 +54,8 @@ To build the same report locally, run `make compare` (see [`test/compare/README.
 | **MPEG-2** | MP4, MOV, MPEG-PS, MPEG-TS | I-picture decoder |
 | **WMV3** (VC-1 Simple & Main) | ASF, WMV | Intra decoder, bit-exact with ffmpeg |
 | **MJPEG** | MP4, MOV, MKV, AVI | Direct frame extract |
-| **HEIC / HEIF**, camera **RAW** | HEIC, HEIF, AVIF, CR2, CR3, NEF, DNG… | Embedded JPEG preview |
+| **HEVC** Main, MP4/MKV/HEIC | MP4, MKV, HEIC | [gen2brain/h265](https://github.com/gen2brain/h265), IRAP keyframe thumbs |
+| **HEIC / HEIF**, camera **RAW** | HEIC, HEIF, AVIF, CR2, CR3, NEF, DNG… | Embedded JPEG preview; HEIC without JPEG uses HEVC decode |
 
 > [!NOTE]
 > Per-format detail, partial support and ffmpeg equivalents are in **[Supported capabilities](docs/SUPPORTED_CAPABILITIES.md)**.
@@ -131,7 +132,7 @@ go run . thumb clip.mkv --large thumb.jpg
 - **Provenance.** `DurationResult.Source`, `ProbeInfo.DurationSrc` and `ThumbnailResult.Source` say how a value was found, so it can be cached next to ffprobe output.
 
 > [!NOTE]
-> **Not in scope:** transcoding, streaming, playback and full HEVC/AV1 decode. Use [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) for those; go-media is the fast path in front of it.
+> **Not in scope:** transcoding, streaming, playback and full random-access decode. Use [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) for those; go-media is the fast path in front of it.
 
 ## Documentation
 
