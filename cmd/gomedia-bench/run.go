@@ -44,6 +44,7 @@ func cmdRun(args []string) error {
 	pgo := fs.Bool("pgo", true, "build with -pgo=default.pgo (production profile)")
 	cpu := fs.Int("cpu", 1, "go test -cpu (GOMAXPROCS); 1 matches the compare harness timing")
 	outDir := fs.String("out", "bench/results", "results directory")
+	jobs := fs.Int("jobs", defaultJobs, "max benchmark jobs (go test processes) running at once; 1 for timing comparisons")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -52,6 +53,9 @@ func cmdRun(args []string) error {
 	}
 	if *count < 1 {
 		return fmt.Errorf("-count must be >= 1")
+	}
+	if err := validateJobs(*jobs); err != nil {
+		return err
 	}
 	if _, err := os.Stat("go.mod"); err != nil {
 		return fmt.Errorf("run from the go-media repository root (go.mod not found)")
@@ -70,47 +74,71 @@ func cmdRun(args []string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	meta := hostMeta(*count, *benchtime, *filter, *pgo, *cpu)
+	meta := hostMeta(*count, *benchtime, *filter, *pgo, *cpu, *jobs)
 	if err := os.WriteFile(filepath.Join(dir, "meta.txt"), []byte(meta), 0o644); err != nil {
 		return err
 	}
 
+	// Each package is one go test job. runJobs keeps at most -jobs of them
+	// running at once; outputs are reassembled per suite below.
+	type benchJob struct{ suite, pkg string }
+	var plan []benchJob
 	for _, name := range names {
-		pkgs := suites[name]
+		for _, pkg := range suites[name] {
+			plan = append(plan, benchJob{suite: name, pkg: pkg})
+		}
+	}
+	outs, errs := runJobs(len(plan), *jobs, func(i int) ([]byte, error) {
+		j := plan[i]
 		argv := []string{"test", "-run", "^$", "-bench", *filter, "-benchmem",
 			"-count", fmt.Sprint(*count), "-benchtime", *benchtime,
 			"-cpu", fmt.Sprint(*cpu), "-timeout", "120m"}
 		if *pgo {
 			argv = append(argv, "-pgo=default.pgo")
 		}
-		argv = append(argv, pkgs...)
-		fmt.Printf("== suite %s: go %s\n", name, strings.Join(argv, " "))
+		argv = append(argv, j.pkg)
+		fmt.Printf("== suite %s %s: go %s\n", j.suite, j.pkg, strings.Join(argv, " "))
 		var out bytes.Buffer
 		cmd := exec.Command("go", argv...)
-		cmd.Env = append(internalFixtureEnv(name, dirAbs(*outDir)), "CGO_ENABLED=0")
+		cmd.Env = append(internalFixtureEnv(j.suite, dirAbs(*outDir)), "CGO_ENABLED=0")
 		cmd.Stdout = &out
 		cmd.Stderr = os.Stderr
 		start := time.Now()
 		runErr := cmd.Run()
-		fmt.Printf("   finished in %s\n", time.Since(start).Round(time.Second))
-		path := filepath.Join(dir, name+".txt")
-		if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
-			return err
+		fmt.Printf("   %s %s finished in %s\n", j.suite, j.pkg, time.Since(start).Round(time.Second))
+		return out.Bytes(), runErr
+	})
+
+	var failed []string
+	for _, name := range names {
+		var suiteOut bytes.Buffer
+		for i, j := range plan {
+			if j.suite != name {
+				continue
+			}
+			suiteOut.Write(outs[i])
+			if errs[i] != nil {
+				failed = append(failed, fmt.Sprintf("%s %s: %v", name, j.pkg, errs[i]))
+			}
 		}
-		if runErr != nil {
-			return fmt.Errorf("suite %s failed (%v); partial output kept in %s", name, runErr, path)
+		path := filepath.Join(dir, name+".txt")
+		if err := os.WriteFile(path, suiteOut.Bytes(), 0o644); err != nil {
+			return err
 		}
 	}
 	if f, err := os.OpenFile(filepath.Join(dir, "meta.txt"), os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 		fmt.Fprintf(f, "load_end: %s\n", loadAverage())
 		f.Close()
 	}
+	if len(failed) > 0 {
+		return fmt.Errorf("%d job(s) failed; partial output kept in %s:\n  %s", len(failed), dir, strings.Join(failed, "\n  "))
+	}
 	fmt.Printf("results written to %s\n", dir)
 	return nil
 }
 
 // hostMeta records what produced a result set.
-func hostMeta(count int, benchtime, filter string, pgo bool, cpu int) string {
+func hostMeta(count int, benchtime, filter string, pgo bool, cpu, jobs int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "date: %s\n", time.Now().Format(time.RFC3339))
 	fmt.Fprintf(&b, "go: %s\n", runtime.Version())
@@ -119,7 +147,7 @@ func hostMeta(count int, benchtime, filter string, pgo bool, cpu int) string {
 	fmt.Fprintf(&b, "logical_cpus: %d\n", runtime.NumCPU())
 	fmt.Fprintf(&b, "git: %s\n", gitRev())
 	fmt.Fprintf(&b, "load_start: %s\n", loadAverage())
-	fmt.Fprintf(&b, "count: %d\nbenchtime: %s\nbench: %s\npgo: %v\ncpu: %d\n", count, benchtime, filter, pgo, cpu)
+	fmt.Fprintf(&b, "count: %d\nbenchtime: %s\nbench: %s\npgo: %v\ncpu: %d\njobs: %d\n", count, benchtime, filter, pgo, cpu, jobs)
 	return b.String()
 }
 

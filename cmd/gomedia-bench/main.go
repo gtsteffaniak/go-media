@@ -43,6 +43,6 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   gomedia-bench gen     [-manifest bench/manifest.json] [-data bench/.data] [-force] [-only regex]
-  gomedia-bench run     -label NAME [-suite e2e|internal|all] [-count 5] [-benchtime 1s] [-bench regex] [-pgo=true] [-out bench/results]
+  gomedia-bench run     -label NAME [-suite e2e|internal|all] [-count 5] [-benchtime 1s] [-bench regex] [-pgo=true] [-jobs 4] [-out bench/results]
   gomedia-bench compare [-format md|text] BASE_LABEL_DIR NEW_LABEL_DIR`)
 }
