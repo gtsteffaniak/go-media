@@ -5,8 +5,15 @@ packages it uses, and every supported container and codec in the fixture
 corpus. The metric is **milliseconds per operation** (ms/op). Results are
 stored as raw `go test -bench` output so any run can be re-compared later.
 
-Results and the optimization history live in [RESULTS.md](RESULTS.md).
-Long-term performance policy lives in [PLAN.md](PLAN.md).
+It is an opt-in tool for performance work, not part of CI. Nothing here runs
+on pull requests: the benchmarks only run with `-bench`, and the golden check
+skips unless you have generated fixtures and recorded a golden locally. The
+ffmpeg comparison gate in `test/compare` remains the PR-level performance check.
+
+Video fixtures are derived from the reference clip
+`test/data/reference_1080_10s.mp4` (scaled and looped per entry), and the WMV
+fixture is `test/data/reference_1080_10s_wmv3.wmv`, the same sources the
+comparison harness uses.
 
 ## Layout
 
@@ -15,7 +22,7 @@ Long-term performance policy lives in [PLAN.md](PLAN.md).
 | `bench/manifest.json` | Fixture corpus: one entry per input file (format, codec, flags, how to generate it). |
 | `bench/manifest/` | Go package that parses and validates the manifest (shared by the generator and the benchmarks). |
 | `bench/*_test.go` | Benchmarks (`public_test.go`, `micro_test.go`) and the golden output check (`golden_test.go`). |
-| `bench/golden/<GOOS>_<GOARCH>.json` | Hashes of every public output per fixture. A change here means output changed. |
+| `bench/golden/<GOOS>_<GOARCH>.json` | Local hashes of every public output per fixture (gitignored; record on the base commit). |
 | `bench/.data/` | Generated fixtures (gitignored). |
 | `bench/results/<label>/` | Raw results: `meta.txt` (host, Go, git revision, flags) and one `*.txt` per suite. |
 | `cmd/gomedia-bench/` | The tool: `gen`, `run`, `compare`. |
@@ -33,8 +40,8 @@ Long-term performance policy lives in [PLAN.md](PLAN.md).
 # 1. Generate the fixture corpus (idempotent; -force to regenerate)
 go run ./cmd/gomedia-bench gen
 
-# 2. Check that outputs are still byte-identical (the golden gate)
-CGO_ENABLED=0 go test ./bench/ -run TestGoldenOutputs -count=1
+# 2. On the base commit, record output hashes (the golden check)
+GOMEDIA_BENCH_UPDATE_GOLDEN=1 CGO_ENABLED=0 go test ./bench/ -run TestGoldenOutputs -count=1
 
 # 3. Run a labelled benchmark set: 5 repetitions, 1 s each, GOMAXPROCS=1, PGO build
 go run ./cmd/gomedia-bench run -label baseline -count 5 -benchtime 1s
@@ -54,7 +61,7 @@ normally.
 
 To finish a run after failures, rerun with `-retry-failed`. It reruns only jobs
 whose shard is missing or failed and keeps the rest. Use `-dry-run` to list the
-jobs without running them, for example to split them between agents with
+jobs without running them, for example to pick a subset with
 `-op` or `-fixture`.
 The report files are rebuilt from the ok shards at the end of every run, so
 parallel runs on different fixtures can share one label and the report keeps
@@ -118,12 +125,11 @@ Operations not benchmarked directly, and why:
    - `thumb`: true only if `Thumbnail` is supported for this file (check first; unsupported codecs use `false`).
    - `subtitles`, `artwork`: true when the file has embedded subtitle streams or cover art.
    - `corrupt`: true when errors are the expected outcome.
-   - How the file is made: `ffmpeg` (argument vector; `{out}` is the output, `{dir}` the data dir), `copy_from` (a repo-relative file), `truncate_of` + `truncate_bytes`, or `generate` (`srt`, `vtt`, `ass`, `lrc` text).
+   - How the file is made: `ffmpeg` (argument vector; `{out}` is the output, `{dir}` the data dir, `{repo}` the repository root), `copy_from` (a repo-relative file), `truncate_of` + `truncate_bytes`, or `generate` (`srt`, `vtt`, `ass`, `lrc` text).
    - `sidecars`: extra text files next to the fixture, keyed by extension.
 2. `go run ./cmd/gomedia-bench gen -only '^your_name$'` (or without `-only`).
 3. Run the smoke check (`-benchtime 1x`). Any fixture that breaks a benchmark fails loudly.
-4. Record its golden: `GOMEDIA_BENCH_UPDATE_GOLDEN=1 CGO_ENABLED=0 go test ./bench/ -run TestGoldenOutputs -count=1`. Review the diff; new entries are additions, not changes.
-5. Record a new baseline if the new case changes the benchmark set.
+4. Re-record your local golden and baseline if you are mid-way through a before/after comparison.
 
 To add an operation, add a `Benchmark*` function in `bench/public_test.go` (or
 `micro_test.go`) using `forEach` for per-fixture cases, and add its outputs to
@@ -154,23 +160,25 @@ go run ./cmd/gomedia-bench compare -format text bench/results/baseline bench/res
 `benchstat` gives equivalent statistics if you have it installed:
 `benchstat bench/results/baseline/e2e.txt bench/results/final/e2e.txt`.
 
-## Golden output gate
+## Golden output check
 
 `TestGoldenOutputs` runs every public operation on every fixture and compares
 SHA-256 digests of the output, or of the error text, against
-`golden/<GOOS>_<GOARCH>.json`. It also records each input file's digest. If an
-input differs from the record, it fails with "input fixture changed" instead of
-comparing outputs of a different input. Goldens are per platform because the
-H.264 and YCbCr kernels have architecture-specific code.
+`golden/<GOOS>_<GOARCH>.json`. It also records each input's digest and reports
+"input fixture changed" rather than comparing outputs of a different input.
+Goldens are per platform (the H.264 and YCbCr kernels have architecture-specific
+code) and depend on the local ffmpeg build, so they are not committed.
 
-Every performance change must keep this test green. A change that alters bytes
-is not a performance change; it needs its own justification, a regenerated
-golden, and a check against the compare harness (`make compare-gate`).
+Workflow: record the golden on the base commit with
+`GOMEDIA_BENCH_UPDATE_GOLDEN=1`, make your change, then rerun the test without
+the variable. An optimization must keep it green; a change that alters output
+bytes is not a pure performance change and also needs the compare harness
+(`make compare-gate`).
 
 ## Reproducibility notes
 
 - `GOMAXPROCS=1` (`-cpu 1`) and `-pgo=default.pgo` match the compare harness.
 - Run on an otherwise idle machine. Do not run two benchmark sessions at once; they
-  interfere with each other (parallel subagents must not benchmark concurrently).
+  interfere with each other.
 - Use `-count >= 5`. A result with CV above 5% is noisy: re-run it before drawing a conclusion.
 - Always record the label, host, and git revision (`meta.txt` does this).

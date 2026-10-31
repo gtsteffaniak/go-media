@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gtsteffaniak/go-media/internal/detect"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
@@ -39,20 +38,7 @@ func ListSubtitleTracks(r io.ReaderAt, size int64) ([]SubtitleTrack, error) {
 		if err != nil {
 			return nil, mapErr(err)
 		}
-		var out []SubtitleTrack
-		for _, s := range streams {
-			if s.Type != detect.StreamSubtitle {
-				continue
-			}
-			out = append(out, SubtitleTrack{
-				Index:    s.Index,
-				Codec:    s.Codec,
-				Language: s.Language,
-				Title:    s.Title,
-				Embedded: true,
-			})
-		}
-		return out, nil
+		return subtitleTracksFromStreams(streams), nil
 	case format.MP4:
 		streams, err := isobmff.SubtitleTracks(r, size)
 		if err != nil {

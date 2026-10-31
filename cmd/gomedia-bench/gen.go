@@ -109,14 +109,14 @@ func genOne(m *manifest.Manifest, f manifest.Fixture, out, dataDir, repoRoot, ff
 		if ffmpeg == "" {
 			return fmt.Errorf("ffmpeg not found on PATH (needed to generate %s)", f.File)
 		}
-		return runFFmpeg(ffmpeg, f.FFmpeg, out, dataDir)
+		return runFFmpeg(ffmpeg, f.FFmpeg, out, dataDir, repoRoot)
 	}
 	return fmt.Errorf("no generator and file missing: %s", out)
 }
 
 // runFFmpeg runs ffmpeg with an argument vector (no shell). Placeholders
-// {dir} and {out} are replaced; the manifest is trusted developer input.
-func runFFmpeg(ffmpeg string, argv []string, out, dataDir string) error {
+// {dir}, {repo} and {out} are replaced; the manifest is trusted developer input.
+func runFFmpeg(ffmpeg string, argv []string, out, dataDir, repoRoot string) error {
 	// Keep the real extension on the temp name so ffmpeg picks the muxer.
 	tmp := out + ".tmp" + filepath.Ext(out)
 	full := []string{"-y", "-hide_banner", "-loglevel", "error"}
@@ -125,7 +125,8 @@ func runFFmpeg(ffmpeg string, argv []string, out, dataDir string) error {
 		case "{out}":
 			full = append(full, tmp)
 		default:
-			full = append(full, strings.ReplaceAll(a, "{dir}", dataDir))
+			a = strings.ReplaceAll(a, "{dir}", dataDir)
+			full = append(full, strings.ReplaceAll(a, "{repo}", repoRoot))
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)

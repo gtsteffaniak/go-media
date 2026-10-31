@@ -5,7 +5,7 @@
 > [!TIP]
 > The live report at [gtsteffaniak.github.io/go-media](https://gtsteffaniak.github.io/go-media/) compares the three build tiers side by side for each video fixture with timing data.
 
-End-to-end latency is gated in `test/compare` against **ffmpeg 9.0.2**. Stage detail: pprof on `internal/thumb` and `internal/h264` benches.
+End-to-end latency is gated in `test/compare` against **ffmpeg 9.0.2**. Stage detail: pprof on `internal/thumb` and `internal/h264` benches. For per-operation, per-format before/after comparisons across the whole public API, use the opt-in [benchmark framework](../bench/README.md) (`cmd/gomedia-bench`), which is not run in CI.
 
 ## Production build (recommended)
 
