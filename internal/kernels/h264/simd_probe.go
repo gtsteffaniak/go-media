@@ -9,12 +9,12 @@ var SIMDProbeCounts atomic.Uint64
 type ProbeName string
 
 const (
-	ProbeIDCT4x4     ProbeName = "idct4x4"
-	ProbeIDCT8x8     ProbeName = "idct8x8"
-	ProbeRecon4x4    ProbeName = "recon4x4"
-	ProbeIntra4x4    ProbeName = "intra4x4"
-	ProbeDequant4x4  ProbeName = "dequant4x4"
-	ProbeYCbCrRow    ProbeName = "ycbcr_row"
+	ProbeIDCT4x4    ProbeName = "idct4x4"
+	ProbeIDCT8x8    ProbeName = "idct8x8"
+	ProbeRecon4x4   ProbeName = "recon4x4"
+	ProbeIntra4x4   ProbeName = "intra4x4"
+	ProbeDequant4x4 ProbeName = "dequant4x4"
+	ProbeYCbCrRow   ProbeName = "ycbcr_row"
 )
 
 func recordSIMD(_ ProbeName) {

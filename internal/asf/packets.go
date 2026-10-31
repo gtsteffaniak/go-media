@@ -8,7 +8,7 @@ import (
 
 type payload struct {
 	keyframe bool
-	pts100ns  int64
+	pts100ns int64
 	data     []byte
 }
 

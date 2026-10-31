@@ -3,15 +3,15 @@ package h264
 import (
 	"image"
 
-	"github.com/gtsteffaniak/go-media/internal/h264/frame"
 	"github.com/abema/go-mp4"
+	"github.com/gtsteffaniak/go-media/internal/h264/frame"
 )
 
 // YUV420 planes and strides from a decoded frame (4:2:0, 8-bit).
 type YUV420 struct {
-	Width   int
-	Height  int
-	Y, Cb, Cr []byte
+	Width            int
+	Height           int
+	Y, Cb, Cr        []byte
 	StrideY, StrideC int
 }
 

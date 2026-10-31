@@ -10,10 +10,10 @@ import (
 
 // ExpectationsFile is the checked-in manifest of allowed comparison outcomes.
 type ExpectationsFile struct {
-	Version             int                `json:"version"`
-	FFmpegVersionPrefix string             `json:"ffmpegVersionPrefix"`
-	TimingGate          *TimingGatePolicy  `json:"timingGate,omitempty"`
-	Cases               []ExpectationCase  `json:"cases"`
+	Version             int               `json:"version"`
+	FFmpegVersionPrefix string            `json:"ffmpegVersionPrefix"`
+	TimingGate          *TimingGatePolicy `json:"timingGate,omitempty"`
+	Cases               []ExpectationCase `json:"cases"`
 }
 
 // ExpectationCase is one asset/check expected status.

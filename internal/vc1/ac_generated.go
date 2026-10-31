@@ -4,7 +4,13 @@ package vc1
 const acVLCBits = 9
 
 var acTableSizes = [...]int{186, 169, 133, 149, 103, 103, 163, 175}
-type acVLCEntry struct{ code uint32; bits uint8; idx int }
+
+type acVLCEntry struct {
+	code uint32
+	bits uint8
+	idx  int
+}
+
 var acVLCTables = [...][]acVLCEntry{
 	{
 		{code: 1, bits: 2, idx: 0},

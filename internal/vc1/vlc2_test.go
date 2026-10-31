@@ -8,7 +8,7 @@ import (
 func TestDecode210Values(t *testing.T) {
 	for _, c := range []struct {
 		b0, b1 bool
-		want int
+		want   int
 	}{
 		{true, false, 0},
 		{false, true, 1},

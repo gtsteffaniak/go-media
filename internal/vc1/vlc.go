@@ -14,15 +14,19 @@ type lutEntry struct {
 }
 
 var (
-	vlcOnce        sync.Once
-	mbIntraSorted  []struct{ code uint32; bits uint8; val uint8 }
-	mbIntraLUT    [1 << mbIntraBits]lutEntry
-	mbIntraLUT13  [1 << mbIntraMaxBits]lutEntry
-	dcLumaLUT    [2][1 << dcVLCBits]lutEntry
-	dcChromaLUT  [2][1 << dcVLCBits]lutEntry
-	acCoeffLUT   [8][1 << acVLCBits]lutEntry
-	acVLCSorted  [8][]acVLCEntry
-	dcLumaSorted [2][]dcEntry
+	vlcOnce       sync.Once
+	mbIntraSorted []struct {
+		code uint32
+		bits uint8
+		val  uint8
+	}
+	mbIntraLUT     [1 << mbIntraBits]lutEntry
+	mbIntraLUT13   [1 << mbIntraMaxBits]lutEntry
+	dcLumaLUT      [2][1 << dcVLCBits]lutEntry
+	dcChromaLUT    [2][1 << dcVLCBits]lutEntry
+	acCoeffLUT     [8][1 << acVLCBits]lutEntry
+	acVLCSorted    [8][]acVLCEntry
+	dcLumaSorted   [2][]dcEntry
 	dcChromaSorted [2][]dcEntry
 )
 
@@ -211,10 +215,8 @@ func (r *bitReader) decodeAcCoeff(set int, scanIdx int, esc3LevelLen, esc3RunLen
 	skip = int(e.skip)
 	last = idx >= lastIdx || r.left() < 0
 	level := int(e.level)
-	if !(last && scanIdx+skip > 63) {
-		sign := r.bit()
-		level = (level ^ -b2i(sign)) + b2i(sign)
-	}
+	sign := r.bit()
+	level = (level ^ -b2i(sign)) + b2i(sign)
 	return last, skip, level, true
 }
 
@@ -251,10 +253,8 @@ func (r *bitReader) decodeAcCoeffEscape(set int, scanIdx int, esc3LevelLen, esc3
 				run += int(acDeltaRun[set][level]) + 1
 			}
 		}
-		if !(last && scanIdx+run > 63) {
-			sign := r.bit()
-			level = (level ^ -b2i(sign)) + b2i(sign)
-		}
+		sign := r.bit()
+		level = (level ^ -b2i(sign)) + b2i(sign)
 		return last, run, level, true
 	}
 	last = r.bit()

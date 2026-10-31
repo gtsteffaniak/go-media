@@ -20,15 +20,15 @@ type FFProbeFormat struct {
 
 // FFProbeStream is a simplified stream entry from ffprobe JSON.
 type FFProbeStream struct {
-	Index        int
-	Tags         map[string]string
-	CodecType    string
-	CodecName    string
-	Width        int
-	Height       int
-	SampleRate   string
-	Channels     int
-	AttachedPic  int
+	Index       int
+	Tags        map[string]string
+	CodecType   string
+	CodecName   string
+	Width       int
+	Height      int
+	SampleRate  string
+	Channels    int
+	AttachedPic int
 }
 
 // FFProbeResult aggregates ffprobe output for one file.
@@ -60,14 +60,14 @@ func probeFFprobe(path string) (FFProbeResult, error) {
 			Tags       map[string]string `json:"tags"`
 		} `json:"format"`
 		Streams []struct {
-			Index      int               `json:"index"`
-			Tags       map[string]string `json:"tags"`
-			CodecType  string            `json:"codec_type"`
-			CodecName  string `json:"codec_name"`
-			Width      int    `json:"width"`
-			Height     int    `json:"height"`
-			SampleRate string `json:"sample_rate"`
-			Channels   int    `json:"channels"`
+			Index       int               `json:"index"`
+			Tags        map[string]string `json:"tags"`
+			CodecType   string            `json:"codec_type"`
+			CodecName   string            `json:"codec_name"`
+			Width       int               `json:"width"`
+			Height      int               `json:"height"`
+			SampleRate  string            `json:"sample_rate"`
+			Channels    int               `json:"channels"`
 			Disposition struct {
 				AttachedPic int `json:"attached_pic"`
 			} `json:"disposition"`

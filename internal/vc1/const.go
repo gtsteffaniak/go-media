@@ -11,15 +11,17 @@ var dcPred = [...]int16{
 
 var dcpred = dcPred
 
+// Coding-set indices select the AC VLC and run/level tables; the order
+// matches the table order (SMPTE 421M tables 168-183, as laid out by FFmpeg).
 const (
-	csHighRateIntra = 0
-	csHighMotIntra  = 1
-	csMidRateIntra  = 2
-	csLowMotIntra   = 3
-	csHighRateInter = 4
-	csHighMotInter  = 5
-	csMidRateInter  = 6
-	csLowMotInter   = 7
+	csHighMotIntra  = 0
+	csHighMotInter  = 1
+	csLowMotIntra   = 2
+	csLowMotInter   = 3
+	csMidRateIntra  = 4
+	csMidRateInter  = 5
+	csHighRateIntra = 6
+	csHighRateInter = 7
 )
 
 func codingSetY(pqIndex, table int) int {

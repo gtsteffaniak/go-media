@@ -39,4 +39,3 @@ func DecodeFrame(dec *gvp8.Decoder, frame []byte) (*image.RGBA, error) {
 	}
 	return pictureRGBA(pic), nil
 }
-

@@ -1,99 +1,104 @@
 package vc1
 
-func (d *intraDecoder) putBlocksDelayed(signed bool) {
-	if !d.firstSliceLn {
-		if d.mbX > 0 {
-			d.putFromRing(d.blkRing[d.blkTopLeft], d.mbX-1, d.mbY-1, signed)
-		}
-		if d.mbX == d.endMBX-1 {
-			d.putFromRing(d.blkRing[d.blkTop], d.mbX, d.mbY-1, signed)
-		}
-	}
-	if d.mbY == d.mbh-1 {
-		if d.mbX > 0 {
-			d.putFromRing(d.blkRing[d.blkLeft], d.mbX-1, d.mbY, signed)
-		}
-		if d.mbX == d.endMBX-1 {
-			d.putFromRing(d.blkRing[d.blkCur], d.mbX, d.mbY, signed)
-		}
-	}
-}
+// Reconstruction runs on whole planes after every macroblock is decoded.
+// The VC-1 spec defines overlap smoothing as all vertical block edges of the
+// frame followed by all horizontal edges, and the in-loop deblocking filter
+// as all horizontal edges followed by all vertical edges (SMPTE 421M 8.5,
+// 8.6). FFmpeg pipelines the same operations with a one-row delay; running
+// them frame-wide is equivalent and far simpler.
 
-func (d *intraDecoder) putFromRing(blocks [][64]int16, mbx, mby int, signed bool) {
-	if mbx < 0 || mby < 0 || mbx >= d.mbw || mby >= d.mbh {
-		return
-	}
-	for i := 0; i < 6; i++ {
-		b := blocks[blockMap[i]]
-		if i < 4 {
-			off := d.xPad + mbx*16 + (i&1)*8 + (d.yPad+mby*16+(i>>1)*8)*d.yBufStride
-			putPixels8x8(d.destY[off:], d.yBufStride, b, signed)
-		} else if i == 4 {
-			off := d.xPad + mbx*8 + (d.yPad+mby*8)*d.cBufStride
-			putPixels8x8(d.destCb[off:], d.cBufStride, b, signed)
-		} else {
-			off := d.xPad + mbx*8 + (d.yPad+mby*8)*d.cBufStride
-			putPixels8x8(d.destCr[off:], d.cBufStride, b, signed)
+// storeMB writes the six inverse-transformed blocks (natural order: Y0 Y1 Y2
+// Y3 Cb Cr) of the current macroblock into the residual planes.
+func (d *intraDecoder) storeMB(blocks *[6][64]int16) {
+	for k := 0; k < 4; k++ {
+		x0 := d.mbX*16 + (k&1)*8
+		y0 := d.mbY*16 + (k>>1)*8
+		for y := 0; y < 8; y++ {
+			copy(d.resY[(y0+y)*d.yStride+x0:], blocks[k][y*8:y*8+8])
 		}
 	}
-}
-
-func putPixels8x8(dest []byte, stride int, block [64]int16, signed bool) {
+	x0, y0 := d.mbX*8, d.mbY*8
 	for y := 0; y < 8; y++ {
-		row := dest[y*stride:]
-		for x := 0; x < 8; x++ {
-			v := int(block[y*8+x])
-			if !signed {
-				v += 128
+		copy(d.resCb[(y0+y)*d.cStride+x0:], blocks[4][y*8:y*8+8])
+		copy(d.resCr[(y0+y)*d.cStride+x0:], blocks[5][y*8:y*8+8])
+	}
+}
+
+// finishPicture applies overlap smoothing, range reduction, clamping and the
+// loop filter, producing the output picture.
+func (d *intraDecoder) finishPicture() {
+	signed := d.overlap && d.pq >= 9
+	type plane struct {
+		res    []int16
+		out    []byte
+		stride int
+		w, h   int
+	}
+	planes := [3]plane{
+		{d.resY, d.pic.Y, d.yStride, d.mbw * 16, d.mbh * 16},
+		{d.resCb, d.pic.Cb, d.cStride, d.mbw * 8, d.mbh * 8},
+		{d.resCr, d.pic.Cr, d.cStride, d.mbw * 8, d.mbh * 8},
+	}
+	for _, p := range planes {
+		if signed {
+			overlapPlane(p.res, p.stride, p.w, p.h)
+		}
+		bias := 0
+		if signed {
+			bias = 128
+		}
+		for i, v := range p.res[:p.stride*p.h] {
+			x := int(v)
+			if d.rangeRedFrm {
+				if signed {
+					x *= 2
+				} else {
+					x = (x - 64) * 2
+				}
 			}
-			row[x] = clipU8(v)
+			p.out[i] = clipU8(x + bias)
+		}
+		if d.loopFilter {
+			loopFilterPlane(p.out, p.stride, p.w, p.h, d.pq)
 		}
 	}
 }
 
-func (d *intraDecoder) iOverlapMB(cur [][64]int16) {
-	for i := 0; i < 6; i++ {
-		if d.mbX == 0 && (i&5) != 1 {
-			continue
+// overlapPlane runs the VC-1 overlap smoothing filter on every internal 8x8
+// block edge: vertical edges first, then horizontal edges.
+func overlapPlane(p []int16, stride, w, h int) {
+	for x := 8; x < w; x += 8 {
+		for y := 0; y < h; y++ {
+			rnd1 := 4
+			if y&1 != 0 {
+				rnd1 = 3
+			}
+			rnd2 := 7 - rnd1
+			row := p[y*stride:]
+			a, b, c, dd := int(row[x-2]), int(row[x-1]), int(row[x]), int(row[x+1])
+			d1 := a - dd
+			d2 := a - dd + b - c
+			row[x-2] = int16((a*8 - d1 + rnd1) >> 3)
+			row[x-1] = int16((b*8 - d2 + rnd2) >> 3)
+			row[x] = int16((c*8 + d2 + rnd1) >> 3)
+			row[x+1] = int16((dd*8 + d1 + rnd2) >> 3)
 		}
-		if d.mbX > 0 {
-			hOverlapInt16(d.blkRing[d.blkLeft][blockMap[i]], cur[blockMap[i]], 0)
+	}
+	for y := 8; y < h; y += 8 {
+		for x := 0; x < w; x++ {
+			rnd1 := 4
+			if x&1 != 0 {
+				rnd1 = 3
+			}
+			rnd2 := 7 - rnd1
+			i := y*stride + x
+			a, b, c, dd := int(p[i-2*stride]), int(p[i-stride]), int(p[i]), int(p[i+stride])
+			d1 := a - dd
+			d2 := a - dd + b - c
+			p[i-2*stride] = int16((a*8 - d1 + rnd1) >> 3)
+			p[i-stride] = int16((b*8 - d2 + rnd2) >> 3)
+			p[i] = int16((c*8 + d2 + rnd1) >> 3)
+			p[i+stride] = int16((dd*8 + d1 + rnd2) >> 3)
 		}
-	}
-	if !d.firstSliceLn && d.mbX > 0 {
-		vOverlapInt16(d.blkRing[d.blkTop][blockMap[0]], cur[blockMap[0]])
-	}
-}
-
-func hOverlapInt16(left, right [64]int16, flags int) {
-	rnd1 := 4
-	if flags&2 != 0 {
-		rnd1 = 3
-	}
-	rnd2 := 7 - rnd1
-	for row := 0; row < 8; row++ {
-		base := row * 8
-		a, b, c, vd := left[base+6], left[base+7], right[base+0], right[base+1]
-		d1 := int(a) - int(vd)
-		d2 := d1 + int(b) - int(c)
-		left[base+6] = int16((int(a)*8 - d1 + rnd1) >> 3)
-		left[base+7] = int16((int(b)*8 - d2 + rnd2) >> 3)
-		right[base+0] = int16((int(c)*8 + d2 + rnd1) >> 3)
-		right[base+1] = int16((int(vd)*8 + d1 + rnd2) >> 3)
-	}
-}
-
-func vOverlapInt16(top, bottom [64]int16) {
-	rnd1, rnd2 := 4, 3
-	for col := 0; col < 8; col++ {
-		a, b, c, vd := top[48+col], top[56+col], bottom[col], bottom[8+col]
-		d1 := int(a) - int(vd)
-		d2 := d1 + int(b) - int(c)
-		top[48+col] = int16((int(a)*8 - d1 + rnd1) >> 3)
-		top[56+col] = int16((int(b)*8 - d2 + rnd2) >> 3)
-		bottom[col] = int16((int(c)*8 + d2 + rnd1) >> 3)
-		bottom[8+col] = int16((int(vd)*8 + d1 + rnd2) >> 3)
-		rnd2 = 7 - rnd2
-		rnd1 = 7 - rnd1
 	}
 }

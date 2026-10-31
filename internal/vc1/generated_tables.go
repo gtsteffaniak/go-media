@@ -2,9 +2,17 @@
 
 package vc1
 
-type dcEntry struct{ code uint32; bits uint8; val int16 }
+type dcEntry struct {
+	code uint32
+	bits uint8
+	val  int16
+}
 
-var mbIntraCBP = [...]struct{ code uint32; bits uint8; val uint8 }{
+var mbIntraCBP = [...]struct {
+	code uint32
+	bits uint8
+	val  uint8
+}{
 	{code: 1, bits: 1, val: 0},
 	{code: 23, bits: 6, val: 1},
 	{code: 9, bits: 5, val: 2},
@@ -584,4 +592,3 @@ var zzWMV2B = [...]uint8{
 	0, 8, 1, 16, 9, 24, 17, 2, 32, 10, 25, 40, 18, 48, 33, 26,
 	56, 41, 34, 3, 49, 57, 11, 42, 19, 50, 27, 58, 35, 43, 51, 59,
 }
-

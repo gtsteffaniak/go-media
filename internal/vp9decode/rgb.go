@@ -22,7 +22,7 @@ func yuv420BT601LimitedToRGBA(dst *image.RGBA, p *govpx.Image) {
 			r := clamp8(1.164*yy + 1.596*cr)
 			g := clamp8(1.164*yy - 0.391*cb - 0.813*cr)
 			b := clamp8(1.164*yy + 2.018*cb)
-			di := dstRow + (dx0 + x) * 4
+			di := dstRow + (dx0+x)*4
 			dst.Pix[di+0] = r
 			dst.Pix[di+1] = g
 			dst.Pix[di+2] = b

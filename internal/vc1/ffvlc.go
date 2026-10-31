@@ -14,8 +14,8 @@ type vlcCode struct {
 }
 
 var (
-	acVLC2 [8][]vlcElem
-	dcVLC2 [2][2][]vlcElem
+	acVLC2   [8][]vlcElem
+	dcVLC2   [2][2][]vlcElem
 	vlc2Done bool
 )
 

@@ -3,15 +3,15 @@ package media
 import (
 	"io"
 
-	"github.com/gtsteffaniak/go-media/internal/avi"
 	"github.com/gtsteffaniak/go-media/internal/asf"
+	"github.com/gtsteffaniak/go-media/internal/avi"
 	"github.com/gtsteffaniak/go-media/internal/flac"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/mp3"
-	ts "github.com/gtsteffaniak/go-media/internal/mpegts"
 	ps "github.com/gtsteffaniak/go-media/internal/mpegps"
+	ts "github.com/gtsteffaniak/go-media/internal/mpegts"
 	"github.com/gtsteffaniak/go-media/internal/ogg"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/wav"

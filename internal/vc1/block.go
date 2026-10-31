@@ -41,17 +41,10 @@ func (d *intraDecoder) decodeIBlock(n int, coded, acPred bool, cs int, block *[6
 	idx := d.blockIndex(n)
 	acBase := idx * 16
 	acLeft, acTop := acBase, acBase
-	wrap := 2 * d.b8Stride
-	if n >= 4 {
-		wrap = d.b8Stride
-	}
+	wrap := d.blockWrap(n)
 	_, dir, _ := d.iPredDC(n)
-	if dir == 1 && acLeft >= 16 {
-		acLeft -= 16
-	}
-	if dir == 0 && acTop >= 16*wrap {
-		acTop -= 16 * wrap
-	}
+	acLeft -= 16
+	acTop -= 16 * wrap
 	scale := d.pq*2 + d.halfPQ
 	if coded {
 		zz := acZZTables(d.seq.resFastTX, acPred, dir == 0)
@@ -82,7 +75,7 @@ func (d *intraDecoder) decodeIBlock(n int, coded, acPred bool, cs int, block *[6
 				block[k<<sh] += ac[k]
 			}
 		}
-		acOut := d.acVal[acBase:]
+		acOut := d.acVal[acBase : acBase+16]
 		for k := 1; k < 8; k++ {
 			acOut[k] = block[k<<d.leftBlkSh]
 			acOut[k+8] = block[k<<d.topBlkSh]
@@ -100,7 +93,7 @@ func (d *intraDecoder) decodeIBlock(n int, coded, acPred bool, cs int, block *[6
 			}
 		}
 	} else {
-		acOut := d.acVal[acBase:]
+		acOut := d.acVal[acBase : acBase+16]
 		clear(acOut)
 		if acPred {
 			sh := d.leftBlkSh

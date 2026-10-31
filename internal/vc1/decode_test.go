@@ -20,11 +20,29 @@ func TestDecodeKeyframe360x288(t *testing.T) {
 	if pic.Width != 360 || pic.Height != 288 {
 		t.Fatalf("size %dx%d", pic.Width, pic.Height)
 	}
-	sum := sha256.Sum256(pic.Y)
-	got := hex.EncodeToString(sum[:])
-	const want = "27f0dc0be6207fb31cd86c90eab16fa6a6c5ee5339cd34593366125e2f298b35"
-	if got != want {
-		t.Fatalf("Y SHA256\ngot  %s\nwant %s", got, want)
+	// Golden hashes are of ffmpeg 9.0.2's decode of the same frame
+	// (-pix_fmt yuv420p rawvideo); the decoder is bit-exact with it.
+	crop := func(p []byte, stride, w, h int) []byte {
+		out := make([]byte, 0, w*h)
+		for y := 0; y < h; y++ {
+			out = append(out, p[y*stride:y*stride+w]...)
+		}
+		return out
+	}
+	planes := []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"Y", crop(pic.Y, pic.YStride, 360, 288), "7d6a4e00c6333aeddeb52dfac4d965510aa97a60d734630089d812b80facd454"},
+		{"Cb", crop(pic.Cb, pic.CStride, 180, 144), "45c0e1bef201b2ac42e9b5c1d25076fe569c1e11dcab7a88cb626e36889517b3"},
+		{"Cr", crop(pic.Cr, pic.CStride, 180, 144), "76259ac1bf2a732c48650b66d3a9091aed56e750521a67e86fef41dcc1fd2c3c"},
+	}
+	for _, p := range planes {
+		sum := sha256.Sum256(p.data)
+		if got := hex.EncodeToString(sum[:]); got != p.want {
+			t.Errorf("%s SHA256\ngot  %s\nwant %s", p.name, got, p.want)
+		}
 	}
 }
 

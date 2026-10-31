@@ -27,16 +27,16 @@ const ShippedTimingGateBuild = "purego_pgo_in_process"
 
 // BuildModeTimingRow is one asset/preset timed in a specific build mode vs ffmpeg.
 type BuildModeTimingRow struct {
-	AssetID      string    `json:"assetId"`
-	Check        string    `json:"check"`
-	ThumbPreset  string    `json:"thumbPreset"`
-	BuildMode    BuildMode `json:"buildMode"`
-	Tier         int       `json:"tier"` // 1..3 stacked tiers
-	GoMediaWrite float64   `json:"goMediaWriteMs"`
-	FFmpegMS     float64   `json:"ffmpegMs"`
-	DeltaPct     float64   `json:"timingDeltaPct"`
-	GatePass         bool `json:"timingGatePass"`         // vs ffmpeg cap when GateApplicable
-	GateApplicable   bool `json:"timingGateApplicable"`   // false for experiment tier 3 (GOEXPERIMENT=simd)
+	AssetID        string    `json:"assetId"`
+	Check          string    `json:"check"`
+	ThumbPreset    string    `json:"thumbPreset"`
+	BuildMode      BuildMode `json:"buildMode"`
+	Tier           int       `json:"tier"` // 1..3 stacked tiers
+	GoMediaWrite   float64   `json:"goMediaWriteMs"`
+	FFmpegMS       float64   `json:"ffmpegMs"`
+	DeltaPct       float64   `json:"timingDeltaPct"`
+	GatePass       bool      `json:"timingGatePass"`       // vs ffmpeg cap when GateApplicable
+	GateApplicable bool      `json:"timingGateApplicable"` // false for experiment tier 3 (GOEXPERIMENT=simd)
 }
 
 var _buildModeTimings []BuildModeTimingRow
@@ -75,9 +75,9 @@ func collectBuildModeTimings(assets []Asset, flat []CheckResult, repoRoot string
 		ffByKey[r.AssetID+"|"+r.ThumbPreset] = r.FFmpegMS
 	}
 	tierOf := map[BuildMode]int{
-		BuildModePurego:         1,
-		BuildModePuregoPGO:      2,
-		BuildModePuregoPGOSIMD:  3,
+		BuildModePurego:        1,
+		BuildModePuregoPGO:     2,
+		BuildModePuregoPGOSIMD: 3,
 	}
 	for _, a := range assets {
 		if a.Category != "video" {

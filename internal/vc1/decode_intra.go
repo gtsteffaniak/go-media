@@ -15,14 +15,10 @@ func decodeIntra(config, sample []byte, width, height int) (*Picture, error) {
 	if err := d.parseFrameHeader(); err != nil {
 		return nil, err
 	}
-	if d.seq.profile == 3 {
-		if err := d.decodeIBlocksAdvanced(); err != nil {
-			return nil, err
-		}
-	} else if err := d.decodeIBlocks(); err != nil {
+	if err := d.decodeIBlocks(); err != nil {
 		return nil, err
 	}
-	d.copyPictureFromBuf()
+	d.finishPicture()
 	return d.pic, nil
 }
 
@@ -30,6 +26,8 @@ func errUnsupportedProfile(profile int) error {
 	switch profile {
 	case 2:
 		return errs.UnsupProfile("wmv3 keyframe", "VC-1 Complex Profile")
+	case 3:
+		return errs.UnsupProfile("wvc1 keyframe", "VC-1 Advanced Profile")
 	default:
 		return errs.UnsupProfile("wmv3 keyframe", "VC-1 profile")
 	}

@@ -14,8 +14,8 @@ const maxTimingRegressionPct = 0.50
 const targetTimingRegressionPct = 0.10
 
 type thumbTimingSample struct {
-	GoMS    float64
-	WriteMS float64
+	GoMS     float64
+	WriteMS  float64
 	FFmpegMS float64
 }
 

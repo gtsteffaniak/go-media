@@ -4,25 +4,25 @@ import "github.com/gtsteffaniak/go-media/internal/errs"
 
 // seq holds VC-1 sequence-layer fields from WMV3/WVC1 extradata.
 type seq struct {
-	profile       int
-	overlap       bool
-	loopFilter    bool
-	quantMode     int
-	maxB          int
-	finterp       bool
-	ranged        bool
-	multires      bool
-	resFastTX     bool
-	fastUVMC      bool
-	extendedMV    bool
-	dquant        int
-	vstrans       bool
-	interlace     bool
-	tfcntr        bool
-	broadcast     bool
-	postproc      bool
-	psf           bool
-	resX8         bool
+	profile    int
+	overlap    bool
+	loopFilter bool
+	quantMode  int
+	maxB       int
+	finterp    bool
+	ranged     bool
+	multires   bool
+	resFastTX  bool
+	fastUVMC   bool
+	extendedMV bool
+	dquant     int
+	vstrans    bool
+	interlace  bool
+	tfcntr     bool
+	broadcast  bool
+	postproc   bool
+	psf        bool
+	resX8      bool
 }
 
 func parseSequence(config []byte, width, height int) (seq, error) {

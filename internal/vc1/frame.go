@@ -50,11 +50,10 @@ func (d *intraDecoder) parseFrameHeaderSimple() error {
 		d.pquantizer = true
 	}
 	if d.seq.extendedMV {
-		n := 0
-		for n < 3 && !d.r.bit() {
-			n++
+		// MVRANGE: unary code of 1 bits terminated by a 0, at most 3 bits.
+		// Only motion-compensated frames use it; keyframes just skip it.
+		for n := 0; n < 3 && d.r.bit(); n++ {
 		}
-		_ = n
 	}
 	if d.seq.multires {
 		r.skip(2)

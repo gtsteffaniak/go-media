@@ -20,7 +20,7 @@ func (pt PacketTester) Or(other PacketTester) PacketTester {
 	return func(p *Packet) bool { return pt(p) || other(p) }
 }
 
-//IsPID creates a packet tester that returns true
+// IsPID creates a packet tester that returns true
 // if the tested packet matches the selected pid
 func IsPID(pid uint32) PacketTester {
 	return func(p *Packet) bool { return p.PID == pid }

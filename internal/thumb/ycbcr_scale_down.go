@@ -91,4 +91,3 @@ func tryScaleYCbCrDown(img image.Image, maxW, maxH int, mode ScalerMode) (image.
 	}
 	return img, false
 }
-

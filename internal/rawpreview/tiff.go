@@ -11,16 +11,16 @@ import (
 )
 
 const (
-	tagImageWidth                 = 0x0100
-	tagImageLength                = 0x0101
-	tagCompression                = 0x0103
-	tagJPEGInterchangeFormat      = 0x0201
-	tagJPEGInterchangeFormatLen   = 0x0202
-	tagSubIFDs                    = 0x014a
-	compJPEG                      = 6
-	compOldJPEG                   = 7
-	maxTIFFRead                   = 64 << 20
-	maxIFDs                       = 64
+	tagImageWidth               = 0x0100
+	tagImageLength              = 0x0101
+	tagCompression              = 0x0103
+	tagJPEGInterchangeFormat    = 0x0201
+	tagJPEGInterchangeFormatLen = 0x0202
+	tagSubIFDs                  = 0x014a
+	compJPEG                    = 6
+	compOldJPEG                 = 7
+	maxTIFFRead                 = 64 << 20
+	maxIFDs                     = 64
 )
 
 func tiffJPEGCandidates(r io.ReaderAt, size int64) ([]jpegCand, error) {

@@ -15,16 +15,16 @@ const (
 
 // mainHeader is the avih chunk body.
 type mainHeader struct {
-	microSecPerFrame uint32
-	maxBytesPerSec   uint32
-	paddingGranularity uint32
-	flags            uint32
-	totalFrames      uint32
-	initialFrames    uint32
-	streams          uint32
+	microSecPerFrame    uint32
+	maxBytesPerSec      uint32
+	paddingGranularity  uint32
+	flags               uint32
+	totalFrames         uint32
+	initialFrames       uint32
+	streams             uint32
 	suggestedBufferSize uint32
-	width            uint32
-	height           uint32
+	width               uint32
+	height              uint32
 }
 
 func parseMainHeader(b []byte) (mainHeader, error) {
@@ -61,13 +61,13 @@ type streamInfo struct {
 
 // fileIndex holds parsed AVI metadata and sample index for one file.
 type fileIndex struct {
-	r          io.ReaderAt
-	size       int64
-	avih       mainHeader
-	streams    []streamInfo
-	video      int // stream index in streams slice, -1 if none
-	moviOff    int64 // offset of the 'movi' list type fourcc
-	index      []sampleIndex
+	r           io.ReaderAt
+	size        int64
+	avih        mainHeader
+	streams     []streamInfo
+	video       int   // stream index in streams slice, -1 if none
+	moviOff     int64 // offset of the 'movi' list type fourcc
+	index       []sampleIndex
 	totalFrames uint32
 }
 
@@ -129,7 +129,7 @@ func (f *fileIndex) parseRIFFChildren(start, end int64) error {
 			listEnd := h.off + 8 + int64(h.sz)
 			switch string(lt[:]) {
 			case "hdrl":
-				if err := f.parseHdrl(h.off + 12, listEnd); err != nil {
+				if err := f.parseHdrl(h.off+12, listEnd); err != nil {
 					return err
 				}
 			case "movi":

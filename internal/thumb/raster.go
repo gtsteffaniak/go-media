@@ -7,7 +7,9 @@ import (
 )
 
 // RasterPNG encodes the scaled decode path as PNG (lossless).
-func RasterPNG(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt Options) ([]byte, string, error) {
+func RasterPNG(r interface {
+	ReadAt([]byte, int64) (int, error)
+}, size int64, opt Options) ([]byte, string, error) {
 	normalizeOptions(&opt)
 	img, src, rot, err := sourceImage(r, size, opt)
 	if err != nil {
@@ -29,7 +31,9 @@ func RasterPNG(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, op
 }
 
 // Raster returns the scaled image before lossy encode.
-func Raster(r interface{ ReadAt([]byte, int64) (int, error) }, size int64, opt Options) (image.Image, string, error) {
+func Raster(r interface {
+	ReadAt([]byte, int64) (int, error)
+}, size int64, opt Options) (image.Image, string, error) {
 	data, src, err := RasterPNG(r, size, opt)
 	if err != nil {
 		return nil, "", err

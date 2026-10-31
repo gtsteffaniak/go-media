@@ -29,7 +29,7 @@ func TestCTLUTCoversAllCodewords(t *testing.T) {
 			L := int(e.length)
 			C := int(e.code)
 			shift := cavlcPeekBits - L
-			idx := C<<shift
+			idx := C << shift
 			got := lut[idx]
 			if got.bits != uint8(L) || got.t0 != e.t0 || got.tc != e.tc {
 				t.Fatalf("%s codeword L=%d C=%d: lut[%d]={%d,%d,%d} want {%d,%d,%d}",

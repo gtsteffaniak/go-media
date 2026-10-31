@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	maxMetaBytes   = 8 << 20
-	maxItemBytes   = 24 << 20
-	maxTopBoxes    = 4096
-	maxBoxPayload  = 64 << 20
+	maxMetaBytes  = 8 << 20
+	maxItemBytes  = 24 << 20
+	maxTopBoxes   = 4096
+	maxBoxPayload = 64 << 20
 )
 
 // JPEGPreview returns the referenced JPEG thumbnail item when present.
@@ -187,7 +187,7 @@ func parseIinf(r io.ReaderAt, size, ps, pe int64, st *metaState) {
 		}
 		boxType := string(payload[off+4 : off+8])
 		if boxType == "infe" {
-			parseInfe(payload[off : off+boxSize], st)
+			parseInfe(payload[off:off+boxSize], st)
 		}
 		off += boxSize
 	}
