@@ -5,7 +5,6 @@ package h264
 import "simd"
 
 func inverseTransform8x8ResidualSIMD(d [64]int32) [64]int32 {
-	recordSIMD(ProbeIDCT8x8)
 	var f [64]int32
 	for r := 0; r < 8; r++ {
 		m := idct8Portable(d[r*8 : r*8+8])

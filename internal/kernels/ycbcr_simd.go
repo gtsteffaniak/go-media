@@ -4,8 +4,6 @@ package kernels
 
 import (
 	"simd"
-
-	h264k "github.com/gtsteffaniak/go-media/internal/kernels/h264"
 )
 
 // AreaDownRowYSIMD averages source luma rows using simd.Int32s horizontal accumulation.
@@ -14,7 +12,6 @@ func AreaDownRowYSIMD(dstY []byte, dstStride int, dx int, srcY []byte, srcStride
 	if dx < 0 || dx >= len(dstY) {
 		return
 	}
-	h264k.RecordYCbCrRowSIMD()
 	total := 0
 	n := 0
 	for sy := sy0; sy < sy1; sy++ {

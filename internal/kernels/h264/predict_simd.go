@@ -5,7 +5,6 @@ package h264
 import "simd"
 
 func predictIntra4x4VerticalSIMD(dst []byte, top []byte) {
-	recordSIMD(ProbeIntra4x4)
 	var row [4]int32
 	for i := 0; i < 4; i++ {
 		row[i] = int32(top[i])
@@ -20,7 +19,6 @@ func predictIntra4x4VerticalSIMD(dst []byte, top []byte) {
 }
 
 func predictIntra4x4HorizontalSIMD(dst []byte, left []byte) {
-	recordSIMD(ProbeIntra4x4)
 	for y := 0; y < 4; y++ {
 		b := simd.BroadcastInt32s(int32(left[y]))
 		var out [4]int32
@@ -32,7 +30,6 @@ func predictIntra4x4HorizontalSIMD(dst []byte, left []byte) {
 }
 
 func predictIntra16x16VerticalSIMD(dst []byte, top []byte) {
-	recordSIMD(ProbeIntra4x4)
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x += 4 {
 			var row [4]int32
@@ -49,7 +46,6 @@ func predictIntra16x16VerticalSIMD(dst []byte, top []byte) {
 }
 
 func predictIntra16x16HorizontalSIMD(dst []byte, left []byte) {
-	recordSIMD(ProbeIntra4x4)
 	for y := 0; y < 16; y++ {
 		b := simd.BroadcastInt32s(int32(left[y]))
 		for x := 0; x < 16; x += 4 {

@@ -6,7 +6,6 @@ import "simd"
 
 // inverseTransform4x4ResidualSIMD applies H.264 4×4 IDCT using simd.Int32s for rounding rows.
 func inverseTransform4x4ResidualSIMD(d [16]int32) [16]int32 {
-	recordSIMD(ProbeIDCT4x4)
 	var f [16]int32
 	for i := 0; i < 4; i++ {
 		butterfly1DInt32s(d[i*4:], f[i*4:])

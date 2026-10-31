@@ -42,6 +42,16 @@ func IDCTAdd4Chroma420(plane []byte, stride, px0, py0 int, pred []byte, predStri
 
 // IDCTAdd4Chroma420InPlace adds residuals; plane already holds intra prediction.
 func IDCTAdd4Chroma420InPlace(plane []byte, stride, px0, py0 int, blocks *[4][16]int32, nz []uint8) {
+	if simdIDCTAddPair && KernelsUseSIMD {
+		for by := 0; by < 2; by++ {
+			i := by * 2
+			if nz[i] == 0 && blocks[i][0] == 0 && nz[i+1] == 0 && blocks[i+1][0] == 0 {
+				continue
+			}
+			idctAdd4x4PairSIMD(plane, (py0+by*4)*stride+px0, stride, &blocks[i], &blocks[i+1])
+		}
+		return
+	}
 	for blk := 0; blk < 4; blk++ {
 		bx, by := blk%2, blk/2
 		d := blocks[blk]
@@ -77,6 +87,26 @@ func addResidual4x4(plane []byte, stride, px0, py0 int, res [16]int32) {
 // IDCTAdd16LumaInPlace adds IDCT residuals to plane that already holds intra prediction.
 // blocks and nz are indexed in raster order (by*4+bx), not luma4x4BlkIdx order.
 func IDCTAdd16LumaInPlace(plane []byte, stride, mbX, mbY int, blocks *[16][16]int32, nz []uint8) {
+	if simdIDCTAddQuad && KernelsUseAVX512 {
+		for by := 0; by < 4; by++ {
+			i := by * 4
+			if nz[i]|nz[i+1]|nz[i+2]|nz[i+3] == 0 && blocks[i][0]|blocks[i+1][0]|blocks[i+2][0]|blocks[i+3][0] == 0 {
+				continue
+			}
+			idctAdd4x4QuadAVX512(plane, (mbY*16+by*4)*stride+mbX*16, stride, (*[4][16]int32)(blocks[i:i+4]))
+		}
+		return
+	}
+	if simdIDCTAddPair && KernelsUseSIMD {
+		for i := 0; i < 16; i += 2 {
+			if nz[i] == 0 && blocks[i][0] == 0 && nz[i+1] == 0 && blocks[i+1][0] == 0 {
+				continue
+			}
+			bx, by := i%4, i/4
+			idctAdd4x4PairSIMD(plane, (mbY*16+by*4)*stride+mbX*16+bx*4, stride, &blocks[i], &blocks[i+1])
+		}
+		return
+	}
 	for blk := 0; blk < 16; blk++ {
 		bx, by := blk%4, blk/4
 		px0, py0 := mbX*16+bx*4, mbY*16+by*4
@@ -126,4 +156,18 @@ func IDCT8x8Add(plane []byte, stride, px0, py0 int, pred []byte, res [64]int32) 
 			plane[row+xx] = byte(v)
 		}
 	}
+}
+
+// idctAdd4x4PairPortable is the reference for idctAdd4x4PairSIMD.
+func idctAdd4x4PairPortable(plane []byte, off, stride int, a, b *[16]int32) {
+	ra := inverseTransform4x4ResidualPortable(*a)
+	rb := inverseTransform4x4ResidualPortable(*b)
+	addResidual4x4(plane, stride, off, 0, ra)
+	addResidual4x4(plane, stride, off+4, 0, rb)
+}
+
+// idctAdd4x4QuadPortable is the reference for idctAdd4x4QuadAVX512.
+func idctAdd4x4QuadPortable(plane []byte, off, stride int, q *[4][16]int32) {
+	idctAdd4x4PairPortable(plane, off, stride, &q[0], &q[1])
+	idctAdd4x4PairPortable(plane, off+8, stride, &q[2], &q[3])
 }
