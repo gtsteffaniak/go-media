@@ -316,10 +316,10 @@ func decodeSource(r interface {
 }
 
 // hasThumbCodec reports whether any Matroska video codec is one the thumbnail
-// path decodes (VP8 or MJPEG).
+// path decodes (VP8, VP9, or MJPEG).
 func hasThumbCodec(ids []string) bool {
 	for _, id := range ids {
-		if id == "V_VP8" || id == "V_MJPEG" {
+		if id == "V_VP8" || id == "V_VP9" || id == "V_MJPEG" {
 			return true
 		}
 	}

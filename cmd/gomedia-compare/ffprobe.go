@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -217,6 +218,10 @@ func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailP
 	if err != nil {
 		return err
 	}
+	// Pinned ffmpeg 9.0.2 static build segfaults on -ss with MPEG-TS; decode from start.
+	if tsLikeContainer(path) {
+		seekSec = 0
+	}
 	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
 	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s,scale=trunc(iw/2)*2:trunc(ih/2)*2",
 		preset.MaxWidth, preset.MaxHeight, scaleFlags)
@@ -226,11 +231,25 @@ func ffmpegThumbnailPreset(path, dest string, seekSec float64, preset thumbnailP
 		args = append(args, "-skip_frame", "nokey", "-skip_loop_filter", "all")
 	}
 	args = append(args, "-threads", "1")
-	if seekSec > 0.001 {
+	inputFirst := tsLikeContainer(path)
+	if seekSec > 0.001 && !inputFirst {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
 	}
-	args = append(args, "-i", path, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
+	args = append(args, "-i", path)
+	if seekSec > 0.001 && inputFirst {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
+	}
+	args = append(args, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
 	return exec.Command(ffmpeg, args...).Run()
+}
+
+func tsLikeContainer(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".ts", ".m2ts", ".mts":
+		return true
+	default:
+		return false
+	}
 }
 
 // ffmpegRasterPNG writes a lossless PNG frame using the same seek/scale as thumbnails.

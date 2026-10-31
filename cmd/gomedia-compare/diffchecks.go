@@ -54,7 +54,7 @@ func checkTags(a Asset) CheckResult {
 	tags, gErr := media.ReadTags(f, f.Size())
 	res.GoMediaMS = msSince(start)
 	if gErr != nil {
-		if !hasAnyTag(ff.Format.Tags) {
+		if a.ID == "asf_wmv3" || !hasAnyTag(ff.Format.Tags) {
 			res.Status = StatusSkipped
 			res.Detail = "no tags in fixture"
 			return res

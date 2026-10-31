@@ -28,3 +28,5 @@ tests.
 ## VP9 keyframe decode (`internal/vp9decode`)
 
 Thumbnail VP9 decode uses **[thesyncim/govpx](https://github.com/thesyncim/govpx)** (BSD-3-Clause; libvpx-derived) for profile 0, 8-bit 4:2:0 packets. Non-profile-0 streams return `ErrUnsupportedProfile`.
+
+**Why a direct dependency (not vendored):** A clean-room VP9 decoder would duplicate thousands of lines of bitstream and loop-filter code already maintained as pure Go in govpx. The module is **CGO-free**, has **no WASM**, and is the same class of dependency as abema/go-mp4 for containers — one focused library for one codec. go-media wraps it in `internal/vp9decode` (BT.601 limited-range thumb output, error mapping, superframe handling) so the public API stays stable if the backend ever changes.

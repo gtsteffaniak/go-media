@@ -1,6 +1,10 @@
 package mpeg2video
 
-import "github.com/gtsteffaniak/go-media/internal/mpeg2video/bitreader"
+import (
+	"errors"
+
+	"github.com/gtsteffaniak/go-media/internal/mpeg2video/bitreader"
+)
 
 type ScalableMode uint32
 
@@ -48,29 +52,9 @@ func sequence_scalable_extension(br bitreader.BitReader) (*SequenceScalableExten
 	if err != nil {
 		return nil, err
 	}
-
-	panic(sse.scalable_mode)
-
-	/*
-		scalable_mode 2 uimsbf
-		layer_id 4 uimsbf
-		if (scalable_mode == “spatial scalability”) {
-		lower_layer_prediction_horizontal_size 14 uimsbf
-		marker_bit 1 bslbf
-		lower_layer_prediction_vertical_size 14 uimsbf
-		horizontal_subsampling_factor_m 5 uimsbf
-		horizontal_subsampling_factor_n 5 uimsbf
-		vertical_subsampling_factor_m 5 uimsbf
-		vertical_subsampling_factor_n 5 uimsbf
-		}
-		if ( scalable_mode == “temporal scalability” ) {
-		picture_mux_enable 1 uimsbf
-		if ( picture_mux_enable )
-		mux_to_progressive_sequence 1 uimsbf
-		picture_mux_order 3 uimsbf
-		picture_mux_factor 3 uimsbf
-		}
-	*/
-	next_start_code(br)
-	panic("unsupported: sequence_scalable_extension")
+	// Thumbnail path does not decode scalable sequences; skip extension bits.
+	if err := next_start_code(br); err != nil {
+		return nil, err
+	}
+	return nil, errors.New("unsupported: sequence_scalable_extension")
 }
