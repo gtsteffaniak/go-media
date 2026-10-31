@@ -39,7 +39,12 @@ func Duration(r io.ReaderAt, size int64) (detect.DurationResult, error) {
 		case string(ch[0:4]) == "fmt ":
 			if sz >= 16 && pos+8+16 <= size {
 				fmtb := buf[:16]
-				_, _ = r.ReadAt(fmtb, pos+8)
+				if n, err := r.ReadAt(fmtb, pos+8); n < len(fmtb) {
+					if err == nil {
+						err = io.ErrUnexpectedEOF
+					}
+					return detect.DurationResult{}, err
+				}
 				byteRate = binary.LittleEndian.Uint32(fmtb[8:12])
 			}
 		case isData:
@@ -77,7 +82,12 @@ func Streams(r io.ReaderAt, size int64) ([]detect.Stream, error) {
 		sz := int64(binary.LittleEndian.Uint32(ch[4:8]))
 		if string(ch[0:4]) == "fmt " && sz >= 16 && pos+8+16 <= size {
 			fmtb := buf[:16]
-			_, _ = r.ReadAt(fmtb, pos+8)
+			if n, err := r.ReadAt(fmtb, pos+8); n < len(fmtb) {
+				if err == nil {
+					err = io.ErrUnexpectedEOF
+				}
+				return nil, err
+			}
 			channels = binary.LittleEndian.Uint16(fmtb[2:4])
 			sampleRate = binary.LittleEndian.Uint32(fmtb[4:8])
 			break

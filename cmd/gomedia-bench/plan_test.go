@@ -169,3 +169,16 @@ func TestKeepUnfinishedReturnsOnlyMissingOrFailed(t *testing.T) {
 		t.Fatalf("retry plan = %+v", got)
 	}
 }
+
+func TestCheckShardSettingsRejectsMismatch(t *testing.T) {
+	dir := t.TempDir()
+	plan := []benchJob{{suite: "e2e", job: "ok__f"}, {suite: "e2e", job: "bad__f"}}
+	writeShardFile(t, dir, "e2e", shardFileName("ok__f"), encodeShard("ok__f", "ok", "count=1;benchtime=1x;cpu=1;pgo=true", []byte("x\n")))
+	writeShardFile(t, dir, "e2e", shardFileName("bad__f"), encodeShard("bad__f", "failed", "count=9;benchtime=1x;cpu=1;pgo=true", nil))
+	if err := checkShardSettings(plan, dir, "count=1;benchtime=1x;cpu=1;pgo=true"); err != nil {
+		t.Fatalf("matching settings rejected: %v", err)
+	}
+	if err := checkShardSettings(plan, dir, "count=5;benchtime=1x;cpu=1;pgo=true"); err == nil {
+		t.Fatal("mismatched ok shard accepted")
+	}
+}

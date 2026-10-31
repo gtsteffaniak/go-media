@@ -155,6 +155,9 @@ func cmdRun(args []string) error {
 		return nil
 	}
 	if *retryFailed {
+		if err := checkShardSettings(plan, dir, settingsKey(*count, *benchtime, *cpu, *pgo)); err != nil {
+			return err
+		}
 		before := len(plan)
 		plan = keepUnfinished(plan, dir)
 		fmt.Printf("retry: %d of %d job(s) need running; finished shards are kept\n", len(plan), before)
@@ -352,6 +355,26 @@ func fixtureOpsFor(op string) []string {
 	for _, f := range fixtureBenchmarks {
 		if f == op {
 			return []string{op}
+		}
+	}
+	return nil
+}
+
+// checkShardSettings rejects a retry when a finished shard was measured with
+// different settings, since its results could not be merged with new ones.
+// Missing, undecodable and unsuccessful shards are ignored; they get rerun.
+func checkShardSettings(plan []benchJob, dir, settings string) error {
+	for _, j := range plan {
+		data, err := os.ReadFile(filepath.Join(dir, "shards", j.suite, shardFileName(j.job)))
+		if err != nil {
+			continue
+		}
+		s, derr := decodeShard(data)
+		if derr != nil || s.status != "ok" {
+			continue
+		}
+		if s.settings != settings {
+			return fmt.Errorf("retry: shard %s/%s was run with %s, not %s; rerun without -retry-failed or use the original settings", j.suite, j.job, s.settings, settings)
 		}
 	}
 	return nil

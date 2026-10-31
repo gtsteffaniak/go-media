@@ -196,7 +196,12 @@ func welchT(b, n stats) float64 {
 	}
 	se := math.Sqrt(b.sd*b.sd/float64(b.n) + n.sd*n.sd/float64(n.n))
 	if se == 0 {
-		return math.Inf(sign(n.mean - b.mean))
+		// Zero variance on both sides: report no difference when the means
+		// match, otherwise a large finite t (Inf is not JSON-safe).
+		if n.mean == b.mean {
+			return 0
+		}
+		return float64(sign(n.mean-b.mean)) * 1e9
 	}
 	return (n.mean - b.mean) / se
 }

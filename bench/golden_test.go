@@ -139,14 +139,15 @@ func TestGoldenOutputs(t *testing.T) {
 	update := os.Getenv(envUpdateGolden) == "1"
 
 	var recorded goldenFile
+	missingGolden := false
 	if b, err := os.ReadFile(gp); err == nil {
 		if err := json.Unmarshal(b, &recorded); err != nil {
 			t.Fatalf("parse %s: %v", gp, err)
 		}
 	} else if !update {
-		// Goldens are a local before/after check, not a CI gate: record them
-		// on the base commit, then rerun after a change.
-		t.Skipf("no golden file %s for %s/%s; record one on the base commit with %s=1", gp, runtime.GOOS, runtime.GOARCH, envUpdateGolden)
+		// Goldens are a local before/after check, not a CI gate. Only fail
+		// once a fixture actually runs, so machines without fixtures skip.
+		missingGolden = true
 	}
 	if recorded.Fixtures == nil {
 		recorded.Fixtures = map[string]map[string]string{}
@@ -162,6 +163,9 @@ func TestGoldenOutputs(t *testing.T) {
 			continue
 		}
 		ran++
+		if missingGolden {
+			t.Fatalf("no golden file %s for %s/%s; record one on the base commit with %s=1", gp, runtime.GOOS, runtime.GOARCH, envUpdateGolden)
+		}
 		got := computeGolden(t, fx, path, data)
 		current.Fixtures[fx.Name] = got
 		if update {

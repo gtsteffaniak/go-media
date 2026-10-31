@@ -90,7 +90,10 @@ go run ./cmd/gomedia-bench run -label full -suite e2e -jobs 12 -count 5
 go run ./cmd/gomedia-bench run -label full -suite e2e -jobs 12 -count 5 -retry-failed
 
 # Internal micro benchmarks only
-go run ./cmd/gomedia-bench run -label kernels -suite internal -bench 'IDCT|Residual' -count 10
+go run ./cmd/gomedia-bench run -label kernels -suite internal -count 10
+
+# Regex selection of benchmarks (-op takes one exact name), via plain go test
+go test -run '^$' -bench 'IDCT|Residual' -count 10 ./internal/...
 
 # Fast smoke check (one iteration each, no statistics)
 CGO_ENABLED=0 go test ./bench/ -run '^$' -bench . -benchtime 1x -cpu 1
