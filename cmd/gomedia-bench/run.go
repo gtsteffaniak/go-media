@@ -165,5 +165,14 @@ func loadAverage() string {
 	if b, err := os.ReadFile("/proc/loadavg"); err == nil {
 		return strings.Join(strings.Fields(string(b))[:3], " ")
 	}
+	// Fallback: parse the "load averages: a b c" tail of uptime(1).
+	if out, err := exec.Command("uptime").Output(); err == nil {
+		if _, tail, ok := strings.Cut(string(out), "averages:"); ok {
+			return strings.Join(strings.Fields(strings.ReplaceAll(tail, ",", " ")), " ")
+		}
+		if _, tail, ok := strings.Cut(string(out), "average:"); ok {
+			return strings.Join(strings.Fields(strings.ReplaceAll(tail, ",", " ")), " ")
+		}
+	}
 	return "unknown"
 }
