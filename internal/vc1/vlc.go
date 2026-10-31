@@ -14,7 +14,8 @@ type lutEntry struct {
 }
 
 var (
-	vlcOnce      sync.Once
+	vlcOnce        sync.Once
+	mbIntraSorted  []struct{ code uint32; bits uint8; val uint8 }
 	mbIntraLUT    [1 << mbIntraBits]lutEntry
 	mbIntraLUT13  [1 << mbIntraMaxBits]lutEntry
 	dcLumaLUT    [2][1 << dcVLCBits]lutEntry
@@ -46,12 +47,22 @@ func initVLCLUTs() {
 		fillLUT(mbIntraLUT[:], mbIntraBits, e.code, e.bits, int16(i))
 		fillLUT(mbIntraLUT13[:], mbIntraMaxBits, e.code, e.bits, int16(i))
 	}
+	mbIntraSorted = append(mbIntraSorted[:0], mbIntraCBP[:]...)
+	for i := 1; i < len(mbIntraSorted); i++ {
+		e := mbIntraSorted[i]
+		j := i - 1
+		for j >= 0 && mbIntraSorted[j].bits < e.bits {
+			mbIntraSorted[j+1] = mbIntraSorted[j]
+			j--
+		}
+		mbIntraSorted[j+1] = e
+	}
 	for set := 0; set < 8; set++ {
 		acVLCSorted[set] = append([]acVLCEntry(nil), acVLCTables[set]...)
 		sortACVLC(acVLCSorted[set])
-		for _, e := range acVLCTables[set] {
+		for _, e := range acVLCSorted[set] {
 			if int(e.bits) <= acVLCBits {
-				fillLUT(acCoeffLUT[set][:], acVLCBits, e.code, e.bits, int16(e.idx))
+				fillLUTFirst(acCoeffLUT[set][:], acVLCBits, e.code, e.bits, int16(e.idx))
 			}
 		}
 	}
@@ -61,7 +72,7 @@ func sortACVLC(tab []acVLCEntry) {
 	for i := 1; i < len(tab); i++ {
 		e := tab[i]
 		j := i - 1
-		for j >= 0 && tab[j].bits > e.bits {
+		for j >= 0 && tab[j].bits < e.bits {
 			tab[j+1] = tab[j]
 			j--
 		}
@@ -73,7 +84,7 @@ func sortDCVLC(tab []dcEntry) {
 	for i := 1; i < len(tab); i++ {
 		e := tab[i]
 		j := i - 1
-		for j >= 0 && tab[j].bits > e.bits {
+		for j >= 0 && tab[j].bits < e.bits {
 			tab[j+1] = tab[j]
 			j--
 		}
@@ -125,56 +136,63 @@ func (r *bitReader) vlc9(lut []lutEntry, bits int) (int16, bool) {
 }
 
 func (r *bitReader) vlcAC(set int) (int, bool) {
-	tab := acVLCSorted[set]
-	for _, e := range tab {
-		nb := int(e.bits)
-		if nb == 0 || r.left() < nb {
+	if r.left() < acVLCBits {
+		return 0, false
+	}
+	w := int(r.peek(acVLCBits))
+	e := acCoeffLUT[set][w]
+	if e.len != 0 {
+		r.skip(int(e.len))
+		return int(e.val), true
+	}
+	for _, ent := range acVLCSorted[set] {
+		nb := int(ent.bits)
+		if nb <= acVLCBits || r.left() < nb {
 			continue
 		}
-		if r.peek(nb) == e.code {
+		if r.peek(nb) == ent.code {
 			r.skip(nb)
-			return e.idx, true
+			return ent.idx, true
 		}
 	}
 	return 0, false
 }
 
 func (r *bitReader) vlcDC(chroma bool, table int) (int16, bool) {
-	var tab []dcEntry
+	tab := dcLumaSorted[table]
 	if chroma {
 		tab = dcChromaSorted[table]
-	} else {
-		tab = dcLumaSorted[table]
 	}
-	for _, e := range tab {
-		nb := int(e.bits)
+	for _, ent := range tab {
+		nb := int(ent.bits)
 		if nb == 0 || r.left() < nb {
 			continue
 		}
-		if r.peek(nb) == e.code {
+		if r.peek(nb) == ent.code {
 			r.skip(nb)
-			return e.val, true
+			return ent.val, true
 		}
 	}
 	return 0, false
 }
 
 func (r *bitReader) vlcMBIntra() (int, bool) {
-	if r.left() < mbIntraMaxBits {
-		return 0, false
+	for _, ent := range mbIntraSorted {
+		nb := int(ent.bits)
+		if nb == 0 || r.left() < nb {
+			continue
+		}
+		if r.peek(nb) == ent.code {
+			r.skip(nb)
+			return int(ent.val), true
+		}
 	}
-	w := int(r.peek(mbIntraMaxBits))
-	e := mbIntraLUT13[w]
-	if e.len == 0 {
-		return 0, false
-	}
-	r.skip(int(e.len))
-	return int(e.val), true
+	return 0, false
 }
 
 func esc3UnaryLevelLen(r *bitReader) int {
 	n := 0
-	for n < 6 && r.bit() {
+	for n < 6 && !r.bit() {
 		n++
 	}
 	return n + 2
@@ -191,10 +209,10 @@ func decode012(r *bitReader) int {
 }
 
 func decode210(r *bitReader) int {
-	if !r.bit() {
+	if r.bit() {
 		return 0
 	}
-	if !r.bit() {
+	if r.bit() {
 		return 1
 	}
 	return 2
@@ -209,17 +227,24 @@ func (r *bitReader) decodeAcCoeff(set int, esc3LevelLen, esc3RunLen *int, pq int
 	size := acTableSizes[set]
 	if idx != size-1 {
 		e := acIndexDecode[set][idx]
-		last = idx >= lastIdx || r.over
-		sign := r.bit()
+		skip = int(e.skip)
+		last = idx >= lastIdx || r.left() < 0
 		v := int(e.level)
+		sign := r.bit()
 		if sign {
 			v = -v
 		}
-		return last, int(e.skip), v, true
+		return last, skip, v, true
 	}
+	return r.decodeAcCoeffEscape(set, esc3LevelLen, esc3RunLen, pq, dquantfrm)
+}
+
+func (r *bitReader) decodeAcCoeffEscape(set int, esc3LevelLen, esc3RunLen *int, pq int, dquantfrm bool) (last bool, skip, value int, ok bool) {
+	lastIdx := acLastIndex[set]
+	size := acTableSizes[set]
 	escape := decode210(r)
 	if escape != 2 {
-		idx, ok = r.vlcAC(set)
+		idx, ok := r.vlcAC(set)
 		if !ok || idx >= size-1 {
 			return false, 0, 0, false
 		}

@@ -54,7 +54,7 @@ func (d *intraDecoder) decodeIBlock(n int, coded, acPred bool, cs int, block *[6
 	}
 	scale := d.pq*2 + d.halfPQ
 	if coded {
-		zz := acZZTables(true, acPred, dir == 0)
+		zz := acZZTables(d.seq.resFastTX, acPred, dir == 0)
 		i := 1
 		for {
 			last, skip, val, ok := d.r.decodeAcCoeff(cs, &d.esc3LevelLen, &d.esc3RunLen, d.pq, d.dquantFrm)
@@ -67,7 +67,7 @@ func (d *intraDecoder) decodeIBlock(n int, coded, acPred bool, cs int, block *[6
 			}
 			block[zz[i]] = int16(val)
 			i++
-			if last || d.r.over {
+			if last {
 				break
 			}
 		}

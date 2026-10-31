@@ -3,6 +3,7 @@ package vc1
 import "github.com/gtsteffaniak/go-media/internal/errs"
 
 func (d *intraDecoder) decodeIBlocks() error {
+	d.esc3LevelLen, d.esc3RunLen = 0, 0
 	d.codingSet = codingSetY(d.pqIndex, d.yACTab)
 	d.codingSet2 = codingSetC(d.pqIndex, d.cACTab)
 	d.initBlockRing()
