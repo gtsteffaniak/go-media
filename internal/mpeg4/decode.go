@@ -562,10 +562,12 @@ func (d *decoder) decodeBlock(r *reader, n int, coded, useDCVLC, acPred bool, mb
 	} else {
 		qmul, qadd := 2*q, (q-1)|1
 		for i := 1; i < 64; i++ {
-			if l := int(blk[i]); l > 0 {
-				blk[i] = int16(l*qmul + qadd)
-			} else if l < 0 {
-				blk[i] = int16(l*qmul - qadd)
+			if l := int(blk[i]); l != 0 {
+				// s is +1 for positive l and -1 for negative l, so the
+				// sign is applied arithmetically rather than with a
+				// data-dependent branch (signs are close to random).
+				s := (l >> 31) | 1
+				blk[i] = int16(l*qmul + s*qadd)
 			}
 		}
 	}
