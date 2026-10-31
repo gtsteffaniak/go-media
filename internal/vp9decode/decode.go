@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/gtsteffaniak/go-media/internal/errs"
-	"github.com/gtsteffaniak/govpx/pkg/govpx"
+	"github.com/gtsteffaniak/go-vpx/pkg/govpx"
 )
 
 // FrameDecoder decodes raw VP9 packets (Matroska/WebM payloads, possibly superframes).

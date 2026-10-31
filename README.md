@@ -48,7 +48,7 @@ To build the same report locally, run `make compare` (see [`test/compare/README.
 | Codec | Containers | Decoder |
 |---|---|---|
 | **H.264** Baseline, Main, High, High 10 | MP4, MOV, M4V, AVI, MPEG-TS | Clean-room intra decoder ([details](docs/H264.md)) |
-| **VP9** profile 0 | WebM, MKV | [govpx](https://github.com/gtsteffaniak/govpx), bit-exact with libvpx |
+| **VP9** profile 0 | WebM, MKV | [govpx](https://github.com/gtsteffaniak/go-vpx), bit-exact with libvpx |
 | **VP8** | WebM, MKV | Pure Go |
 | **MPEG-4 Part 2** (DivX, XviD) | MP4, MOV, MKV, AVI | Clean-room I-VOP decoder, bit-exact with ffmpeg ([details](docs/MPEG4.md)) |
 | **MPEG-2** | MP4, MOV, MPEG-PS, MPEG-TS | I-picture decoder |

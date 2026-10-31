@@ -25,7 +25,7 @@ func TestVP9PictureAtSeekWebM(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pic, err := matroska.VP9PictureAtSeek(f, st.Size(), hdr, 10)
+	pic, err := matroska.VP9PictureAtSeek(f, st.Size(), hdr, 10, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,4 +58,35 @@ func vp9Fixture(t *testing.T) string {
 		t.Fatalf("ffmpeg: %v\n%s", err, out)
 	}
 	return path
+}
+
+// TestVP9KeyframeSnapDefault checks that the default (non-exact) seek returns
+// the keyframe at or before the target: at 10% it must equal the picture
+// decoded at the very start of the clip, where the first keyframe sits.
+func TestVP9KeyframeSnapDefault(t *testing.T) {
+	path := vp9Fixture(t)
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hdr, err := matroska.ProbeHeader(f, st.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapped, err := matroska.VP9PictureAtSeek(f, st.Size(), hdr, 10, false)
+	if err != nil || snapped == nil {
+		t.Fatalf("snapped: %v", err)
+	}
+	first, err := matroska.VP9PictureAtSeek(f, st.Size(), hdr, 0.001, true)
+	if err != nil || first == nil {
+		t.Fatalf("first: %v", err)
+	}
+	if string(snapped.Y) != string(first.Y) {
+		t.Fatal("default seek did not return the first keyframe")
+	}
 }

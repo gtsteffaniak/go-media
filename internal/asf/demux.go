@@ -184,22 +184,22 @@ func parseStreamProps(b []byte) (*streamEntry, error) {
 }
 
 func parseVideoFormat(spec []byte) (codec string, width, height int, extra []byte, err error) {
-	if len(spec) < 47 {
+	// ASF video type-specific data (ASF spec 9.2): encoded width u32, encoded
+	// height u32, reserved u8, format data size u16, then a BITMAPINFOHEADER
+	// starting at byte 11. Codec-specific data follows the 40-byte header.
+	const bih = 11
+	if len(spec) < bih+40 {
 		return "", 0, 0, nil, errs.Corrupt
 	}
-	// Layout matches ffmpeg asf_read_stream_properties for video (extradata at end).
-	if len(spec) >= 19 {
-		width = int(int32(leU32(spec[15:19])))
-		height = int(int32(leU32(spec[19:23])))
-	}
-	sizeX := int(leU32(spec[11:15]))
-	if sizeX > 40 && len(spec) >= 47+(sizeX-40) {
-		extra = append([]byte(nil), spec[47:47+sizeX-40]...)
-	}
-	if len(extra) == 0 || bytes.Equal(extra, []byte{0, 0, 0, 0}) {
-		if len(spec) >= 4 {
-			extra = append([]byte(nil), spec[len(spec)-4:]...)
+	width = int(int32(leU32(spec[bih+4:])))
+	height = int(int32(leU32(spec[bih+8:])))
+	biSize := int(leU32(spec[bih:]))
+	if biSize > 40 {
+		end := bih + biSize
+		if end > len(spec) {
+			end = len(spec)
 		}
+		extra = append([]byte(nil), spec[bih+40:end]...)
 	}
 	if idx := bytes.Index(spec, []byte("WMV3")); idx >= 0 {
 		codec = "wmv3"
@@ -209,7 +209,7 @@ func parseVideoFormat(spec []byte) (codec string, width, height int, extra []byt
 		codec = "wmv1"
 	}
 	if codec == "" {
-		tag := binary.LittleEndian.Uint32(spec[23:27])
+		tag := binary.LittleEndian.Uint32(spec[bih+16:])
 		var b [4]byte
 		binary.LittleEndian.PutUint32(b[:], tag)
 		codec = detectVideoFourCC(string(b[:]))

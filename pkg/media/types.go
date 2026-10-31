@@ -123,6 +123,14 @@ type ThumbnailOptions struct {
 	Fast bool
 	// PreferEmbedded tries cover art before decoding video.
 	PreferEmbedded bool
+	// Exact captures the frame at the seek time instead of the nearest
+	// keyframe. By default (false) video thumbnails use the keyframe at or
+	// before the seek time, which only needs one frame decoded; the image can
+	// then sit up to one keyframe interval (GOP) before the requested time.
+	// Exact decodes forward from that keyframe and is slower in proportion to
+	// the distance. Only VP8 and VP9 honor it today; other codecs always use
+	// the keyframe.
+	Exact bool
 }
 
 // ThumbnailResult holds encoded image bytes and how they were obtained.

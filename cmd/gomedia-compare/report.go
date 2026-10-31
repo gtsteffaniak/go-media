@@ -163,7 +163,7 @@ func buildSummary(assets []Asset, nested [][]CheckResult) ReportSummary {
 	s := ReportSummary{
 		Assets:      len(assets),
 		GeneratedAt: time.Now().UTC(),
-		SeedCommit:  goFFmpegSeedCommit,
+		SeedCommit:  seedID,
 		SeedSHA256:  seedSHA256,
 		ByStatus:    map[string]int{},
 		ByCheck:     map[string]int{},

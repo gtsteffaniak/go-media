@@ -5,27 +5,32 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 )
 
-// Seed media is the same file used by go-ffmpeg tests, pinned to a commit and verified by SHA-256.
+// The seed is the single reference clip every comparison fixture is derived
+// from. It is checked into the repo (test/data) and verified by SHA-256.
 const (
-	goFFmpegSeedCommit = "eaaf6b064cf7143a719af6c50e222914b525e88b"
-	seedFileName       = "Big_Buck_Bunny_1080_10s_2MB.mp4"
-	seedSHA256         = "bad8caf78fbf9ca292db2f170f99ff6251782947c0bfa8bfd391b4da4a459163"
+	seedFileName = "reference_1080_10s.mp4"
+	seedSHA256   = "406e43b9b133af8de0027427f922ed3c5bcd647d018f25ddb0b7e200c4dade02"
+
+	// seedWMV3FileName is the reference clip encoded to WMV3 (Main) on Windows,
+	// since ffmpeg cannot encode WMV3. See copyReferenceWMV3.
+	seedWMV3FileName = "reference_1080_10s_wmv3.wmv"
+	seedWMV3SHA256   = "3aac947c163d24b4aa136f15cd842a7f18f96ba2ec38969841dcf6c31c4e2684"
 )
 
-// seedURL returns the raw GitHub URL for the pinned seed object.
-func seedURL() string {
-	return fmt.Sprintf(
-		"https://raw.githubusercontent.com/gtsteffaniak/go-ffmpeg/%s/test/data/%s",
-		goFFmpegSeedCommit, seedFileName,
-	)
+// seedID is the short identifier shown in the report footer.
+var seedID = seedSHA256[:12]
+
+// seedSourcePath is the checked-in reference clip.
+func seedSourcePath() string {
+	return filepath.Join(findRepoRoot("."), "test", "data", seedFileName)
 }
 
-// ensureSeed downloads the seed file when missing or when the checksum does not match.
+// ensureSeed copies the checked-in reference clip into destDir and verifies
+// its checksum.
 func ensureSeed(destDir string) (string, error) {
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", err
@@ -36,13 +41,13 @@ func ensureSeed(destDir string) (string, error) {
 	} else if ok {
 		return path, nil
 	}
-	if err := downloadSeed(path); err != nil {
-		return "", err
+	if err := copyFile(seedSourcePath(), path); err != nil {
+		return "", fmt.Errorf("seed: %w", err)
 	}
 	if ok, err := fileMatchesSHA256(path, seedSHA256); err != nil {
 		return "", err
 	} else if !ok {
-		return "", fmt.Errorf("seed checksum mismatch after download (expected %s)", seedSHA256)
+		return "", fmt.Errorf("seed checksum mismatch (expected %s)", seedSHA256)
 	}
 	return path, nil
 }
@@ -62,31 +67,4 @@ func fileMatchesSHA256(path, wantHex string) (bool, error) {
 		return false, err
 	}
 	return hex.EncodeToString(h.Sum(nil)) == wantHex, nil
-}
-
-// downloadSeed fetches the pinned seed over HTTPS.
-func downloadSeed(path string) error {
-	resp, err := http.Get(seedURL())
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("seed download: HTTP %d", resp.StatusCode)
-	}
-	tmp := path + ".part"
-	out, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		out.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := out.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, path)
 }
