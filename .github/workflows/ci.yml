@@ -81,6 +81,8 @@ jobs:
 
   compare-gate:
     name: ffmpeg comparison gate
+    # PRs only: on main, pages.yml already regenerates the comparison report.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
