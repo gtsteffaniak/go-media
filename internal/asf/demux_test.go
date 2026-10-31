@@ -1,6 +1,7 @@
 package asf
 
 import (
+	"bytes"
 	"os"
 	"testing"
 )
@@ -39,15 +40,20 @@ func TestVideoKeyframePayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := bytesReaderAt{b: b}
-	extra, sample, err := videoKeyframe(r, int64(len(b)), 0)
+	_, sample, err := videoKeyframe(r, int64(len(b)), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ref, _ := os.ReadFile("../vc1/testdata/frame1_360x288.bin")
-	if len(sample) == 0 {
-		t.Fatal("empty sample")
+	if len(sample) != 4108 {
+		t.Fatalf("sample len %d want 4108", len(sample))
 	}
-	t.Logf("extra=%x sample=%d ref=%d", extra, len(sample), len(ref))
+	if len(ref) >= 3174 && !bytes.Equal(sample[:3174], ref[:3174]) {
+		t.Fatalf("first fragment mismatch")
+	}
+	if sample[0] != 0x10 {
+		t.Fatalf("sample start %02x", sample[0])
+	}
 }
 
 type bytesReaderAt struct {
