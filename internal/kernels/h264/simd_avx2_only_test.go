@@ -23,7 +23,7 @@ func TestSIMDKernelsAVX2Only(t *testing.T) {
 	}
 	// AVX2-tier kernel symbols: everything except the explicit AVX-512 ones.
 	out, err := exec.Command("go", "tool", "objdump", "-s",
-		`h264\.(idctAdd4x4PairSIMD|transpose4x4x2|butterfly4x8|addRow8|join2|inverseTransform4x4ResidualSIMD)$`, bin).CombinedOutput()
+		`h264\.(idctAdd4x4PairSIMD|idctAdd4x4BlockSIMD|transpose4x4|butterfly4x4|addTwoRows4|transpose4x4x2|butterfly4x8|addRow8|join2|inverseTransform4x4ResidualSIMD)$`, bin).CombinedOutput()
 	if err != nil {
 		t.Skipf("objdump: %v", err)
 	}
@@ -33,5 +33,30 @@ func TestSIMDKernelsAVX2Only(t *testing.T) {
 	}
 	if re := regexp.MustCompile(`(?i)\bzmm\d+|\bk[0-7]\b|\{k[0-7]\}|VPMOVUSDB|VPMOVDB`); re.MatchString(text) {
 		t.Fatalf("AVX-512 instruction in AVX2-tier kernel:\n%s", re.FindString(text))
+	}
+}
+
+// TestSIMDKernelsClearUpperBits fails if a top-level kernel that uses YMM/ZMM
+// registers returns without VZEROUPPER (archsimd.ClearAVXUpperBits). Dirty upper
+// bits slow every later legacy-SSE instruction in ordinary Go code.
+func TestSIMDKernelsClearUpperBits(t *testing.T) {
+	bin := t.TempDir() + "/h264k.test"
+	cmd := exec.Command("go", "test", "-c", "-o", bin, ".")
+	cmd.Env = append(os.Environ(), "GOEXPERIMENT=simd", "CGO_ENABLED=0", "GOFLAGS=")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go test -c: %v\n%s", err, out)
+	}
+	for _, sym := range []string{"idctAdd4x4PairSIMD", "idctAdd4x4BlockSIMD", "idctAdd4x4QuadAVX512"} {
+		out, err := exec.Command("go", "tool", "objdump", "-s", `h264\.`+sym+`$`, bin).CombinedOutput()
+		if err != nil {
+			t.Skipf("objdump: %v", err)
+		}
+		text := string(out)
+		if !strings.Contains(text, "TEXT") {
+			t.Fatalf("%s not found in binary", sym)
+		}
+		if regexp.MustCompile(`\b[YZ]\d+\b`).MatchString(text) && !strings.Contains(text, "VZEROUPPER") {
+			t.Errorf("%s uses YMM/ZMM registers but never executes VZEROUPPER", sym)
+		}
 	}
 }

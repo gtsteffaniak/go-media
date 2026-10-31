@@ -12,10 +12,28 @@ func IDCTDCAdd4x4(plane []byte, stride, px0, py0 int, pred []byte, predStride, l
 		}
 		return
 	}
-	var d [16]int32
-	d[0] = dcCoeff
-	res := inverseTransform4x4Residual(d)
-	WriteBlock4x4(plane, stride, px0, py0, pred, predStride, lx, ly, res)
+	// DC-only: every residual sample is (dc+32)>>6, exactly what the full
+	// transform produces, so skip the transform.
+	r := int(dcCoeff+32) >> 6
+	for yy := 0; yy < 4; yy++ {
+		row := (py0+yy)*stride + px0
+		poff := (ly+yy)*predStride + lx
+		p := pred[poff : poff+4 : poff+4]
+		o := plane[row : row+4 : row+4]
+		for xx := 0; xx < 4; xx++ {
+			o[xx] = clip255(int(p[xx]) + r)
+		}
+	}
+}
+
+func clip255(v int) byte {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return byte(v)
 }
 
 // IDCTAdd4x4Luma reconstructs one 4×4 luma block; tc is TotalCoeff for AC (0 = no AC parsed).
@@ -65,6 +83,10 @@ func IDCTAdd4Chroma420InPlace(plane []byte, stride, px0, py0 int, blocks *[4][16
 
 // IDCTAdd4x4Block runs full 4×4 IDCT on dequantized coeffs d and adds to pred at (lx,ly).
 func IDCTAdd4x4Block(plane []byte, stride, px0, py0 int, pred []byte, predStride, lx, ly int, d [16]int32) {
+	if simdIDCTAddBlock && KernelsUseSIMD {
+		idctAdd4x4BlockSIMD(plane, py0*stride+px0, stride, pred, ly*predStride+lx, predStride, &d)
+		return
+	}
 	res := inverseTransform4x4Residual(d)
 	WriteBlock4x4(plane, stride, px0, py0, pred, predStride, lx, ly, res)
 }
@@ -170,4 +192,14 @@ func idctAdd4x4PairPortable(plane []byte, off, stride int, a, b *[16]int32) {
 func idctAdd4x4QuadPortable(plane []byte, off, stride int, q *[4][16]int32) {
 	idctAdd4x4PairPortable(plane, off, stride, &q[0], &q[1])
 	idctAdd4x4PairPortable(plane, off+8, stride, &q[2], &q[3])
+}
+
+// idctAdd4x4BlockPortable is the reference for idctAdd4x4BlockSIMD.
+func idctAdd4x4BlockPortable(plane []byte, off, stride int, pred []byte, predOff, predStride int, d *[16]int32) {
+	res := inverseTransform4x4ResidualPortable(*d)
+	for yy := 0; yy < 4; yy++ {
+		for xx := 0; xx < 4; xx++ {
+			plane[off+yy*stride+xx] = clip255(int(pred[predOff+yy*predStride+xx]) + int(res[yy*4+xx]))
+		}
+	}
 }

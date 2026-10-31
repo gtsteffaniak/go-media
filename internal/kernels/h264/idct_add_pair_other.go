@@ -14,3 +14,7 @@ func archHasAVX512() bool { return false }
 func idctAdd4x4QuadAVX512(plane []byte, off, stride int, q *[4][16]int32) {
 	idctAdd4x4QuadPortable(plane, off, stride, q)
 }
+
+func idctAdd4x4BlockSIMD(plane []byte, off, stride int, pred []byte, predOff, predStride int, d *[16]int32) {
+	idctAdd4x4BlockPortable(plane, off, stride, pred, predOff, predStride, d)
+}

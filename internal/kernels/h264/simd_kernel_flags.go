@@ -23,6 +23,8 @@ const (
 	simdIDCTAddPair = simdArchKernels
 	// simdIDCTAddQuad: AVX-512 tier, four blocks (one MB row) per Int32x16.
 	simdIDCTAddQuad = simdArchKernels
+	// simdIDCTAddBlock: single 4×4 block (sequential I4x4 path), 128-bit transform.
+	simdIDCTAddBlock = simdArchKernels
 	// arm64: no kernel yet. Go 1.27 archsimd on arm64 has no vector reinterpret
 	// (AsInt64x2) so the 4×4 transpose cannot be expressed; arm64 runs purego+PGO.
 )
@@ -41,6 +43,7 @@ var simdKernels = []struct {
 	{"idct_add16", simdIDCTAdd16},
 	{"idct_add_pair", simdIDCTAddPair},
 	{"idct_add_quad_avx512", simdIDCTAddQuad},
+	{"idct_add_block", simdIDCTAddBlock},
 }
 
 // KernelSIMD reports whether a named kernel dispatches to its SIMD body.
