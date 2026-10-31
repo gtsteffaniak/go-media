@@ -46,14 +46,41 @@ go run ./cmd/gomedia-bench compare bench/results/baseline bench/results/opt-prob
 `run` must be started from the repository root. Each run writes
 `bench/results/<label>/e2e.txt`, `internal.txt` and `meta.txt`.
 
+Each job is one operation on one fixture (`Probe__mp4_h264_...`), the micro
+benchmarks as a single job, or one internal package. Each writes its own shard
+once, when it finishes, to `bench/results/<label>/shards/<suite>/`. A failure
+therefore stays inside one operation and one fixture, and the other jobs finish
+normally.
+
+To finish a run after failures, rerun with `-retry-failed`. It reruns only jobs
+whose shard is missing or failed and keeps the rest. Use `-dry-run` to list the
+jobs without running them, for example to split them between agents with
+`-op` or `-fixture`.
+The report files are rebuilt from the ok shards at the end of every run, so
+parallel runs on different fixtures can share one label and the report keeps
+growing. A shard that failed is marked `status=failed` and left out of the
+report. A label may not mix shards measured with different `-count`,
+`-benchtime`, `-cpu`, or `-pgo`; the report refuses to merge them, so use a new
+label for different settings. A lock file stops two runs from writing the same
+fixture shard at once.
+
 ### Useful variants
 
 ```bash
 # Only one operation across all fixtures
-go run ./cmd/gomedia-bench run -label probe-try -suite e2e -bench 'Probe' -count 5
+go run ./cmd/gomedia-bench run -label probe-try -suite e2e -op Probe -count 5
 
-# One fixture across all operations
-go run ./cmd/gomedia-bench run -label mp4-1080 -suite e2e -bench '/mp4_h264_1920x1080' -count 5
+# One fixture across all operations (exact fixture name; comma-separate to pick several)
+go run ./cmd/gomedia-bench run -label mp4-1080 -suite e2e -fixture mp4_h264_1920x1080_60s_large -count 5
+
+# One operation on one fixture
+go run ./cmd/gomedia-bench run -label thumb-1080 -suite e2e -op ThumbnailLarge -fixture mp4_h264_1920x1080_60s_large -count 5
+
+# Parallel: 12 operation-and-fixture jobs at a time
+go run ./cmd/gomedia-bench run -label full -suite e2e -jobs 12 -count 5
+
+# Finish a run after some jobs failed, rerunning only those
+go run ./cmd/gomedia-bench run -label full -suite e2e -jobs 12 -count 5 -retry-failed
 
 # Internal micro benchmarks only
 go run ./cmd/gomedia-bench run -label kernels -suite internal -bench 'IDCT|Residual' -count 10

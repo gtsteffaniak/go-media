@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"math"
@@ -50,7 +51,7 @@ var msKeys = map[string]bool{"ns/op": true}
 // per-format geometric means and the cumulative improvement.
 func cmdCompare(args []string) error {
 	fs := flag.NewFlagSet("compare", flag.ContinueOnError)
-	format := fs.String("format", "md", "output format: md or text")
+	format := fs.String("format", "md", "output format: md, text or json")
 	threshold := fs.Float64("threshold", 5, "minimum %% change to count as improved/regressed")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -87,9 +88,12 @@ func cmdCompare(args []string) error {
 		return fmt.Errorf("no benchmarks in common between %s and %s", fs.Arg(0), fs.Arg(1))
 	}
 
-	if *format == "text" {
+	switch *format {
+	case "json":
+		return printJSON(rows, fs.Arg(0), fs.Arg(1), missingNew, missingBase)
+	case "text":
 		printText(rows, fs.Arg(0), fs.Arg(1), missingNew, missingBase)
-	} else {
+	default:
 		printMarkdown(rows, fs.Arg(0), fs.Arg(1), missingNew, missingBase)
 	}
 	return nil
@@ -370,4 +374,48 @@ func printNames(names []string, title string) {
 		return
 	}
 	fmt.Printf("%s: %s\n\n", title, strings.Join(names, ", "))
+}
+
+// jsonRow is the machine-readable form of one compared benchmark (for canvases and dashboards).
+type jsonRow struct {
+	Name     string  `json:"name"`
+	Op       string  `json:"op"`
+	Format   string  `json:"format"`
+	BaseMS   float64 `json:"base_ms"`
+	BaseSD   float64 `json:"base_sd_ms"`
+	BaseCV   float64 `json:"base_cv_pct"`
+	NewMS    float64 `json:"new_ms"`
+	NewSD    float64 `json:"new_sd_ms"`
+	NewCV    float64 `json:"new_cv_pct"`
+	DeltaPct float64 `json:"delta_pct"`
+	T        float64 `json:"welch_t"`
+	Verdict  string  `json:"verdict"`
+}
+
+// printJSON writes the comparison as one JSON document.
+func printJSON(rows []row, baseDir, newDir string, onlyBase, onlyNew []string) error {
+	out := struct {
+		Base     string    `json:"base"`
+		New      string    `json:"new"`
+		Geomean  float64   `json:"geomean_ratio"`
+		Count    int       `json:"count"`
+		Rows     []jsonRow `json:"rows"`
+		OnlyBase []string  `json:"only_in_base"`
+		OnlyNew  []string  `json:"only_in_new"`
+	}{Base: baseDir, New: newDir, OnlyBase: onlyBase, OnlyNew: onlyNew}
+	out.Geomean, out.Count = geomeanSummary(rows)
+	for _, r := range rows {
+		out.Rows = append(out.Rows, jsonRow{
+			Name: r.name, Op: r.op, Format: r.format,
+			BaseMS: r.base.mean, BaseSD: r.base.sd, BaseCV: r.base.cv,
+			NewMS: r.new.mean, NewSD: r.new.sd, NewCV: r.new.cv,
+			DeltaPct: r.delta * 100, T: r.t, Verdict: r.verdict,
+		})
+	}
+	b, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(b))
+	return nil
 }
