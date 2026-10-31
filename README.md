@@ -16,7 +16,7 @@
 
 ---
 
-go-media answers the questions a file browser or media indexer asks all day (*what is this file, how long is it, what's in it, what does it look like?*) straight from an `io.ReaderAt`, in pure Go, with minimal I/O. It is built for [FileBrowser Quantum](https://github.com/gtsteffaniak/filebrowser), and anything it can't do returns a typed error so you can fall back to ffmpeg.
+Built for file browsers and indexers (e.g. [FileBrowser Quantum](https://github.com/gtsteffaniak/filebrowser)) that need fast, deterministic answers from `io.ReaderAt` with minimal I/O. Unsupported inputs return typed errors so the app can fall back to ffmpeg.
 
 ## Measured against ffmpeg on every commit
 
