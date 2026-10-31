@@ -22,6 +22,12 @@ func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 	if len(buf) < 4 {
 		return "", errs.NotMedia
 	}
+	if id, ok := sniffMPEGTS(r, size); ok {
+		return id, nil
+	}
+	if sniffMPEGPS(r, size) {
+		return format.MPEGPS, nil
+	}
 
 	switch {
 	case bytes.Equal(buf[:4], []byte("fLaC")):
@@ -32,9 +38,17 @@ func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 		return format.MP3, nil
 	case bytes.Equal(buf[:4], []byte("RIFF")) && len(buf) >= 12 && bytes.Equal(buf[8:12], []byte("WAVE")):
 		return format.WAV, nil
+	case bytes.Equal(buf[:4], []byte("RIFF")) && len(buf) >= 12 && bytes.Equal(buf[8:12], []byte("AVI ")):
+		return format.AVI, nil
 	case bytes.Equal(buf[:4], []byte(".snd")) || (len(buf) >= 4 && buf[0] == 0x2e && buf[1] == 's' && buf[2] == 'n' && buf[3] == 'd'):
 		return format.AU, nil
 	case len(buf) >= 12 && bytes.Equal(buf[4:8], []byte("ftyp")):
+		major, compat, ok := ftypBrands(r, size)
+		if ok {
+			if id, yes := sniffISOBrand(major, compat); yes {
+				return id, nil
+			}
+		}
 		return format.MP4, nil
 	case bytes.Equal(buf[:4], []byte{0x1A, 0x45, 0xDF, 0xA3}):
 		return sniffEBML(r, size)
@@ -44,7 +58,16 @@ func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 		return format.MP3, nil
 	default:
 		if len(buf) >= 12 && bytes.Equal(buf[4:8], []byte("ftyp")) {
+			major, compat, ok := ftypBrands(r, size)
+			if ok {
+				if id, yes := sniffISOBrand(major, compat); yes {
+					return id, nil
+				}
+			}
 			return format.MP4, nil
+		}
+		if id, ok := sniffCameraRaw(r, size); ok {
+			return id, nil
 		}
 	}
 	return "", errs.NotMedia

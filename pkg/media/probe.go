@@ -4,6 +4,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/gtsteffaniak/go-media/internal/avi"
 	"github.com/gtsteffaniak/go-media/internal/flac"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
@@ -79,8 +80,22 @@ func probeOther(r io.ReaderAt, size int64, id format.ID, info *ProbeInfo) (*Prob
 		info.FormatName = "ogg"
 	case format.MP3:
 		info.FormatName = "mp3"
+	case format.AVI:
+		info.FormatName = "avi"
+	case format.HEIC:
+		info.FormatName = "heic"
+	case format.HEIF:
+		info.FormatName = "heif"
+	case format.AVIF:
+		info.FormatName = "avif"
+	case format.CR2, format.CR3, format.NEF, format.ARW, format.DNG, format.ORF, format.RW2, format.RAF, format.PEF:
+		info.FormatName = string(id)
 	default:
 		info.FormatName = string(id)
+	}
+
+	if format.IsHEIFImage(id) || format.IsCameraRAW(id) {
+		return info, nil
 	}
 
 	if dr, err := Duration(r, size); err == nil {
@@ -128,6 +143,9 @@ func streamsForFormat(r io.ReaderAt, size int64, id format.ID) ([]Stream, error)
 		return mapStreams(s), mapErr(err)
 	case format.MP3:
 		s, err := mp3.Streams(r, size)
+		return mapStreams(s), mapErr(err)
+	case format.AVI:
+		s, err := avi.Streams(r, size)
 		return mapStreams(s), mapErr(err)
 	default:
 		return nil, Unsupported("streams", string(id))
