@@ -290,7 +290,7 @@ func BenchmarkThumbnailRasterPNG(b *testing.B) {
 }
 
 func BenchmarkH264KeyframeYUV420(b *testing.B) {
-	forEach(b, func(fx manifest.Fixture) bool { return fx.Thumb && fx.Codec == "h264" }, func(b *testing.B, in *input) {
+	forEach(b, isMP4H264Thumb, func(b *testing.B, in *input) {
 		size := int64(len(in.data))
 		out, w, h, err := media.H264KeyframeYUV420(in.r, size, 10, true)
 		check(b, in, err, "H264KeyframeYUV420")
@@ -308,7 +308,7 @@ func BenchmarkH264KeyframeYUV420(b *testing.B) {
 }
 
 func BenchmarkH264KeyframeTimeSec(b *testing.B) {
-	forEach(b, func(fx manifest.Fixture) bool { return fx.Thumb && fx.Codec == "h264" }, func(b *testing.B, in *input) {
+	forEach(b, isMP4H264Thumb, func(b *testing.B, in *input) {
 		size := int64(len(in.data))
 		sec, err := media.H264KeyframeTimeSec(in.r, size, 10)
 		check(b, in, err, "H264KeyframeTimeSec")

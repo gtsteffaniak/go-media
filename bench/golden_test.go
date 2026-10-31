@@ -119,7 +119,7 @@ func computeGolden(t *testing.T, fx manifest.Fixture, path string, data []byte) 
 		png, err := media.ThumbnailRasterPNG(r, size, opt)
 		add("thumb_png_raster", png, errOr(err))
 	}
-	if fx.Thumb && fx.Codec == "h264" {
+	if isMP4H264Thumb(fx) {
 		yuv, w, h, err := media.H264KeyframeYUV420(r, size, 10, true)
 		add("h264_yuv", yuv, w, h, errOr(err))
 		sec, err := media.H264KeyframeTimeSec(r, size, 10)

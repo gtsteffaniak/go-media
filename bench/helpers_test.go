@@ -87,6 +87,13 @@ func fixturesWhere(tb testing.TB, keep func(manifest.Fixture) bool) []manifest.F
 	return loadManifest(tb).Where(keep)
 }
 
+// isMP4H264Thumb selects fixtures for the H.264 keyframe APIs. Those read the
+// avcC track from an MP4 sample table, so AVI and MPEG-TS H.264 fixtures (which
+// still get the Thumbnail benchmarks) are excluded here.
+func isMP4H264Thumb(fx manifest.Fixture) bool {
+	return fx.Thumb && fx.Codec == "h264" && fx.Container == "mp4"
+}
+
 func isMedia(fx manifest.Fixture) bool {
 	return fx.Kind == manifest.KindVideo || fx.Kind == manifest.KindAudio
 }
