@@ -6,6 +6,7 @@ import (
 
 	"github.com/gtsteffaniak/go-media/internal/asf"
 	"github.com/gtsteffaniak/go-media/internal/avi"
+	"github.com/gtsteffaniak/go-media/internal/detect"
 	"github.com/gtsteffaniak/go-media/internal/flac"
 	"github.com/gtsteffaniak/go-media/internal/format"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
@@ -114,7 +115,17 @@ func probeOther(r io.ReaderAt, size int64, id format.ID, info *ProbeInfo) (*Prob
 		info.DurationSrc = dr.Source
 	}
 
-	if streams, err := streamsForFormat(r, size, id); err == nil {
+	// Matroska/WebM: parse the header once. The stream list and the subtitle
+	// list are both derived from the same parse (the subtitle filter matches
+	// ListSubtitleTracks), instead of re-reading the header for each.
+	isMKV := id == format.MKV || id == format.WebM
+	var mkvStreams []detect.Stream
+	if isMKV {
+		if raw, err := matroska.Streams(r, size); err == nil {
+			mkvStreams = raw
+			info.Streams = mapStreams(raw)
+		}
+	} else if streams, err := streamsForFormat(r, size, id); err == nil {
 		info.Streams = streams
 	}
 
@@ -128,10 +139,33 @@ func probeOther(r io.ReaderAt, size int64, id format.ID, info *ProbeInfo) (*Prob
 		info.HasArtwork = tagread.HasArtwork(r, size, id)
 	}
 
-	subs, _ := ListSubtitleTracks(r, size)
-	info.SubtitleTracks = subs
+	if isMKV {
+		info.SubtitleTracks = subtitleTracksFromStreams(mkvStreams)
+	} else {
+		subs, _ := ListSubtitleTracks(r, size)
+		info.SubtitleTracks = subs
+	}
 
 	return info, nil
+}
+
+// subtitleTracksFromStreams selects the subtitle streams from a parsed stream
+// list. It produces the same tracks as ListSubtitleTracks for Matroska/WebM.
+func subtitleTracksFromStreams(streams []detect.Stream) []SubtitleTrack {
+	var out []SubtitleTrack
+	for _, s := range streams {
+		if s.Type != detect.StreamSubtitle {
+			continue
+		}
+		out = append(out, SubtitleTrack{
+			Index:    s.Index,
+			Codec:    s.Codec,
+			Language: s.Language,
+			Title:    s.Title,
+			Embedded: true,
+		})
+	}
+	return out
 }
 
 // streamsForFormat reads stream metadata for a detected container.
