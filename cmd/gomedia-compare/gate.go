@@ -91,8 +91,9 @@ func validateGate(exp ExpectationsFile, report FullReport) error {
 		}
 		if r.Status != c.Expect {
 			// Production gate uses tier-2 purego+PGO subprocess timings; in-process harness can be noisier on CI.
+			// Only a timing-only mismatch is excused this way; a quality mismatch always fails.
 			if c.Expect == StatusSupported && r.Status == StatusMismatch &&
-				(c.Check == CheckThumbnailLarge || c.Check == CheckThumbnailSmall) && tier2OK[key] {
+				(c.Check == CheckThumbnailLarge || c.Check == CheckThumbnailSmall) && r.TimingGateFail && tier2OK[key] {
 				continue
 			}
 			diffs = append(diffs, fmt.Sprintf("%s %s: expected %s, got %s (%s)",

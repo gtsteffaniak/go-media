@@ -31,6 +31,17 @@ func runComparisons(assets []Asset, reportDir string) ([][]CheckResult, error) {
 // compareAsset runs the full check matrix for one asset.
 func compareAsset(a Asset, thumbDir string) []CheckResult {
 	var out []CheckResult
+	if isStillImageAsset(a.ID) {
+		// Still images only expose an embedded preview; duration, probe,
+		// tags, artwork, lyrics and subtitles don't apply.
+		for _, c := range []CheckName{CheckDuration, CheckProbe, CheckTags, CheckArtwork, CheckLyrics, CheckSubtitles} {
+			out = append(out, CheckResult{AssetID: a.ID, Check: c, Status: StatusSkipped, Detail: "still image fixture"})
+		}
+		for _, preset := range thumbnailPresets {
+			out = append(out, checkThumbnailPreset(a, thumbDir, preset))
+		}
+		return out
+	}
 	out = append(out, checkDuration(a))
 	out = append(out, checkProbe(a))
 	out = append(out, checkTags(a))
@@ -212,6 +223,15 @@ func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetCo
 	kfOnly := assetH264KeyframeOnly(a)
 	seekSec := thumbnailSeekSeconds(a.Path, 10, kfOnly)
 	opt := compareThumbnailOptions(a.Path, preset, kfOnly)
+	if isStillImageAsset(a.ID) {
+		seekSec = 0
+	} else if assetIntraSeekOnly(a.ID) {
+		// go-media keeps the seek percent; only ffmpeg moves to the keyframe
+		// go-media will pick (minus a hair so -ss lands on it, not after it).
+		if t, ok := ffprobeKeyframeAtOrBefore(a.Path, seekSec); ok {
+			seekSec = max(0, t-0.001)
+		}
+	}
 
 	tr, gErr := media.Thumbnail(f, f.Size(), opt)
 
@@ -221,7 +241,13 @@ func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetCo
 	goPNG := filepath.Join(thumbDir, base+"_go.png")
 	ffPNG := filepath.Join(thumbDir, base+"_ff.png")
 
+	_ = os.Remove(ffPath)
 	ffErr := ffmpegThumbnailPreset(a, ffPath, seekSec, preset, kfOnly)
+	if ffErr == nil {
+		if st, err := os.Stat(ffPath); err != nil || st.Size() == 0 {
+			ffErr = fmt.Errorf("ffmpeg wrote no thumbnail at seek %.3fs", seekSec)
+		}
+	}
 
 	if gErr != nil {
 		res.goErr = gErr
@@ -408,4 +434,14 @@ func relReportPath(abs string) string {
 		return abs[i+len(marker):]
 	}
 	return filepath.Base(abs)
+}
+
+// isStillImageAsset reports fixtures that are still images with an embedded
+// preview (HEIC, RAW) rather than timed media.
+func isStillImageAsset(id string) bool {
+	switch id {
+	case "heic_jpeg_thumb", "raw_dng_preview":
+		return true
+	}
+	return false
 }

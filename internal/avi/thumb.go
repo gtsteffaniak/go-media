@@ -153,9 +153,12 @@ func (f *fileIndex) pickKeyframeBySeek(seekPercent float64) (sampleIndex, bool) 
 	}
 	var target uint32
 	if f.avih.totalFrames > 0 {
+		// Frame index at the seek time (frame n starts at n/fps), matching
+		// where ffmpeg -ss lands; pickKeyframe then takes the keyframe at or
+		// before it.
 		target = uint32(float64(f.avih.totalFrames) * seekPercent / 100.0)
-		if target > 0 {
-			target--
+		if target >= f.avih.totalFrames {
+			target = f.avih.totalFrames - 1
 		}
 	}
 	return f.pickKeyframe(target)

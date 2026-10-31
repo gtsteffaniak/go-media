@@ -680,12 +680,14 @@
     {
       "assetId": "webm_vp9",
       "check": "thumbnail_large",
-      "expect": "supported"
+      "expect": "typed_unsupported",
+      "note": "govpx (pure-Go libvpx port) desyncs mid-tile on some libvpx keyframes; returns ErrUnsupported so callers fall back to ffmpeg"
     },
     {
       "assetId": "webm_vp9",
       "check": "thumbnail_small",
-      "expect": "supported"
+      "expect": "typed_unsupported",
+      "note": "govpx (pure-Go libvpx port) desyncs mid-tile on some libvpx keyframes; returns ErrUnsupported so callers fall back to ffmpeg"
     },
     {
       "assetId": "mp4_h264_baseline_1080",
@@ -974,14 +976,12 @@
     {
       "assetId": "asf_wmv3",
       "check": "thumbnail_large",
-      "expect": "typed_unsupported",
-      "note": "VC-1/WMV3 intra decode in progress (ErrUnsupportedProfile until decoder lands)"
+      "expect": "supported"
     },
     {
       "assetId": "asf_wmv3",
       "check": "thumbnail_small",
-      "expect": "typed_unsupported",
-      "note": "VC-1/WMV3 intra decode in progress (ErrUnsupportedProfile until decoder lands)"
+      "expect": "supported"
     },
     {
       "assetId": "mpegts_h264",

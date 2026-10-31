@@ -43,7 +43,7 @@ The gate has no Matroska or WebM tag fixtures, so MKV/WebM tags are not compared
 | Small size | 256×256 max (`ThumbnailPresetSmall`) | `scale=w='min(256,iw)':h='min(256,ih)':force_original_aspect_ratio=decrease` |
 | Large size | 1280×720 max | same with 1280 / 720 |
 | Downscale | `ThumbnailFilterArea` → area tile average | `flags=area` on first scale pass |
-| Dimensions | `fitThumbSize`: scaled outputs round to the nearest pixel (no forced even size); a source that already fits is made even | `scale=trunc(iw/2)*2:trunc(ih/2)*2` after the fit (forces even) |
+| Dimensions | `fitThumbSize`: scaled outputs round to the nearest pixel (no forced even size); a source that already fits is made even | `force_original_aspect_ratio=decrease` alone (rounds to nearest, no forced even size), so both sides produce the same dimensions |
 | Small quality | JPEG quality **76** | `-q:v` **9** (`31 - (76×29)/100`) |
 | Large quality | JPEG quality **90** | `-q:v` **5** |
 | H.264 seek | `SeekPercent` **10** (sync sample nearest 10% of **video track**, skipping a tiny black/flat keyframe) | `-ss` = `H264KeyframeTimeSec(10)`; `-skip_frame nokey` + `-skip_loop_filter all` |

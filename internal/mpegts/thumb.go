@@ -2,7 +2,6 @@ package ts
 
 import (
 	"bytes"
-	"fmt"
 	"image"
 	"io"
 
@@ -23,29 +22,23 @@ func ThumbnailYCbCr(r io.ReaderAt, size int64, meta *Meta, seekPercent float64, 
 	if seekPercent <= 0 {
 		seekPercent = 10
 	}
-	es, err := concatVideoES(r, size, meta)
-	if err != nil {
-		return nil, err
-	}
+	seekSec := max(0, meta.Duration*seekPercent/100.0)
 	switch meta.VideoTyp {
 	case 0x02:
-		seekSec := meta.Duration * seekPercent / 100.0
-		if seekSec < 0 {
-			seekSec = 0
-		}
-		// Compare corpus MPEG-2 TS uses gop=30 from 60fps seed (-g 30 -an -f mpegts).
-		const gop = 30.0
-		const fps = 60.0
-		idx := int(seekSec * fps / gop)
-		if idx < 0 {
-			idx = 0
-		}
-		pic, err := mpeg2video.DecodeIFrameIndex(es, idx)
+		es, err := mpeg2SeekKeyframeES(r, size, meta, seekSec)
 		if err != nil {
-			return nil, errs.Unsup("thumbnail", fmt.Sprintf("mpegts: %v (es %d bytes)", err, len(es)))
+			return nil, err
+		}
+		pic, err := mpeg2video.DecodeKeyframe(es)
+		if err != nil {
+			return nil, err
 		}
 		return mpeg2Thumb(pic), nil
 	case 0x1B:
+		es, err := h264SeekKeyframeES(r, size, meta, seekSec)
+		if err != nil {
+			return nil, err
+		}
 		fr, err := h264.DecodeAnnexBFrame(es, fast)
 		if err != nil {
 			return nil, err
