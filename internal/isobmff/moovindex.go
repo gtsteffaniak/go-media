@@ -128,6 +128,14 @@ func readFullAt(r io.ReaderAt, b []byte, off int64) bool {
 
 // openMovieIndex finds moov with bounded top-level header reads and indexes its traks.
 func openMovieIndex(r io.ReaderAt, size int64) (*movieIndex, error) {
+	return openMovieIndexFor(r, size, -1)
+}
+
+// openMovieIndexFor is openMovieIndex when only track only is needed: that
+// trak is indexed in full and every other trak keeps its slot (so trak counts
+// and positions match) without being parsed. Callers must only access
+// track(only); the other slots are empty. only < 0 indexes every trak.
+func openMovieIndexFor(r io.ReaderAt, size int64, only int) (*movieIndex, error) {
 	var off int64
 	var hdr [16]byte
 	for i := 0; off+8 <= size; i++ {
@@ -142,7 +150,7 @@ func openMovieIndex(r io.ReaderAt, size int64) (*movieIndex, error) {
 			if boxSize > maxMoovSize {
 				return nil, errs.Unsup("mp4 index", "moov exceeds 64 MiB")
 			}
-			idx, err := indexMoov(r, size, off+hdrLen, off+boxSize)
+			idx, err := indexMoov(r, size, off+hdrLen, off+boxSize, only)
 			if idx != nil {
 				idx.moovEnd = off + boxSize
 			}
@@ -215,7 +223,7 @@ func readPayload(r io.ReaderAt, start, end int64, limit int64) ([]byte, error) {
 	return b, nil
 }
 
-func indexMoov(r io.ReaderAt, size, start, end int64) (*movieIndex, error) {
+func indexMoov(r io.ReaderAt, size, start, end int64, only int) (*movieIndex, error) {
 	idx := &movieIndex{r: r, size: size}
 	err := walkBoxes(r, size, start, end, func(typ [4]byte, ps, pe int64) error {
 		if typ == [4]byte{'m', 'v', 'e', 'x'} {
@@ -223,6 +231,11 @@ func indexMoov(r io.ReaderAt, size, start, end int64) (*movieIndex, error) {
 			return nil
 		}
 		if typ != [4]byte{'t', 'r', 'a', 'k'} {
+			return nil
+		}
+		if only >= 0 && len(idx.tracks) != only {
+			// Keep the slot so track numbers stay aligned; skip the parse.
+			idx.tracks = append(idx.tracks, trackIndex{})
 			return nil
 		}
 		// A bad trak (corrupt timecode/subtitle tables, oversized audio

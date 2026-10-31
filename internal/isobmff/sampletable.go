@@ -63,7 +63,7 @@ func SampleRefs(r io.ReaderAt, size int64, trackIndex int) ([]SampleRef, error) 
 
 // openSampleTable indexes moov and returns a usable table for trackIndex.
 func openSampleTable(r io.ReaderAt, size int64, trackIndex int) (*sampleTable, error) {
-	idx, err := openMovieIndex(r, size)
+	idx, err := openMovieIndexFor(r, size, trackIndex)
 	if err != nil {
 		return nil, err
 	}
