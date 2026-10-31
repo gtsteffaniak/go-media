@@ -306,7 +306,7 @@ func decodeSource(r interface {
 // path decodes (VP8 or MJPEG).
 func hasThumbCodec(ids []string) bool {
 	for _, id := range ids {
-		if id == "V_VP8" || id == "V_VP9" || id == "V_MJPEG" {
+		if id == "V_VP8" || id == "V_MJPEG" {
 			return true
 		}
 	}

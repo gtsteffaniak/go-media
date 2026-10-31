@@ -9,6 +9,8 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	"github.com/gtsteffaniak/go-media/internal/mp3"
+	ts "github.com/gtsteffaniak/go-media/internal/mpegts"
+	ps "github.com/gtsteffaniak/go-media/internal/mpegps"
 	"github.com/gtsteffaniak/go-media/internal/ogg"
 	"github.com/gtsteffaniak/go-media/internal/sniff"
 	"github.com/gtsteffaniak/go-media/internal/wav"
@@ -41,6 +43,12 @@ func Duration(r io.ReaderAt, size int64) (DurationResult, error) {
 		return mapDuration(res), mapErr(err)
 	case format.AVI:
 		res, err := avi.Duration(r, size)
+		return mapDuration(res), mapErr(err)
+	case format.MPEGTS, format.M2TS:
+		res, err := ts.Duration(r, size)
+		return mapDuration(res), mapErr(err)
+	case format.MPEGPS:
+		res, err := ps.Duration(r, size)
 		return mapDuration(res), mapErr(err)
 	default:
 		return DurationResult{}, Unsupported("duration", string(id))

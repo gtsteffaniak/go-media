@@ -1,6 +1,8 @@
 package sniff
 
 import (
+	"io"
+
 	"github.com/gtsteffaniak/go-media/internal/format"
 	ps "github.com/gtsteffaniak/go-media/internal/mpegps"
 	ts "github.com/gtsteffaniak/go-media/internal/mpegts"

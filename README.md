@@ -18,17 +18,17 @@ thumb, err := media.ThumbnailLarge(r, size, 10) // ~10% into the timeline
 
 | Area | Coverage |
 |------|----------|
-| **Containers** | MP4/MOV/M4A/M4V/3GP, MKV/WebM, WAV, FLAC, OGG (Vorbis/Opus), MP3 |
+| **Containers** | MP4/MOV/M4A/M4V/3GP, MKV/WebM, **AVI**, **MPEG-TS/M2TS**, **MPEG-PS**, WAV, FLAC, OGG (Vorbis/Opus), MP3; **HEIC/HEIF/AVIF** stills; common **camera RAW** (embedded JPEG preview) |
 | **Probe & duration** | Stream layout, codecs, tags summary; duration from headers (MP3 CBR estimate where needed; WebM when `Duration` is present) |
 | **Tags & artwork** | ID3, MP4 `ilst`, Vorbis comments ([dhowden/tag](https://github.com/dhowden/tag)); APIC / `covr` / FLAC `PICTURE` |
 | **Subtitles** | Sidecar SRT/VTT/ASS/SSA and embedded MKV (SRT, ASS/SSA, WebVTT) and MP4 (`tx3g`, `wvtt`) text tracks → WebVTT, byte-identical to `ffmpeg -f webvtt` (golden-tested against ffmpeg 9.0.2); bitmap tracks (PGS, VobSub, DVB) return a typed unsupported error; external track discovery |
-| **Thumbnails** | MJPEG, VP8 (WebM/MKV), H.264 intra IDR (Baseline CAVLC + Main/High/High 10 CABAC, 8/9/10-bit 4:2:0; `avc1`/`avc3`, progressive or fragmented MP4), MPEG-4 Part 2 / DivX / XviD I-VOP (MP4 `mp4v`, MKV; [`docs/MPEG4.md`](docs/MPEG4.md)); embedded cover when `PreferEmbedded` |
+| **Thumbnails** | MJPEG, **VP9** (WebM/MKV, profile 0 8-bit 4:2:0), VP8 (WebM/MKV), H.264 intra IDR (Baseline CAVLC + Main/High/High 10 CABAC, 8/9/10-bit 4:2:0; MP4/MOV/**AVI**/**MPEG-TS** `avc1`/`avc3`), **MPEG-2** I-pictures (MP4 `mp4v`/esds, MPEG-PS; MPEG-TS MPEG-2 demux in progress), MPEG-4 Part 2 / DivX / XviD I-VOP (MP4, MKV, **AVI**), **HEIC/HEIF embedded JPEG**, **RAW embedded JPEG**; embedded cover when `PreferEmbedded` |
 | **H.264 decode** | Clean-room intra-only decoder for thumbnail keyframes ([`docs/H264.md`](docs/H264.md))—not a general player |
 | **MPEG-4 Part 2 decode** | Clean-room I-VOP decoder (Simple / Advanced Simple), bit-exact with ffmpeg ([`docs/MPEG4.md`](docs/MPEG4.md)) |
 
 Capability reference (by feature, with ffmpeg equivalents where useful): **[`docs/SUPPORTED_CAPABILITIES.md`](docs/SUPPORTED_CAPABILITIES.md)**.
 
-**Not in scope:** transcoding, HLS, inter-frame playback, WMV/AVI/FLV/MPEG-TS, VP9/AV1/HEVC thumbnails, or full ffmpeg parity. Use **[go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)** for that; go-media is the **fast path** in front of it.
+**Not in scope:** transcoding, HLS, inter-frame playback, **VC-1/WMV (ASF) thumbnails** (typed unsupported until intra decoder lands), full HEVC/AV1 video decode, or full ffmpeg parity. Use **[go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg)** for that; go-media is the **fast path** in front of it.
 
 ## Quality and CI
 
