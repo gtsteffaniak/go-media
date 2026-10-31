@@ -1,12 +1,13 @@
 # Supported capabilities
 
+[← Back to README](../README.md) · [Examples](../examples/README.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
+
 What **go-media** implements in pure Go (`CGO_ENABLED=0`). This is **not** a ffmpeg compatibility matrix: it documents library behavior. Where validation or a common fallback exists, the **ffmpeg / ffprobe** equivalent is listed for comparison.
 
-Unsupported inputs should return typed errors (`ErrUnsupported`, `ErrUnsupportedProfile`, …) so callers can use [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) or ffmpeg.
+> [!TIP]
+> Anything marked ❌ returns a typed error (`ErrUnsupported` or `ErrUnsupportedProfile`), so callers can fall back to [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) or ffmpeg. See [the fallback example](../examples/README.md#fall-back-to-ffmpeg-when-go-media-says-no).
 
-**Import:** `github.com/gtsteffaniak/go-media/pkg/media`
-
-Regression checks vs **ffmpeg 9.0.2**: `make compare-gate` ([`test/compare/README.md`](../test/compare/README.md)).
+**Import:** `github.com/gtsteffaniak/go-media/pkg/media`. **Verified against:** ffmpeg 9.0.2 on every commit ([live report](https://gtsteffaniak.github.io/go-media/), [harness](../test/compare/README.md)).
 
 ## Legend
 
@@ -209,6 +210,9 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 |-------|------------|:------:|-------|
 | **MJPEG** | MP4, MOV, MKV, … | ✅ | Direct frame extract |
 | **VP8** | `.webm`, `.mkv` | ✅ | Pure-Go VP8 decode (`gen2brain/vpx`) |
+| **MPEG-2** I-picture | MP4/MOV (`mp4v`), MPEG-PS, MPEG-TS | ✅ | Pure-Go intra decode |
+| **WMV3** (VC-1 Simple / Main) | ASF, WMV | ✅ | Intra keyframe decode, bit-exact vs ffmpeg |
+| **WVC1** (VC-1 Advanced) | ASF, WMV | ❌ | `ErrUnsupportedProfile` |
 | **H.264** Baseline CAVLC, 8-bit 4:2:0 intra keyframe (IDR or open-GOP) | MP4, MOV, M4V, … | ✅ | Clean-room intra decoder; H.264 in MKV returns `ErrUnsupportedProfile` |
 | **H.264 `avc3`** (in-band SPS/PPS) | MP4, MOV | ✅ | SPS/PPS read from the keyframe sample; an SPS in the sample wins over avcC, as in ffmpeg. avcC may be absent or empty |
 | **H.264** Main / High CABAC intra | MP4, MOV, M4V, … | ✅ | Not MKV (see above) |
@@ -298,7 +302,6 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | `mp4 seek: fragmented MP4: no moof boxes after moov` / `no sync sample for track N in M moof boxes` / `duration unknown ...` | fragmented file whose fragments cannot be located or contain no keyframe |
 | `mp4: avcC box missing from avc1 sample entry` / `mp4: avcC invalid: ...` | H.264 decoder configuration unusable |
 | `mp4: sync sample N unreadable (...)` | Keyframe bytes could not be read |
-| `mp4: mp4v track carries MPEG-2 video (go-media has no decoder for this codec)` | `mp4v` entry whose esds objectTypeIndication is not MPEG-4 Part 2 (ffmpeg's `ff_mp4_obj_type` names) |
 | `mp4: esds box missing from mp4v sample entry` / `mp4: esds has no DecoderConfigDescriptor` | MPEG-4 decoder configuration unusable |
 | `matroska: no decodable V_VP8 frame near seek target (...)` | Matroska VP8/MJPEG seek or decode failed |
 | `mp3: no embedded cover art` | Audio file without artwork |
