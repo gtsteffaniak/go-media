@@ -35,11 +35,11 @@ Capability reference (by feature, with ffmpeg equivalents where useful): **[`doc
 Regression safety is built into the repo, not ad hoc manual testing.
 
 - **`go test ./...`** with `CGO_ENABLED=0` on **linux/amd64 and linux/arm64**, with and without the checked-in PGO profile.
-- **ffmpeg 9.0.2 comparison gate** (`make compare-gate`): generated corpus of **20 assets** (phone/camera-style encodes), **162** manifest cases in [`test/compare/expectations.json`](test/compare/expectations.json)—**72** must match ffmpeg/ffprobe as **supported** (duration, probe, tags, artwork, lyrics, subtitles, thumbnails where applicable). **6** cases must return typed unsupported (MKV H.264 and MKV subtitle thumbnails, WebM VP9 thumbnails). CI uploads the HTML report as an artifact.
+- **ffmpeg 9.0.2 comparison gate** (`make compare-gate`): generated corpus of **20 assets** (phone/camera-style encodes), **162** manifest cases in [`test/compare/expectations.json`](test/compare/expectations.json)—**72** must match ffmpeg/ffprobe as **supported** (duration, probe, tags, artwork, lyrics, subtitles, thumbnails where applicable). **6** cases must return typed unsupported (MKV H.264 and MKV subtitle thumbnails, WebM VP9 thumbnails). CI uploads the HTML report as an artifact, and every push to `main` regenerates it and publishes it to the `gh-pages` branch: **[latest comparison report](https://gtsteffaniak.github.io/go-media/)**.
 - **Thumbnail timing:** supported thumb paths are gated on the **production build** (`CGO_ENABLED=0` + `-pgo=default.pgo`) to stay within **50%** of ffmpeg 9.0.2 wall time on the same fixture (stricter **10%** documented as the long-term target). Visual parity uses PSNR/SSIM vs `ffmpeg -frames:v 1` on keyframe decodes.
 - **Fuzzing:** subtitle parsers and H.264 CABAC engine (`go test -fuzz`); CI runs a fuzz smoke on subtitles.
 
-Run locally: `make compare` (ffmpeg on PATH) or `make compare-gate` (pinned ffmpeg). Report: `test/compare/report_site/index.html` — see [`test/compare/README.md`](test/compare/README.md).
+Run locally: `make compare` (ffmpeg on PATH) or `make compare-gate` (pinned ffmpeg). Report: `test/compare/report_site/index.html` (latest from `main`: [gtsteffaniak.github.io/go-media](https://gtsteffaniak.github.io/go-media/)) — see [`test/compare/README.md`](test/compare/README.md).
 
 ## Design
 

@@ -1,0 +1,59 @@
+name: Publish comparison report
+
+# Regenerates the go-media vs ffmpeg comparison report on every push to main
+# and publishes it to the gh-pages branch, which GitHub Pages serves.
+# The gate itself runs in ci.yml; this job always publishes fresh numbers,
+# even when a case regresses, so the site shows the current state of main.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-report
+  cancel-in-progress: false
+
+env:
+  FFMPEG_VERSION: "9.0.2"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+          cache: true
+      - name: Install static ffmpeg
+        run: FFMPEG_FORCE_INSTALL=1 bash scripts/install-ffmpeg.sh
+      - name: Generate compare assets
+        run: ./scripts/generate-fixtures.sh
+      - name: Regenerate comparison report (pinned ffmpeg, no gate)
+        run: FFMPEG_DIR="$HOME/ffmpeg-$FFMPEG_VERSION" CGO_ENABLED=0 bash scripts/run-comparison.sh
+      - name: Verify report data
+        run: test -s test/compare/report_site/index.html && test -s test/compare/report_site/data/report.json
+      - name: Stamp build info
+        run: |
+          cat > test/compare/report_site/build.json <<JSON
+          {"commit":"${GITHUB_SHA}","ref":"${GITHUB_REF_NAME}","run":"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}","ffmpeg":"${FFMPEG_VERSION}","generated":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+          JSON
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: test/compare/report_site
+          # Normal fast-forward commits (no force push), so the branch can be
+          # protected against force pushes and deletion.
+          keep_files: false
+          commit_message: "report: regenerate for ${{ github.sha }}"
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
