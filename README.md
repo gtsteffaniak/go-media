@@ -16,7 +16,7 @@
 
 ---
 
-Built for file browsers and indexers (e.g. [FileBrowser Quantum](https://github.com/gtsteffaniak/filebrowser)) that need fast, deterministic answers from `io.ReaderAt` with minimal I/O. Unsupported inputs return typed errors so the app can fall back to ffmpeg.
+Built for go programs that value speed and efficiency as the primary concern (e.g. [FileBrowser Quantum](https://github.com/gtsteffaniak/filebrowser)). The library is designed so anything thats unsupported will return typed errors so the app can fall back to ffmpeg without additional delay.
 
 ## Measured against ffmpeg on every commit
 
