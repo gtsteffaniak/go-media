@@ -296,6 +296,9 @@ func yuv420BT601LimitedToRGBA(yy, cb, cr byte) (r, g, b byte) {
 
 // rgbaFromImage uses matrix-aware YCbCr→RGB when possible.
 func rgbaFromImage(img image.Image) *image.RGBA {
+	if t, ok := img.(*h264.ThumbYCbCr); ok && t.YCbCr != nil {
+		return rgbaFromThumbLUT(t.YCbCr, t.RGBLUT())
+	}
 	if ycc, toRGB := yccSource(img); ycc != nil {
 		return rgbaFromYCbCr(ycc, toRGB)
 	}
