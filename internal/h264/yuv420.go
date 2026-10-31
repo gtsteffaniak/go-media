@@ -47,10 +47,17 @@ func frameYUV(f *frame.Frame) YUV420 {
 // WriteI420 appends Y, U, V in ffmpeg yuv420p/I420 order (no padding between planes).
 func (p YUV420) WriteI420(dst []byte) []byte {
 	w, h := p.Width, p.Height
+	cw, ch := w/2, h/2
+	// Reserve the exact final size up front so the appends below do not
+	// reallocate and copy repeatedly (the output is the same bytes).
+	if need := w*h + 2*cw*ch; cap(dst)-len(dst) < need {
+		grown := make([]byte, len(dst), len(dst)+need)
+		copy(grown, dst)
+		dst = grown
+	}
 	for y := 0; y < h; y++ {
 		dst = append(dst, p.Y[y*p.StrideY:y*p.StrideY+w]...)
 	}
-	cw, ch := w/2, h/2
 	for y := 0; y < ch; y++ {
 		dst = append(dst, p.Cb[y*p.StrideC:y*p.StrideC+cw]...)
 	}
