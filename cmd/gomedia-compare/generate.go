@@ -47,6 +47,10 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	if err != nil {
 		return nil, fmt.Errorf("hevc fixtures: %w", err)
 	}
+	av1Enc, err := pickEncoder(encoders, "libsvtav1", "libaom-av1", "av1")
+	if err != nil {
+		return nil, fmt.Errorf("av1 fixtures: %w", err)
+	}
 	mpeg2Enc, err := pickEncoder(encoders, "mpeg2video")
 	if err != nil {
 		return nil, fmt.Errorf("mpegts_mpeg2 fixture: %w", err)
@@ -104,6 +108,16 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 			[]string{"-i", clip, "-c:v", hevcEnc, "-tag:v", "hvc1", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "28", "-an"}, nil},
 		{"mkv_hevc", "video", "MKV HEVC", "video/mkv_hevc.mkv",
 			[]string{"-i", clip, "-c:v", hevcEnc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "28", "-an", "-f", "matroska"}, nil},
+		{"mp4_av1", "video", "MP4 AV1 1080p", "video/mp4_av1.mp4",
+			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", av1Enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "35", "-an"}, nil},
+		{"mp4_av1_4k", "video", "MP4 AV1 4K", "video/mp4_av1_4k.mp4",
+			[]string{"-i", clip, "-vf", "scale=3840:2160", "-c:v", av1Enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "40", "-an"}, nil},
+		{"mkv_av1", "video", "MKV AV1", "video/mkv_av1.mkv",
+			[]string{"-i", clip, "-c:v", av1Enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "35", "-an", "-f", "matroska"}, nil},
+		{"webm_av1", "video", "WebM AV1", "video/webm_av1.webm",
+			[]string{"-i", clip, "-c:v", av1Enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "35", "-an"}, nil},
+		{"avif_coded", "video", "AVIF AV1 primary", "image/avif_coded.avif",
+			[]string{"-i", coverPNG, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}, nil},
 		{"avi_mjpeg", "video", "AVI MJPEG", "video/avi_mjpeg.avi",
 			[]string{"-i", clip, "-c:v", "mjpeg", "-q:v", "3", "-an", "-f", "avi"}, nil},
 		{"avi_mpeg4", "video", "AVI MPEG-4 Part 2", "video/avi_mpeg4.avi",

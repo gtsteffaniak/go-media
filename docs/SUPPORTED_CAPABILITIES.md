@@ -132,7 +132,7 @@ MP4 sample entries (AV1, ProRes, PCM, AC-3, E-AC-3, Opus, FLAC) and MKV codec ID
 | FLAC `PICTURE` | `.flac` | ✅ |
 | Vorbis cover (METADATA_BLOCK_PICTURE) | `.ogg` | 🟡 |
 | MKV attachments | `.mkv`, `.webm` | 📋 |
-| HEIC/HEIF/AVIF embedded JPEG (thumbnail API) | `.heic`, `.heif`, `.avif` | ✅ | Not `EmbeddedArtwork()`; use `Thumbnail()` |
+| HEIC/HEIF/AVIF embedded JPEG (thumbnail API) | `.heic`, `.heif`, `.avif` | ✅ | Not `EmbeddedArtwork()`; use `Thumbnail()`. AVIF without embedded JPEG decodes the AV1 primary item (including grids) |
 
 ---
 
@@ -224,7 +224,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **MPEG-4 Part 2** shape, sprites/GMC, data partitioning, RVLC, NEWPRED, reduced resolution, scalability, Studio, short header (H.263) | — | ❌ | `ErrUnsupportedProfile` naming the tool |
 | **VP9** profile 0, 8-bit 4:2:0 | `.webm`, `.mkv` | ✅ | Keyframe by default, `Exact` decodes forward to the seek frame. Pure-Go VP9 decode (`gtsteffaniak/go-vpx`, a fork of `thesyncim/govpx` with an edge-context fix; BSD-3 libvpx port, via `internal/vp9decode`); bit-exact with libvpx on every frame of the gate fixture |
 | **HEVC** Main / Main 10 / Main Still Picture, 4:2:0 (8–10-bit) intra IRAP/IDR | MP4/MOV (`hvc1`/`hev1`), MKV (`V_MPEGH/ISO/HEVC`), HEIC/HEIF primary image | ✅ | `gen2brain/h265` via `internal/hevcdecode`; keyframe snap by default; Main 10 decoded to 8-bit thumbs; 4:2:2/4:4:4/monochrome per h265 decoder |
-| **AV1** | — | ❌ | |
+| **AV1** 8/10/12-bit 4:2:0 intra keyframe | MP4/MOV (`av01`), MKV/WebM (`V_AV1`), AVIF primary still/grid | ✅ | [gtsteffaniak/go-av1](https://github.com/gtsteffaniak/go-av1) via `internal/av1decode`; keyframe at or before seek (same as HEVC); film grain skipped; high bit depth rounded to 8-bit; `Exact` not honored (keyframe-only decoder) |
 
 ### Cover art instead of video frame
 

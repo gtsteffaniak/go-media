@@ -56,6 +56,7 @@ bench thumb-h264-large -bench=BenchmarkMP4H264Large ./internal/thumb/
 bench thumb-h264-small -bench=BenchmarkMP4H264Small ./internal/thumb/
 bench thumb-h264-baseline-small -bench=BenchmarkMP4H264Baseline1080Small ./internal/thumb/
 bench thumb-webm-large -bench=BenchmarkThumbnailLargeWebM ./internal/thumb/
+bench thumb-av1-mp4 -bench=BenchmarkMP4AV1Thumbnail ./internal/isobmff/
 bench thumb-h264-main -bench=BenchmarkMP4H264Main1080Large ./internal/thumb/
 bench thumb-h264-high -bench=BenchmarkMP4H264High1080Large ./internal/thumb/
 bench h264-baseline-decode -bench=BenchmarkBaselineThumbnailDecode ./internal/h264/
@@ -78,6 +79,7 @@ cat >"$ROOT/default.pgo.provenance.json" <<EOF
     "internal/thumb BenchmarkMP4H264Main1080Large",
     "internal/thumb BenchmarkMP4H264High1080Large",
     "internal/thumb BenchmarkThumbnailLargeWebM",
+    "internal/isobmff BenchmarkMP4AV1Thumbnail",
     "internal/h264 BenchmarkBaselineThumbnailDecode (CAVLC IDR)"
   ],
   "hotPathGlobs": [
@@ -85,6 +87,7 @@ cat >"$ROOT/default.pgo.provenance.json" <<EOF
     "internal/h264/**/*.go",
     "internal/kernels/**/*.go",
     "internal/isobmff/**/*.go",
+    "internal/av1decode/**/*.go",
     "internal/matroska/**/*.go",
     "internal/jpegfast/**/*.go"
   ]

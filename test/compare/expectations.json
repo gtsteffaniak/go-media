@@ -1220,6 +1220,206 @@
       "assetId": "raw_dng_preview",
       "check": "thumbnail_small",
       "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1_4k",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1_4k",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1_4k",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1_4k",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1_4k",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1_4k",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1_4k",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1_4k",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mkv_av1",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mkv_av1",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mkv_av1",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mkv_av1",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mkv_av1",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mkv_av1",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mkv_av1",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mkv_av1",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "webm_av1",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "webm_av1",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "webm_av1",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "webm_av1",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "webm_av1",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "webm_av1",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "webm_av1",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "webm_av1",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avif_coded",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_coded",
+      "check": "duration",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_coded",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_coded",
+      "check": "probe",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_coded",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_coded",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_coded",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avif_coded",
+      "check": "thumbnail_small",
+      "expect": "supported"
     }
   ]
 }
