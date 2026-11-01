@@ -209,7 +209,7 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 
 func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetConfig) CheckResult {
 	res := CheckResult{AssetID: a.ID, Check: thumbnailCheckName(preset), ThumbPreset: preset.Name}
-	if a.Category != "video" {
+	if a.Category != "video" && a.Category != "image" {
 		res.Status = StatusSkipped
 		res.Detail = "audio fixture"
 		return res
@@ -440,7 +440,8 @@ func relReportPath(abs string) string {
 // preview (HEIC, RAW) rather than timed media.
 func isStillImageAsset(id string) bool {
 	switch id {
-	case "heic_jpeg_thumb", "raw_dng_preview", "avif_coded":
+	case "heic_jpeg_thumb", "heif_jpeg_thumb", "heic_jpeg_irot",
+		"heic_coded", "heif_coded", "raw_dng_preview", "avif_coded":
 		return true
 	}
 	return false

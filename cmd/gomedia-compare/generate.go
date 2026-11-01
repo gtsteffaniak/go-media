@@ -120,7 +120,7 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		{"mp4_av1", "video", "MP4 AV1", "video/mp4_av1.mp4", mp4AV1Args, nil},
 		{"mkv_av1", "video", "MKV AV1", "video/mkv_av1.mkv", mkvAV1Args, nil},
 		{"webm_av1", "video", "WebM AV1", "video/webm_av1.webm", webmAV1Args, nil},
-		{"avif_coded", "video", "AVIF AV1 primary", "image/avif_coded.avif", avifArgs, nil},
+		{"avif_coded", "image", "AVIF AV1 primary", "image/avif_coded.avif", avifArgs, nil},
 		{"avi_mjpeg", "video", "AVI MJPEG", "video/avi_mjpeg.avi",
 			[]string{"-i", clip, "-c:v", "mjpeg", "-q:v", "3", "-an", "-f", "avi"}, nil},
 		{"avi_mpeg4", "video", "AVI MPEG-4 Part 2", "video/avi_mpeg4.avi",
@@ -257,7 +257,7 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		}
 	}
 
-	imgAssets, err := appendImageCompareAssets(ffmpeg, clip, outDir)
+	imgAssets, err := appendImageCompareAssets(ffmpeg, hevcEnc, clip, outDir)
 	os.Remove(clip)
 	if err != nil {
 		return nil, err

@@ -43,24 +43,34 @@ type synthIrotMeta struct {
 
 // SynthJPEGHEIF builds a minimal HEIF-like file with a JPEG item and thmb reference.
 func SynthJPEGHEIF(jpeg []byte, thumbID, primaryID uint16) []byte {
-	return synthJPEGHEIF(jpeg, thumbID, primaryID, synthIrotMeta{})
+	return synthJPEGHEIF(jpeg, thumbID, primaryID, synthIrotMeta{}, "heic", "heic", "heic")
 }
 
 // SynthJPEGHEIFWithPrimaryIrot is like SynthJPEGHEIF but adds pitm/iprp/ipco/ipma with a
 // known primary-item irot value (0–3), including essential-bit ipma entries like iPhone HEIC.
 func SynthJPEGHEIFWithPrimaryIrot(jpeg []byte, thumbID, primaryID uint16, primaryIrot uint8) []byte {
 	r := primaryIrot
-	return synthJPEGHEIF(jpeg, thumbID, primaryID, synthIrotMeta{primaryIrot: &r})
+	return synthJPEGHEIF(jpeg, thumbID, primaryID, synthIrotMeta{primaryIrot: &r}, "heic", "heic", "heic")
 }
 
 // SynthJPEGHEIFWithItemIrot sets independent irot on primary and thumbnail items.
 func SynthJPEGHEIFWithItemIrot(jpeg []byte, thumbID, primaryID uint16, primaryIrot, thumbIrot uint8) []byte {
 	p, th := primaryIrot, thumbIrot
-	return synthJPEGHEIF(jpeg, thumbID, primaryID, synthIrotMeta{primaryIrot: &p, thumbIrot: &th})
+	return synthJPEGHEIF(jpeg, thumbID, primaryID, synthIrotMeta{primaryIrot: &p, thumbIrot: &th}, "heic", "heic", "heic")
 }
 
-func synthJPEGHEIF(jpegBytes []byte, thumbID, primaryID uint16, rot synthIrotMeta) []byte {
-	ftyp := synthBox("ftyp", []byte("heic"), u32(0), []byte("heicheic"))
+// SynthJPEGHEIFMIF1 builds the same embedded-JPEG HEIF as SynthJPEGHEIF but with an
+// mif1 ftyp so sniff maps to format.HEIF instead of HEIC.
+func SynthJPEGHEIFMIF1(jpeg []byte, thumbID, primaryID uint16) []byte {
+	return synthJPEGHEIF(jpeg, thumbID, primaryID, synthIrotMeta{}, "mif1", "heic", "mif1")
+}
+
+func synthJPEGHEIF(jpegBytes []byte, thumbID, primaryID uint16, rot synthIrotMeta, ftypMajor string, ftypCompat ...string) []byte {
+	ftypBody := append([]byte(ftypMajor), u32(0)...)
+	for _, c := range ftypCompat {
+		ftypBody = append(ftypBody, []byte(c)...)
+	}
+	ftyp := synthBox("ftyp", ftypBody)
 	infePrimary := synthInfe(primaryID, "jpeg")
 	infeThumb := synthInfe(thumbID, "jpeg")
 	iinfBody := append([]byte{0, 0, 0, 0}, u16(2)...)
