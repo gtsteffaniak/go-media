@@ -34,3 +34,7 @@ Thumbnail VP9 decode uses **[gtsteffaniak/go-vpx](https://github.com/gtsteffania
 ## HEVC keyframe decode (`internal/hevcdecode`)
 
 Thumbnail HEVC decode uses **[gen2brain/h265](https://github.com/gen2brain/h265)** (MIT), a pure-Go HEVC/HEIC codec with amd64/arm64/riscv64 assembly tiers (AVX2/AVX-512 on capable x86). go-media wraps it for MP4/MKV sync-sample seek and HEIF primary items when no embedded JPEG thumbnail exists. Inter prediction is decoded when required to reach an IRAP keyframe; thumbnail mode always snaps to the keyframe at or before the seek time on video. See **`docs/DECODER_PATTERNS.md`** and **`THIRD_PARTY_NOTICES.md`** (rust_h265 / oxideav-h265 lineage in upstream h265).
+
+## AV1 keyframe decode (`internal/av1decode`)
+
+Thumbnail AV1/AVIF decode uses **[gtsteffaniak/go-av1](https://github.com/gtsteffaniak/go-av1)** (MIT), a pure-Go AV1 decoder with optional `GOEXPERIMENT=simd` kernels (same experiment model as go-vpx). go-media depends on a pre-release commit until the module is tagged (`go.mod` pseudo-version); bump to a tagged release after go-av1 is published. Wrapped for MP4/MKV/WebM sync/keyframe seek and AVIF primary/grid stills. Film grain synthesis is skipped; 10/12-bit output is down-converted to 8-bit YCbCr for JPEG/WebP thumbs.

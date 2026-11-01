@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-10-31T21:30:34Z",
-  "gitHead": "c283938d2b9af6dd97e0f90e16622893ad838315",
-  "profileSha256": "66d7522bd948b06698ce36388e3b99d43c87b7025c54fc11c76086184fecfd48",
+  "generatedAt": "2026-11-01T03:20:45Z",
+  "gitHead": "208a70b4ebec463c99ccecefdc69f7c8d35a37a1",
+  "profileSha256": "bfdf3a79a77f466479ee1ff515d8acad17971628f7ced59c320812a65f8fb80c",
   "workloads": [
     "internal/thumb BenchmarkMJPEGSmall/Large",
     "internal/thumb BenchmarkMP4H264Large",
@@ -10,6 +10,7 @@
     "internal/thumb BenchmarkMP4H264Main1080Large",
     "internal/thumb BenchmarkMP4H264High1080Large",
     "internal/thumb BenchmarkThumbnailLargeWebM",
+    "internal/isobmff BenchmarkMP4AV1Thumbnail",
     "internal/h264 BenchmarkBaselineThumbnailDecode (CAVLC IDR)"
   ],
   "hotPathGlobs": [
@@ -17,6 +18,7 @@
     "internal/h264/**/*.go",
     "internal/kernels/**/*.go",
     "internal/isobmff/**/*.go",
+    "internal/av1decode/**/*.go",
     "internal/matroska/**/*.go",
     "internal/jpegfast/**/*.go"
   ]

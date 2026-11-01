@@ -18,6 +18,8 @@ github.com/go-test/deep v1.1.0/go.mod h1:5C2ZWiW0ErCdrYzpqxLbTX7MG14M9iiw8DgHncV
 github.com/google/uuid v1.1.2/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/gtsteffaniak/go-av1 v0.0.0-20261101031208-03767868b89d h1:2Z15ATqB4V8B6kIM08DAxSOD8N7y3GPhU9woKzM/a58=
+github.com/gtsteffaniak/go-av1 v0.0.0-20261101031208-03767868b89d/go.mod h1:C/dIrjfdUcHgdyChr2YXwLY3pIVjENI9npSd98PU4lE=
 github.com/gtsteffaniak/go-vpx v1.0.1 h1:9lSI8yoz6omDChaeV0AJrhdfe2YTrWvJrDENI/bnkAM=
 github.com/gtsteffaniak/go-vpx v1.0.1/go.mod h1:tRCdDZ15oZZTsiwmQAwyH56PTt1jn1C1O0P03oOkoJ8=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=

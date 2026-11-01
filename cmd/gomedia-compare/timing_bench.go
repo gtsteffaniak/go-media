@@ -30,11 +30,15 @@ func benchmarkThumbnail(a Asset, opt media.ThumbnailOptions, preset thumbnailPre
 		start := time.Now()
 		tr, err := media.Thumbnail(f, f.Size(), opt)
 		goMs := msSince(start)
-		goSamples = append(goSamples, goMs)
+		if i >= thumbTimingWarmup {
+			goSamples = append(goSamples, goMs)
+		}
 		if err == nil {
 			w0 := time.Now()
 			_ = os.WriteFile(tmp, tr.Data, 0o644)
-			writeSamples = append(writeSamples, goMs+msSince(w0))
+			if i >= thumbTimingWarmup {
+				writeSamples = append(writeSamples, goMs+msSince(w0))
+			}
 		}
 	}
 	ffSamples := []float64{}
@@ -43,7 +47,9 @@ func benchmarkThumbnail(a Asset, opt media.ThumbnailOptions, preset thumbnailPre
 		start := time.Now()
 		kf := assetH264KeyframeOnly(a)
 		_ = ffmpegThumbnailPreset(a, ffPath, thumbnailSeekSeconds(a.Path, 10, kf), preset, kf)
-		ffSamples = append(ffSamples, msSince(start))
+		if i >= thumbTimingWarmup {
+			ffSamples = append(ffSamples, msSince(start))
+		}
 	}
 	return thumbTimingSample{
 		GoMS:     medianFloat(goSamples),

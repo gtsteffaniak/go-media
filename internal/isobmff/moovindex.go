@@ -91,6 +91,7 @@ type trackIndex struct {
 	rotation int     // tkhd display rotation, ffprobe sign convention
 	avcC     []byte  // avcC payload for avc1/encv entries
 	hvcC     []byte  // hvcC payload for hvc1/hev1 entries
+	av1C     []byte  // av1C payload for av01 entries
 	esds     []byte  // esds payload for mp4v entries
 	// fragmented copies movieIndex.fragmented so seek errors can say why the
 	// moov sample tables are empty.
@@ -404,6 +405,8 @@ func (tr *trackIndex) parseStsd(b []byte) {
 		want = "avcC"
 	case isHEVCEntry(entry):
 		want = "hvcC"
+	case isAV1Entry(entry):
+		want = "av1C"
 	case entry == "mp4v":
 		want = "esds"
 	default:
@@ -424,6 +427,8 @@ func (tr *trackIndex) parseStsd(b []byte) {
 				tr.esds = c[8:csz]
 			case "hvcC":
 				tr.hvcC = c[8:csz]
+			case "av1C":
+				tr.av1C = c[8:csz]
 			default:
 				tr.avcC = c[8:csz]
 			}
