@@ -33,7 +33,7 @@ func appendImageCompareAssets(ffmpeg, hevcEnc, clip, outDir string) ([]Asset, er
 		return nil, fmt.Errorf("heic irot coded frame: %w", err)
 	}
 	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-i", irotCoded, "-frames:v", "1", "-vf", "transpose=1", "-q:v", "3", irotDisplay); err != nil {
+		"-i", irotCoded, "-frames:v", "1", "-vf", "transpose=2", "-q:v", "3", irotDisplay); err != nil {
 		return nil, fmt.Errorf("heic irot display frame: %w", err)
 	}
 	if err := seedFrameJPEG(ffmpeg, clip, dngRef, 640, 360); err != nil {
@@ -75,36 +75,38 @@ func appendImageCompareAssets(ffmpeg, hevcEnc, clip, outDir string) ([]Asset, er
 		Asset{ID: "raw_dng_preview", Path: dngPath, Category: "image", Description: "DNG-style TIFF embedded JPEG preview"},
 	)
 
-	if coded, err := generateHEICCodedStill(ffmpeg, hevcEnc, clip, dir); err == nil {
-		assets = append(assets, coded...)
+	coded, err := generateHEICCodedStill(ffmpeg, hevcEnc, clip, dir)
+	if err != nil {
+		return nil, fmt.Errorf("heic/heif coded still fixtures: %w", err)
 	}
+	assets = append(assets, coded...)
 
 	return assets, nil
 }
 
 func generateHEICCodedStill(ffmpeg, hevcEnc, clip, dir string) ([]Asset, error) {
-	if !ffmpegHasDemuxer(ffmpeg, "heic") {
-		return nil, fmt.Errorf("ffmpeg has no HEIC demuxer")
+	_, muxFmt, ok := ffmpegHEIFContainer(ffmpeg)
+	if !ok {
+		return nil, fmt.Errorf("ffmpeg has no HEIC/HEIF demuxer")
 	}
 	heicPath := filepath.Join(dir, "heic_coded.heic")
 	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
 		"-ss", "2", "-i", clip, "-frames:v", "1", "-vf", "scale=480:-2",
-		"-c:v", hevcEnc, "-tag:v", "hvc1", "-f", "heic", heicPath); err != nil {
+		"-c:v", hevcEnc, "-tag:v", "hvc1", "-f", muxFmt, heicPath); err != nil {
 		return nil, err
 	}
 	out := []Asset{
 		{ID: "heic_coded", Path: heicPath, Category: "image", Description: "HEIC HEVC primary still (ffmpeg mux)"},
 	}
 	heifPath := filepath.Join(dir, "heif_coded.heif")
-	if ffmpegHasDemuxer(ffmpeg, "heif") {
-		if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-			"-ss", "2", "-i", clip, "-frames:v", "1", "-vf", "scale=480:-2",
-			"-c:v", hevcEnc, "-tag:v", "hvc1", "-f", "heif", heifPath); err == nil {
-			out = append(out, Asset{ID: "heif_coded", Path: heifPath, Category: "image", Description: "HEIF HEVC primary still (ffmpeg mux)"})
+	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+		"-ss", "2", "-i", clip, "-frames:v", "1", "-vf", "scale=480:-2",
+		"-c:v", hevcEnc, "-tag:v", "hvc1", "-f", muxFmt, heifPath); err != nil {
+		if err := copyFile(heicPath, heifPath); err != nil {
+			return out, nil
 		}
-	} else if err := copyFile(heicPath, heifPath); err == nil {
-		out = append(out, Asset{ID: "heif_coded", Path: heifPath, Category: "image", Description: "HEIF HEVC primary still (.heif, same bitstream as heic_coded)"})
 	}
+	out = append(out, Asset{ID: "heif_coded", Path: heifPath, Category: "image", Description: "HEIF HEVC primary still (ffmpeg mux)"})
 	return out, nil
 }
 

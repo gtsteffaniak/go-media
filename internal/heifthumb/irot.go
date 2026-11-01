@@ -229,12 +229,17 @@ func parseIPCOProperties(ipco []byte) []ipcoProperty {
 	return props
 }
 
-func parseIPMAPropertyIndices(ipma []byte, itemID uint32) []uint8 {
+func parseIPMAPropertyIndices(ipma []byte, itemID uint32) []uint16 {
 	payload := bmffBoxPayload(ipma)
 	if len(ipma) < 12 || payload == nil || len(payload) < 4 {
 		return nil
 	}
 	version := ipma[8]
+	wide := ipma[11]&0x01 != 0
+	entrySize := 1
+	if wide {
+		entrySize = 2
+	}
 	entryCount := int(binary.BigEndian.Uint32(payload[0:4]))
 	pos := 4
 	for i := 0; i < entryCount && pos < len(payload); i++ {
@@ -258,14 +263,18 @@ func parseIPMAPropertyIndices(ipma []byte, itemID uint32) []uint8 {
 		}
 		count := int(payload[pos])
 		pos++
-		if pos+count > len(payload) {
+		if pos+count*entrySize > len(payload) {
 			return nil
 		}
-		indices := make([]uint8, count)
+		indices := make([]uint16, count)
 		for j := 0; j < count; j++ {
-			indices[j] = payload[pos+j] & 0x7f
+			if wide {
+				indices[j] = binary.BigEndian.Uint16(payload[pos+2*j:]) & 0x7fff
+			} else {
+				indices[j] = uint16(payload[pos+j] & 0x7f)
+			}
 		}
-		pos += count
+		pos += count * entrySize
 		if id != itemID {
 			continue
 		}
