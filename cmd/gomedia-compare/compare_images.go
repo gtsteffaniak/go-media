@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/gtsteffaniak/go-media/internal/heifthumb"
 	"github.com/gtsteffaniak/go-media/internal/rawpreview"
@@ -12,7 +11,11 @@ import (
 
 // appendImageCompareAssets builds HEIC/HEIF/RAW still fixtures from the reference
 // clip frame so report thumbnails share the same source imagery as video fixtures.
-func appendImageCompareAssets(ffmpeg, hevcEnc, clip, outDir string) ([]Asset, error) {
+//
+// Coded HEVC-primary HEIC is not generated here: pinned ffmpeg 9.0.2 has no HEIF
+// muxer (same as WMV3 encode). Add a checksum-pinned file under test/data when
+// a coded-primary fixture is needed.
+func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 	dir := filepath.Join(outDir, "image")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -68,61 +71,12 @@ func appendImageCompareAssets(ffmpeg, hevcEnc, clip, outDir string) ([]Asset, er
 		return nil, err
 	}
 
-	var assets []Asset
-	assets = append(assets,
-		Asset{ID: "heic_jpeg_thumb", Path: heicPath, Category: "image", Description: "HEIC embedded JPEG thumbnail"},
-		Asset{ID: "heif_jpeg_thumb", Path: heifPath, Category: "image", Description: "HEIF (mif1) embedded JPEG thumbnail"},
-		Asset{ID: "heic_jpeg_irot", Path: irotPath, Category: "image", Description: "HEIC embedded JPEG + primary irot (90° CCW)"},
-		Asset{ID: "raw_dng_preview", Path: dngPath, Category: "image", Description: "DNG-style TIFF embedded JPEG preview"},
-	)
-
-	coded, err := generateHEICCodedStill(ffmpeg, hevcEnc, clip, dir)
-	if err != nil {
-		return nil, fmt.Errorf("heic/heif coded still fixtures: %w", err)
-	}
-	assets = append(assets, coded...)
-
-	return assets, nil
-}
-
-func generateHEICCodedStill(ffmpeg, hevcEnc, clip, dir string) ([]Asset, error) {
-	heicPath := filepath.Join(dir, "heic_coded.heic")
-	muxFmt, ok := ffmpegHEIFContainer(ffmpeg)
-	if !ok {
-		muxFmt = "heif"
-	}
-	var muxErr error
-	tried := map[string]bool{}
-	for _, try := range []string{muxFmt, "heif", "heic"} {
-		try = strings.TrimSpace(try)
-		if try == "" || tried[try] {
-			continue
-		}
-		tried[try] = true
-		muxErr = runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-			"-ss", "2", "-i", clip, "-frames:v", "1", "-vf", "scale=480:-2",
-			"-c:v", hevcEnc, "-tag:v", "hvc1", "-f", try, heicPath)
-		if muxErr == nil {
-			muxFmt = try
-			break
-		}
-	}
-	if muxErr != nil {
-		return nil, fmt.Errorf("heic/heif coded still mux: %w", muxErr)
-	}
-	out := []Asset{
-		{ID: "heic_coded", Path: heicPath, Category: "image", Description: "HEIC HEVC primary still (ffmpeg mux)"},
-	}
-	heifPath := filepath.Join(dir, "heif_coded.heif")
-	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-ss", "2", "-i", clip, "-frames:v", "1", "-vf", "scale=480:-2",
-		"-c:v", hevcEnc, "-tag:v", "hvc1", "-f", muxFmt, heifPath); err != nil {
-		if err := copyFile(heicPath, heifPath); err != nil {
-			return out, nil
-		}
-	}
-	out = append(out, Asset{ID: "heif_coded", Path: heifPath, Category: "image", Description: "HEIF HEVC primary still (ffmpeg mux)"})
-	return out, nil
+	return []Asset{
+		{ID: "heic_jpeg_thumb", Path: heicPath, Category: "image", Description: "HEIC embedded JPEG thumbnail"},
+		{ID: "heif_jpeg_thumb", Path: heifPath, Category: "image", Description: "HEIF (mif1) embedded JPEG thumbnail"},
+		{ID: "heic_jpeg_irot", Path: irotPath, Category: "image", Description: "HEIC embedded JPEG + primary irot (90° CCW)"},
+		{ID: "raw_dng_preview", Path: dngPath, Category: "image", Description: "DNG-style TIFF embedded JPEG preview"},
+	}, nil
 }
 
 // seedFrameJPEG writes one baseline 4:2:0 JPEG frame from the seed clip.

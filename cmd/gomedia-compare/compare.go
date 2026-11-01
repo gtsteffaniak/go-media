@@ -441,7 +441,7 @@ func relReportPath(abs string) string {
 func isStillImageAsset(id string) bool {
 	switch id {
 	case "heic_jpeg_thumb", "heif_jpeg_thumb", "heic_jpeg_irot",
-		"heic_coded", "heif_coded", "raw_dng_preview", "avif_coded":
+		"raw_dng_preview", "avif_coded":
 		return true
 	}
 	return false

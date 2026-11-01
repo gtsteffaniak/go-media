@@ -257,7 +257,7 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		}
 	}
 
-	imgAssets, err := appendImageCompareAssets(ffmpeg, hevcEnc, clip, outDir)
+	imgAssets, err := appendImageCompareAssets(ffmpeg, clip, outDir)
 	os.Remove(clip)
 	if err != nil {
 		return nil, err

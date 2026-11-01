@@ -12,8 +12,7 @@ import (
 // ffmpegThumbInput returns a path ffmpeg can decode for thumbnail extraction.
 // Pinned ffmpeg 9.0.2 segfaults on MPEG-TS demux in this environment; we demux
 // with go-media and pass elementary video. Minimal synth HEIC containers use
-// display-aligned sidecar JPEGs; ffmpeg-generated heic_coded/heif_coded use the
-// container path directly.
+// display-aligned sidecar JPEGs for synth HEIC/HEIF fixtures.
 func ffmpegThumbInput(assetPath, assetID string) (input string, cleanup func(), err error) {
 	cleanup = func() {}
 	if sidecar, ok := stillImageFFmpegSidecar(assetPath, assetID); ok {
@@ -21,9 +20,6 @@ func ffmpegThumbInput(assetPath, assetID string) (input string, cleanup func(), 
 			return "", cleanup, fmt.Errorf("still image sidecar %s: %w", assetID, err)
 		}
 		return sidecar, cleanup, nil
-	}
-	if isStillImageAsset(assetID) && stillImageUsesContainer(assetID) {
-		return assetPath, cleanup, nil
 	}
 	if !tsLikeContainer(assetPath) {
 		return assetPath, cleanup, nil
@@ -56,15 +52,6 @@ func ffmpegThumbInput(assetPath, assetID string) (input string, cleanup func(), 
 		return "", func() {}, err
 	}
 	return tmp.Name(), cleanup, nil
-}
-
-func stillImageUsesContainer(assetID string) bool {
-	switch assetID {
-	case "heic_coded", "heif_coded":
-		return true
-	default:
-		return false
-	}
 }
 
 func stillImageFFmpegSidecar(assetPath, assetID string) (string, bool) {
