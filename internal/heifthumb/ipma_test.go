@@ -32,6 +32,27 @@ func TestParseIPMAPropertyIndicesWideEntries(t *testing.T) {
 	}
 }
 
+func TestParseIPMAPropertyIndicesExtendedBoxSize(t *testing.T) {
+	payload := make([]byte, 0, 12)
+	payload = append(payload, 0, 0, 0, 1)
+	payload = append(payload, 0, 1)
+	payload = append(payload, 1)
+	payload = append(payload, 0x81) // essential, property 1
+
+	ipma := make([]byte, 20+len(payload))
+	binary.BigEndian.PutUint32(ipma[0:4], 1)
+	binary.BigEndian.PutUint64(ipma[8:16], uint64(len(ipma)))
+	copy(ipma[4:8], "ipma")
+	ipma[16] = 0    // version (after 16-byte header + full-box)
+	ipma[19] = 0x00 // flags: narrow entries
+	copy(ipma[20:], payload)
+
+	got := parseIPMAPropertyIndices(ipma, 1)
+	if len(got) != 1 || got[0] != 1 {
+		t.Fatalf("parseIPMAPropertyIndices() = %v, want [1]", got)
+	}
+}
+
 func TestParseIPMAPropertyIndicesNarrowEntries(t *testing.T) {
 	payload := make([]byte, 0, 12)
 	payload = append(payload, 0, 0, 0, 1)

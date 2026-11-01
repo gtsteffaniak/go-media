@@ -7,7 +7,6 @@ import (
 
 	"github.com/gtsteffaniak/go-media/internal/heifthumb"
 	"github.com/gtsteffaniak/go-media/internal/rawpreview"
-	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 // appendImageCompareAssets builds HEIC/HEIF/RAW still fixtures from the reference
@@ -74,7 +73,7 @@ func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 		return nil, fmt.Errorf("heic phone reference: %w", err)
 	}
 	phoneDisplayPNG := filepath.Join(dir, "heic_phone_primary_display.png")
-	if err := seedPhoneHEICDisplayPNG(phonePath, phoneDisplayPNG); err != nil {
+	if err := copyReferenceSoundboardDisplayPNG(phoneDisplayPNG); err != nil {
 		return nil, fmt.Errorf("heic phone display sidecar: %w", err)
 	}
 
@@ -86,26 +85,6 @@ func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 		{ID: "raw_dng_preview", Path: dngPath, Category: "image", Description: "DNG-style TIFF embedded JPEG preview"},
 	}
 	return assets, nil
-}
-
-// seedPhoneHEICDisplayPNG writes a display-oriented lossless raster for ffmpeg.
-// Pinned ffmpeg decodes this tiled HEIC as low-res tiles, not the full grid go-media uses.
-func seedPhoneHEICDisplayPNG(phonePath, pngOut string) error {
-	f, err := os.Open(phonePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	st, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	opt := media.ThumbnailOptions{MaxWidth: 8192, MaxHeight: 8192, Quality: 95}
-	png, err := media.ThumbnailRasterPNG(f, st.Size(), opt)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(pngOut, png, 0o644)
 }
 
 // seedFrameJPEG writes one baseline 4:2:0 JPEG frame from the seed clip.

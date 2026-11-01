@@ -157,10 +157,7 @@ func bmffBoxPayload(box []byte) []byte {
 		return nil
 	}
 	typ := string(box[4:8])
-	header := 8
-	if binary.BigEndian.Uint32(box[0:4]) == 1 {
-		header = 16
-	}
+	header := bmffBoxHeaderSize(box)
 	if isBMFFFullBoxType(typ) {
 		header += 4
 	}
@@ -168,6 +165,26 @@ func bmffBoxPayload(box []byte) []byte {
 		return nil
 	}
 	return box[header:]
+}
+
+func bmffBoxHeaderSize(box []byte) int {
+	if len(box) >= 8 && binary.BigEndian.Uint32(box[0:4]) == 1 {
+		return 16
+	}
+	return 8
+}
+
+func bmffFullBoxVersionFlags(box []byte) (version byte, flags byte, ok bool) {
+	if len(box) < 8 || !isBMFFFullBoxType(string(box[4:8])) {
+		return 0, 0, false
+	}
+	off := bmffBoxHeaderSize(box)
+	if len(box) < off+4 {
+		return 0, 0, false
+	}
+	version = box[off]
+	flags = box[off+3]
+	return version, flags, true
 }
 
 func isBMFFFullBoxType(typ string) bool {
@@ -181,10 +198,10 @@ func isBMFFFullBoxType(typ string) bool {
 
 func parsePITMItemID(pitm []byte) uint32 {
 	payload := bmffBoxPayload(pitm)
-	if len(pitm) < 12 || payload == nil {
+	version, _, ok := bmffFullBoxVersionFlags(pitm)
+	if !ok || payload == nil {
 		return 0
 	}
-	version := pitm[8]
 	switch version {
 	case 0:
 		if len(payload) < 2 {
@@ -231,11 +248,11 @@ func parseIPCOProperties(ipco []byte) []ipcoProperty {
 
 func parseIPMAPropertyIndices(ipma []byte, itemID uint32) []uint16 {
 	payload := bmffBoxPayload(ipma)
-	if len(ipma) < 12 || payload == nil || len(payload) < 4 {
+	version, flags, ok := bmffFullBoxVersionFlags(ipma)
+	if !ok || payload == nil || len(payload) < 4 {
 		return nil
 	}
-	version := ipma[8]
-	wide := ipma[11]&0x01 != 0
+	wide := flags&0x01 != 0
 	entrySize := 1
 	if wide {
 		entrySize = 2
