@@ -13,167 +13,182 @@
 </head>
 <body>
   <header>
-    <h1>go-media vs ffmpeg / ffprobe</h1>
+    <div class="header-top">
+      <h1>go-media vs ffmpeg / ffprobe</h1>
+      <div class="view-toggle" role="tablist" aria-label="Report view">
+        <button type="button" role="tab" class="is-active" data-view="statistics" aria-selected="true" id="tab-statistics">Statistics</button>
+        <button type="button" role="tab" data-view="data" aria-selected="false" id="tab-data">Data</button>
+      </div>
+    </div>
     <p id="meta">Loading…</p>
     <p id="timing-meta" class="sub-meta"></p>
     <p id="gate-build-meta" class="sub-meta"></p>
   </header>
 
-  <section class="cards" id="summary-cards"></section>
+  <div id="view-statistics" class="report-view" role="tabpanel" aria-labelledby="tab-statistics">
+    <section class="cards" id="summary-cards"></section>
 
-  <section class="charts-row" id="charts-summary">
-    <div class="chart-box compact">
-      <div class="chart-wrap"><canvas id="chart-status"></canvas></div>
-    </div>
-    <div class="chart-box compact">
-      <div class="chart-wrap"><canvas id="chart-timing-totals"></canvas></div>
-    </div>
-    <div class="chart-box compact">
-      <div class="chart-wrap"><canvas id="chart-capability"></canvas></div>
-    </div>
-  </section>
+    <section class="charts-row" id="charts-summary">
+      <div class="chart-box compact">
+        <div class="chart-wrap"><canvas id="chart-status"></canvas></div>
+      </div>
+      <div class="chart-box compact">
+        <div class="chart-wrap"><canvas id="chart-timing-totals"></canvas></div>
+      </div>
+      <div class="chart-box compact">
+        <div class="chart-wrap"><canvas id="chart-capability"></canvas></div>
+      </div>
+    </section>
 
-  <section class="charts-metrics" id="charts-metrics">
-    <div class="chart-box tall">
-      <h3>Thumbnail speed vs ffmpeg (how often we win or lose)</h3>
-      <p class="chart-caption">Each bar counts thumbnail rows in a Δ% bucket. Green = go-media faster than ffmpeg.</p>
-      <div class="chart-wrap"><canvas id="chart-timing-histogram"></canvas></div>
-    </div>
-    <div class="chart-box tall">
-      <h3>Single-run latency by check type</h3>
-      <p class="chart-caption">Median go-media vs ffmpeg/ffprobe per check (one harness pass; thumbs use go+write ms).</p>
-      <div class="chart-wrap"><canvas id="chart-check-median"></canvas></div>
-    </div>
-    <div class="chart-box tall" id="per-asset-chart-section">
-      <h3>Total time per asset vs ffmpeg</h3>
-      <p class="chart-caption">Sum of timed checks per asset (duration, probe, thumbs, …) — go-media vs ffmpeg side by side.</p>
-      <div class="chart-wrap"><canvas id="chart-per-asset"></canvas></div>
-    </div>
-  </section>
+    <section class="charts-metrics" id="charts-metrics">
+      <div class="chart-box tall">
+        <h3>Thumbnail speed vs ffmpeg (how often we win or lose)</h3>
+        <p class="chart-caption">Signed × vs ffmpeg (− = slower, + = faster). Buckets from −5.0+ through 5.0+.</p>
+        <div class="chart-wrap"><canvas id="chart-timing-histogram"></canvas></div>
+      </div>
+      <div class="chart-box tall">
+        <h3>Single-run latency by check type</h3>
+        <p class="chart-caption">Median go-media vs ffmpeg/ffprobe per check (one harness pass; thumbs use go+write ms).</p>
+        <div class="chart-wrap"><canvas id="chart-check-median"></canvas></div>
+      </div>
+      <div class="chart-box tall" id="per-asset-chart-section">
+        <h3>Total time per asset vs ffmpeg</h3>
+        <p class="chart-caption">Sum of timed checks per asset (duration, probe, thumbs, …) — go-media vs ffmpeg side by side.</p>
+        <div class="chart-wrap"><canvas id="chart-per-asset"></canvas></div>
+      </div>
+    </section>
 
-  <section>
-    <h2>Capability matrix</h2>
-    <div class="filters">
-      <label>Filter asset <input type="search" id="matrix-filter" placeholder="id or description" /></label>
-    </div>
-    <div class="table-scroll">
-      <table id="matrix-table" class="sortable">
-        <thead>
-          <tr>
-            <th data-sort="asset">Asset</th>
-            <th data-sort="duration">Duration</th>
-            <th data-sort="probe">Probe</th>
-            <th data-sort="tags">Tags</th>
-            <th data-sort="artwork">Artwork</th>
-            <th data-sort="lyrics">Lyrics</th>
-            <th data-sort="subtitles">Subtitles</th>
-            <th data-sort="thumbnail_small">Thumb S</th>
-            <th data-sort="thumbnail_large">Thumb L</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+    <section id="buildmode-section">
+      <h2>Thumbnail builds: diagnostic → production → SIMD experiment</h2>
+      <p class="hint" id="buildmode-hint"><strong>Production</strong> = tier 2 (<code>CGO_ENABLED=0</code> + <code>-pgo=default.pgo</code>) — support gate and recommended for apps. Tier 1 (no PGO) and tier 3 (+<code>GOEXPERIMENT=simd</code>) are diagnostic only.</p>
+      <p id="buildmode-tier-summary" class="sub-meta"></p>
+      <p id="buildmode-charts-empty" class="chart-empty hidden">No build-mode timing data in this report. Re-run <code>make compare</code> (needs <code>default.pgo</code> and subprocess thumbmode builds).</p>
+      <div class="charts-row" id="buildmode-tier-summary-charts">
+        <div class="chart-box compact"><canvas id="chart-tier-median-delta"></canvas></div>
+        <div class="chart-box compact"><canvas id="chart-tier-median-ms"></canvas></div>
+      </div>
+      <div class="chart-box tall">
+        <h3>Per fixture: slower or faster than ffmpeg (by build tier)</h3>
+        <p class="chart-caption">Subprocess <code>thumbmode</code> bench (median of 15 runs). Same ffmpeg ms for all tiers on each row.</p>
+        <div class="chart-wrap"><canvas id="chart-build-modes"></canvas></div>
+      </div>
+      <div class="chart-box tall">
+        <h3>Per fixture: thumbnail decode + JPEG write time (by build tier)</h3>
+        <p class="chart-caption">Lower is better. Tier 2 is what ships; tier 3 adds SIMD where enabled.</p>
+        <div class="chart-wrap"><canvas id="chart-build-modes-ms"></canvas></div>
+      </div>
+    </section>
 
-  <section>
-    <h2>Detailed results</h2>
-    <div class="filters">
-      <label>Asset <input type="search" id="filter-asset" placeholder="asset id" /></label>
-      <label>Check <select id="filter-check"><option value="">all</option></select></label>
-      <label>Status <select id="filter-status"><option value="">all</option></select></label>
-      <label>Δ timing <select id="filter-delta">
-        <option value="">all</option>
-        <option value="faster">go-media faster</option>
-        <option value="slower">go-media slower</option>
-        <option value="regression">vs prev run</option>
-      </select></label>
-    </div>
-    <div class="table-scroll">
-      <table id="results-table" class="sortable">
-        <thead>
-          <tr>
-            <th data-sort="assetId">Asset</th>
-            <th data-sort="check">Check</th>
-            <th data-sort="status">Status</th>
-            <th data-sort="goMediaWriteMs">go+write ms</th>
-            <th data-sort="ffmpegMs">ffmpeg ms</th>
-            <th data-sort="timingDeltaPct">Δ%</th>
-            <th>Gate</th>
-            <th>Detail</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+    <section id="thumb-grid-section">
+      <h2>Thumbnail compare</h2>
+      <div id="thumb-grid" class="thumb-grid"></div>
+    </section>
+  </div>
 
-  <section id="buildmode-section">
-    <h2>Thumbnail builds: diagnostic → production → SIMD experiment</h2>
-    <p class="hint" id="buildmode-hint"><strong>Production</strong> = tier 2 (<code>CGO_ENABLED=0</code> + <code>-pgo=default.pgo</code>) — support gate and recommended for apps. Tier 1 (no PGO) and tier 3 (+<code>GOEXPERIMENT=simd</code>) are diagnostic only.</p>
-    <p id="buildmode-tier-summary" class="sub-meta"></p>
-    <p id="buildmode-charts-empty" class="chart-empty hidden">No build-mode timing data in this report. Re-run <code>make compare</code> (needs <code>default.pgo</code> and subprocess thumbmode builds).</p>
-    <div class="charts-row" id="buildmode-tier-summary-charts">
-      <div class="chart-box compact"><canvas id="chart-tier-median-delta"></canvas></div>
-      <div class="chart-box compact"><canvas id="chart-tier-median-ms"></canvas></div>
-    </div>
-    <div class="chart-box tall">
-      <h3>Per fixture: slower or faster than ffmpeg (by build tier)</h3>
-      <p class="chart-caption">Subprocess <code>thumbmode</code> bench (median of 15 runs). Same ffmpeg ms for all tiers on each row.</p>
-      <div class="chart-wrap"><canvas id="chart-build-modes"></canvas></div>
-    </div>
-    <div class="chart-box tall">
-      <h3>Per fixture: thumbnail decode + JPEG write time (by build tier)</h3>
-      <p class="chart-caption">Lower is better. Tier 2 is what ships; tier 3 adds SIMD where enabled.</p>
-      <div class="chart-wrap"><canvas id="chart-build-modes-ms"></canvas></div>
-    </div>
-    <div class="table-scroll">
-      <table id="buildmode-table" class="sortable">
-        <thead>
-          <tr>
-            <th>Tier</th>
-            <th>Asset</th>
-            <th>Preset</th>
-            <th>Mode</th>
-            <th>go+write ms</th>
-            <th>ffmpeg ms</th>
-            <th>Δ% vs ffmpeg</th>
-            <th>Δ% vs prev tier</th>
-            <th>Gate vs ffmpeg</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+  <div id="view-data" class="report-view hidden" role="tabpanel" aria-labelledby="tab-data" hidden>
+    <section id="matrix-section">
+      <h2>Capability matrix</h2>
+      <div class="filters">
+        <label>Filter asset <input type="search" id="matrix-filter" placeholder="id or description" /></label>
+      </div>
+      <div class="table-scroll">
+        <table id="matrix-table" class="sortable">
+          <thead>
+            <tr>
+              <th data-sort="asset">Asset</th>
+              <th data-sort="duration">Duration</th>
+              <th data-sort="probe">Probe</th>
+              <th data-sort="tags">Tags</th>
+              <th data-sort="artwork">Artwork</th>
+              <th data-sort="lyrics">Lyrics</th>
+              <th data-sort="subtitles">Subtitles</th>
+              <th data-sort="thumbnail_small">Thumb S</th>
+              <th data-sort="thumbnail_large">Thumb L</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
 
-  <section id="scaler-section">
-    <h2>Scaler benchmark (vs ffmpeg area)</h2>
-    <p class="hint">Median of 7 timed runs after 2 warmup iterations. Δ% uses go-media encode+write vs full ffmpeg exec. PSNR/SSIM vs matching preset JPEG.</p>
-    <div class="table-scroll">
-      <table id="scaler-table" class="sortable">
-        <thead>
-          <tr>
-            <th data-sort="assetId">Asset</th>
-            <th data-sort="preset">Preset</th>
-            <th data-sort="scaler">Scaler</th>
-            <th data-sort="goMediaMs">go ms</th>
-            <th data-sort="goWriteMs">go+write ms</th>
-            <th data-sort="ffmpegMs">ffmpeg ms</th>
-            <th data-sort="deltaPct">Δ%</th>
-            <th data-sort="psnr">PSNR</th>
-            <th data-sort="ssim">SSIM</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+    <section id="results-section">
+      <h2>Detailed results</h2>
+      <div class="filters">
+        <label>Asset <input type="search" id="filter-asset" placeholder="asset id" /></label>
+        <label>Check <select id="filter-check"><option value="">all</option></select></label>
+        <label>Status <select id="filter-status"><option value="">all</option></select></label>
+        <label>Speed vs ffmpeg <select id="filter-delta">
+          <option value="">all</option>
+          <option value="faster">go-media faster</option>
+          <option value="slower">go-media slower</option>
+          <option value="regression">vs prev run</option>
+        </select></label>
+      </div>
+      <div class="table-scroll">
+        <table id="results-table" class="sortable">
+          <thead>
+            <tr>
+              <th data-sort="assetId">Asset</th>
+              <th data-sort="check">Check</th>
+              <th data-sort="status">Status</th>
+              <th data-sort="goMediaWriteMs">go+write ms</th>
+              <th data-sort="ffmpegMs">ffmpeg ms</th>
+              <th data-sort="timingDeltaPct">× vs ffmpeg</th>
+              <th>Gate</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
 
-  <section id="thumb-grid-section">
-    <h2>Thumbnail compare</h2>
-    <div id="thumb-grid" class="thumb-grid"></div>
-  </section>
+    <section id="buildmode-data-section">
+      <h2>Thumbnail build timings (table)</h2>
+      <p class="hint">Same subprocess bench as the build charts in Statistics — one row per asset, preset, and tier.</p>
+      <div class="table-scroll">
+        <table id="buildmode-table" class="sortable">
+          <thead>
+            <tr>
+              <th>Tier</th>
+              <th>Asset</th>
+              <th>Preset</th>
+              <th>Mode</th>
+              <th>go+write ms</th>
+              <th>ffmpeg ms</th>
+              <th>× vs ffmpeg</th>
+              <th>× vs prev tier</th>
+              <th>Gate vs ffmpeg</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="scaler-section">
+      <h2>Scaler benchmark (vs ffmpeg area)</h2>
+      <p class="hint">Median of 7 timed runs after 2 warmup iterations. Speed uses go-media encode+write vs full ffmpeg exec. PSNR/SSIM vs matching preset JPEG.</p>
+      <div class="table-scroll">
+        <table id="scaler-table" class="sortable">
+          <thead>
+            <tr>
+              <th data-sort="assetId">Asset</th>
+              <th data-sort="preset">Preset</th>
+              <th data-sort="scaler">Scaler</th>
+              <th data-sort="goMediaMs">go ms</th>
+              <th data-sort="goWriteMs">go+write ms</th>
+              <th data-sort="ffmpegMs">ffmpeg ms</th>
+              <th data-sort="deltaPct">× vs ffmpeg</th>
+              <th data-sort="psnr">PSNR</th>
+              <th data-sort="ssim">SSIM</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 
   <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true" aria-labelledby="lightbox-caption">
     <button type="button" class="lightbox-close" aria-label="Close">×</button>
