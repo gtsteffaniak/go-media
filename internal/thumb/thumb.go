@@ -347,6 +347,10 @@ func decodeSource(r interface {
 		}
 		return yimg, "decode", nil
 	case format.HEIC, format.HEIF:
+		if deg, ok := heifthumb.PrimaryDisplayRotation(r, size); ok {
+			*rot = deg
+		}
+		opt = fitOptions(opt, *rot)
 		data, err := heifthumb.JPEGPreview(r, size, opt.MaxWidth, opt.MaxHeight)
 		if err == nil {
 			img, err := decodeBytes(data, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)

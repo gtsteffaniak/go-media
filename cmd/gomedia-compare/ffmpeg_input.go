@@ -11,23 +11,18 @@ import (
 
 // ffmpegThumbInput returns a path ffmpeg can decode for thumbnail extraction.
 // Pinned ffmpeg 9.0.2 segfaults on MPEG-TS demux in this environment; we demux
-// with go-media and pass elementary video. HEIC/DNG fixtures use sidecar JPEGs
-// (embedded preview source) because ffmpeg cannot read our minimal synth containers.
+// with go-media and pass elementary video. Minimal synth HEIC containers use
+// display-aligned sidecar JPEGs for synth HEIC/HEIF fixtures.
 func ffmpegThumbInput(assetPath, assetID string) (input string, cleanup func(), err error) {
 	cleanup = func() {}
-	switch assetID {
-	case "heic_jpeg_thumb":
-		ref := filepath.Join(filepath.Dir(assetPath), "heic_jpeg_thumb_embed.jpg")
-		if _, err := os.Stat(ref); err != nil {
-			return "", cleanup, fmt.Errorf("heic embed ref: %w", err)
+	if sidecar, ok := stillImageFFmpegSidecar(assetPath, assetID); ok {
+		if _, err := os.Stat(sidecar); err != nil {
+			return "", cleanup, fmt.Errorf("still image sidecar %s: %w", assetID, err)
 		}
-		return ref, cleanup, nil
-	case "raw_dng_preview":
-		ref := filepath.Join(filepath.Dir(assetPath), "raw_dng_preview_embed.jpg")
-		if _, err := os.Stat(ref); err != nil {
-			return "", cleanup, fmt.Errorf("dng embed ref: %w", err)
-		}
-		return ref, cleanup, nil
+		return sidecar, cleanup, nil
+	}
+	if isStillImageAsset(assetID) {
+		return assetPath, cleanup, nil
 	}
 	if !tsLikeContainer(assetPath) {
 		return assetPath, cleanup, nil
@@ -60,4 +55,36 @@ func ffmpegThumbInput(assetPath, assetID string) (input string, cleanup func(), 
 		return "", func() {}, err
 	}
 	return tmp.Name(), cleanup, nil
+}
+
+func stillImageFFmpegSidecar(assetPath, assetID string) (string, bool) {
+	dir := filepath.Dir(assetPath)
+	switch assetID {
+	case "heic_jpeg_thumb":
+		return filepath.Join(dir, "heic_jpeg_thumb_embed.jpg"), true
+	case "heif_jpeg_thumb":
+		return filepath.Join(dir, "heif_jpeg_thumb_embed.jpg"), true
+	case "heic_jpeg_irot":
+		return filepath.Join(dir, "heic_jpeg_irot_display.jpg"), true
+	case "heic_phone_primary":
+		return filepath.Join(dir, "heic_phone_primary_display.png"), true
+	case "raw_dng_preview":
+		return filepath.Join(dir, "raw_dng_preview_embed.jpg"), true
+	default:
+		return "", false
+	}
+}
+
+// ffmpegScaleViaFilterComplex is true when ffmpeg's demuxer already uses a complex
+// filtergraph (HEIC/HEIF/AVIF containers), so -vf cannot be combined with decode.
+func ffmpegScaleViaFilterComplex(assetPath, assetID string) bool {
+	if _, ok := stillImageFFmpegSidecar(assetPath, assetID); ok {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(assetPath)) {
+	case ".heic", ".heif", ".avif":
+		return true
+	default:
+		return false
+	}
 }

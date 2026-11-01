@@ -28,17 +28,13 @@ ffmpeg_pair_matches_version() {
 	ffmpeg_version_line_matches "$ff_line" "$ver" && ffmpeg_version_line_matches "$fp_line" "$ver"
 }
 
-# _ffmpeg_bindir_if_usable prints dir when dir/ffmpeg and dir/ffprobe work, else returns 1.
+# _ffmpeg_bindir_if_usable returns 0 when dir/ffmpeg and dir/ffprobe work, else returns 1.
 _ffmpeg_bindir_if_usable() {
 	local dir="$1" ff fp
 	[[ -n "$dir" ]] || return 1
 	ff="$dir/ffmpeg"
 	fp="$dir/ffprobe"
-	if ffmpeg_binary_usable "$ff" && ffmpeg_binary_usable "$fp"; then
-		printf '%s\n' "$dir"
-		return 0
-	fi
-	return 1
+	ffmpeg_binary_usable "$ff" && ffmpeg_binary_usable "$fp"
 }
 
 # _ffmpeg_resolve_path_override normalizes FFMPEG_PATH to a directory with both binaries.
@@ -50,7 +46,11 @@ _ffmpeg_resolve_path_override() {
 	else
 		dir="${dir%/}"
 	fi
-	_ffmpeg_bindir_if_usable "$dir"
+	if _ffmpeg_bindir_if_usable "$dir"; then
+		printf '%s\n' "$dir"
+		return 0
+	fi
+	return 1
 }
 
 # _ffmpeg_scan_path walks PATH (colon-separated only; preserves spaces in entries).
@@ -61,7 +61,29 @@ _ffmpeg_scan_path() {
 		IFS="$old_ifs"
 		[[ -n "$path_entry" ]] || continue
 		if _ffmpeg_bindir_if_usable "$path_entry"; then
+			printf '%s\n' "$path_entry"
 			return 0
+		fi
+		IFS=':'
+	done
+	IFS="$old_ifs"
+	return 1
+}
+
+# _ffmpeg_scan_path_version walks PATH and returns the first dir whose ffmpeg/ffprobe match ver.
+_ffmpeg_scan_path_version() {
+	local ver="$1" path_entry ff fp old_ifs="$IFS"
+	IFS=':'
+	for path_entry in $PATH; do
+		IFS="$old_ifs"
+		[[ -n "$path_entry" ]] || continue
+		if _ffmpeg_bindir_if_usable "$path_entry"; then
+			ff="$path_entry/ffmpeg"
+			fp="$path_entry/ffprobe"
+			if ffmpeg_pair_matches_version "$ff" "$fp" "$ver"; then
+				printf '%s\n' "$path_entry"
+				return 0
+			fi
 		fi
 		IFS=':'
 	done
@@ -78,13 +100,20 @@ find_ffmpeg_bindir() {
 		return 0
 	fi
 
-	# Gate / explicit pin: require FFMPEG_DIR; do not fall back to PATH (avoids silent version skew).
+	# Gate: prefer pinned FFMPEG_DIR (CI static build). When that dir is missing (common on
+	# macOS Homebrew), accept PATH only if ffmpeg/ffprobe match FFMPEG_VERSION.
 	if [[ -n "${FFMPEG_DIR:-}" && "${COMPARE_GATE:-}" == "1" ]]; then
-		if dir=$(_ffmpeg_bindir_if_usable "${FFMPEG_DIR}"); then
+		if _ffmpeg_bindir_if_usable "${FFMPEG_DIR}"; then
+			printf '%s\n' "${FFMPEG_DIR}"
+			return 0
+		fi
+		local gate_ver="${FFMPEG_VERSION:-9.0.2}"
+		if dir=$(_ffmpeg_scan_path_version "$gate_ver"); then
+			echo "COMPARE_GATE: using PATH ffmpeg at $dir (FFMPEG_DIR=${FFMPEG_DIR} not installed)" >&2
 			printf '%s\n' "$dir"
 			return 0
 		fi
-		echo "COMPARE_GATE: FFMPEG_DIR=${FFMPEG_DIR} has no usable ffmpeg/ffprobe" >&2
+		echo "COMPARE_GATE: FFMPEG_DIR=${FFMPEG_DIR} has no usable ffmpeg/ffprobe (need ffmpeg $gate_ver on PATH or run make ffmpeg on Linux)" >&2
 		return 1
 	fi
 
@@ -94,8 +123,8 @@ find_ffmpeg_bindir() {
 	fi
 
 	if [[ -n "${FFMPEG_DIR:-}" ]]; then
-		if dir=$(_ffmpeg_bindir_if_usable "${FFMPEG_DIR}"); then
-			printf '%s\n' "$dir"
+		if _ffmpeg_bindir_if_usable "${FFMPEG_DIR}"; then
+			printf '%s\n' "${FFMPEG_DIR}"
 			return 0
 		fi
 	fi

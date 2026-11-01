@@ -84,9 +84,13 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	mp4AV1Args := append([]string{"-i", clip}, av1Vid...)
 	mkvAV1Args := append([]string{"-i", clip}, append(av1Vid, "-f", "matroska")...)
 	webmAV1Args := append([]string{"-i", clip}, av1Vid...)
-	avifArgs := []string{"-i", coverPNG, "-c:v", av1Enc, "-frames:v", "1"}
+	avifStill := filepath.Join(outDir, "_avif_still.jpg")
+	if err := seedFrameJPEG(ffmpeg, clip, avifStill, 320, 180); err != nil {
+		return nil, fmt.Errorf("avif still frame: %w", err)
+	}
+	avifArgs := []string{"-i", avifStill, "-c:v", av1Enc, "-frames:v", "1"}
 	if av1Enc == "libaom-av1" {
-		avifArgs = []string{"-i", coverPNG, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}
+		avifArgs = []string{"-i", avifStill, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}
 	}
 
 	type spec struct {
@@ -120,7 +124,7 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		{"mp4_av1", "video", "MP4 AV1", "video/mp4_av1.mp4", mp4AV1Args, nil},
 		{"mkv_av1", "video", "MKV AV1", "video/mkv_av1.mkv", mkvAV1Args, nil},
 		{"webm_av1", "video", "WebM AV1", "video/webm_av1.webm", webmAV1Args, nil},
-		{"avif_coded", "video", "AVIF AV1 primary", "image/avif_coded.avif", avifArgs, nil},
+		{"avif_coded", "image", "AVIF AV1 primary", "image/avif_coded.avif", avifArgs, nil},
 		{"avi_mjpeg", "video", "AVI MJPEG", "video/avi_mjpeg.avi",
 			[]string{"-i", clip, "-c:v", "mjpeg", "-q:v", "3", "-an", "-f", "avi"}, nil},
 		{"avi_mpeg4", "video", "AVI MPEG-4 Part 2", "video/avi_mpeg4.avi",

@@ -209,7 +209,7 @@ func checkThumbnailPreset(a Asset, thumbDir string, preset thumbnailPresetConfig
 
 func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetConfig) CheckResult {
 	res := CheckResult{AssetID: a.ID, Check: thumbnailCheckName(preset), ThumbPreset: preset.Name}
-	if a.Category != "video" {
+	if a.Category != "video" && a.Category != "image" {
 		res.Status = StatusSkipped
 		res.Detail = "audio fixture"
 		return res
@@ -316,21 +316,26 @@ func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetCo
 	res.Detail = fmt.Sprintf("jpeg PSNR=%.1f SSIM=%.3f decode PSNR=%.1f SSIM=%.3f",
 		res.PSNR, res.SSIM, res.PSNRDecode, res.SSIMDecode)
 
-	timing := benchmarkThumbnail(a, opt, preset)
-	res.GoMediaMS = timing.GoMS
-	res.GoMediaWriteMS = timing.WriteMS
-	res.FFmpegMS = timing.FFmpegMS
-	if res.FFmpegMS > 0 {
-		goCmp := res.GoMediaWriteMS
-		if goCmp <= 0 {
-			goCmp = res.GoMediaMS
+	_, sidecarThumb := stillImageFFmpegSidecar(a.Path, a.ID)
+	if !sidecarThumb {
+		timing := benchmarkThumbnail(a, opt, preset)
+		res.GoMediaMS = timing.GoMS
+		res.GoMediaWriteMS = timing.WriteMS
+		res.FFmpegMS = timing.FFmpegMS
+		if res.FFmpegMS > 0 {
+			goCmp := res.GoMediaWriteMS
+			if goCmp <= 0 {
+				goCmp = res.GoMediaMS
+			}
+			delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
+			res.TimingDeltaPct = &delta
+			// Allow 1pp slack on the timing gate (median-of-15 variance on cloud CI).
+			if delta > activeTimingGate.maxRegression()+0.01 && activeTimingGate.enforced(res.Check) {
+				res.TimingGateFail = true
+			}
 		}
-		delta := (goCmp - res.FFmpegMS) / res.FFmpegMS
-		res.TimingDeltaPct = &delta
-		// Allow 1pp slack on the timing gate (median-of-15 variance on cloud CI).
-		if delta > activeTimingGate.maxRegression()+0.01 && activeTimingGate.enforced(res.Check) {
-			res.TimingGateFail = true
-		}
+	} else {
+		res.Detail += "; timing skipped (ffmpeg uses still-image sidecar)"
 	}
 
 	if res.TimingGateFail {
@@ -440,7 +445,8 @@ func relReportPath(abs string) string {
 // preview (HEIC, RAW) rather than timed media.
 func isStillImageAsset(id string) bool {
 	switch id {
-	case "heic_jpeg_thumb", "raw_dng_preview", "avif_coded":
+	case "heic_jpeg_thumb", "heif_jpeg_thumb", "heic_jpeg_irot", "heic_phone_primary",
+		"raw_dng_preview", "avif_coded":
 		return true
 	}
 	return false
