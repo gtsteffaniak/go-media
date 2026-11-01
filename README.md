@@ -2,7 +2,7 @@
 
 # go-media
 
-**Pure-Go media probing, metadata, subtitles and keyframe thumbnails, with no `ffmpeg` or `ffprobe` subprocess.**
+A pure-Go media library API to handle thumbnail generation, probing, metadata, and subtitles natively. (no `ffmpeg` or `ffprobe` subprocess.)
 
 [![CI](https://github.com/gtsteffaniak/go-media/actions/workflows/ci.yml/badge.svg)](https://github.com/gtsteffaniak/go-media/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/gtsteffaniak/go-media/pkg/media.svg)](https://pkg.go.dev/github.com/gtsteffaniak/go-media/pkg/media)
