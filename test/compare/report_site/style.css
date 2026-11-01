@@ -25,6 +25,43 @@ body {
 }
 
 header h1 { margin: 0 0 0.25rem; font-size: 1.6rem; }
+.header-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 0.25rem;
+}
+.header-top h1 { margin: 0; }
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--card);
+}
+.view-toggle button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.45rem 1rem;
+  cursor: pointer;
+}
+.view-toggle button:hover { color: var(--text); }
+.view-toggle button.is-active {
+  background: var(--go);
+  color: #0f1419;
+}
+.view-toggle button:focus-visible {
+  outline: 2px solid var(--go);
+  outline-offset: 2px;
+}
+.report-view.hidden { display: none; }
 #meta { color: var(--muted); margin: 0 0 0.35rem; }
 .sub-meta { color: var(--muted); font-size: 0.9rem; margin: 0 0 1.5rem; }
 
@@ -356,6 +393,12 @@ body.capture-mode .thumb-card[data-thumb-preset="large"] .compare-label {
   font-size: 1rem;
   color: var(--text);
   background: rgba(0,0,0,0.7);
+}
+body.capture-mode #view-data {
+  display: none !important;
+}
+body.capture-mode #view-statistics {
+  display: block !important;
 }
 body.capture-mode #charts-summary,
 body.capture-mode #charts-metrics {

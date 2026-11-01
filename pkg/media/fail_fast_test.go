@@ -2,7 +2,6 @@ package media
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -100,28 +99,6 @@ func assertBudget(t *testing.T, op string, c *countingReaderAt, size int64) {
 	}
 }
 
-// TestUnsupportedMatroskaThumbnailFailsFast checks that an MKV or WebM whose
-// video codec the thumbnail path cannot decode is rejected from the headers.
-func TestUnsupportedMatroskaThumbnailFailsFast(t *testing.T) {
-	cases := []struct {
-		name    string
-		path    func(*testing.T) string
-		wantErr error
-	}{
-		{"h264 mkv", h264MKV, ErrUnsupportedProfile},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			size, c := openCounted(t, tc.path(t))
-			_, err := Thumbnail(c, size, ThumbnailOptions{MaxWidth: 320, MaxHeight: 320, SeekPercent: 10, Format: "jpeg", Quality: 72})
-			if !errors.Is(err, tc.wantErr) {
-				t.Fatalf("Thumbnail error = %v, want %v", err, tc.wantErr)
-			}
-			assertBudget(t, "Thumbnail", c, size)
-		})
-	}
-}
-
 // TestUnsupportedMatroskaProbeFailsFast checks that metadata reads on the same
 // files use only header bytes.
 func TestUnsupportedMatroskaProbeFailsFast(t *testing.T) {
@@ -148,6 +125,22 @@ func TestUnsupportedMatroskaProbeFailsFast(t *testing.T) {
 			}
 			assertBudget(t, "Duration", c, size)
 		})
+	}
+}
+
+// TestH264MatroskaDecodes checks that H.264 in MKV, formerly rejected by the
+// codec gate, now produces a thumbnail.
+func TestH264MatroskaDecodes(t *testing.T) {
+	size, c := openCounted(t, h264MKV(t))
+	res, err := Thumbnail(c, size, ThumbnailOptions{MaxWidth: 320, MaxHeight: 320, SeekPercent: 10, Format: "jpeg", Quality: 72})
+	if err != nil {
+		t.Fatalf("Thumbnail error = %v", err)
+	}
+	if len(res.Data) == 0 {
+		t.Fatal("empty thumbnail")
+	}
+	if c.bytes > size/4 {
+		t.Fatalf("read %d of %d bytes for one keyframe", c.bytes, size)
 	}
 }
 

@@ -103,6 +103,74 @@ function timingGateRow(r) {
   return r.check === 'thumbnail_small' || r.check === 'thumbnail_large';
 }
 
+/** timingDeltaPct is (goMs − ffmpegMs) / ffmpegMs (fraction, not percent). */
+function speedCompareFromDelta(pct) {
+  if (pct == null || Number.isNaN(pct)) return null;
+  const denom = 1 + pct;
+  if (denom <= 0) return null;
+  if (pct <= 0) {
+    return { kind: 'faster', factor: 1 / denom };
+  }
+  return { kind: 'slower', factor: denom };
+}
+
+/** Chart axis: ffmpeg/go; 1× = tie, >1× = go-media faster. */
+function speedRatioForChart(pct) {
+  const sc = speedCompareFromDelta(pct);
+  if (!sc) return null;
+  return sc.kind === 'faster' ? sc.factor : 1 / sc.factor;
+}
+
+function formatSpeedCompare(pct, digits = 1) {
+  const sc = speedCompareFromDelta(pct);
+  if (!sc) return '—';
+  return `${sc.factor.toFixed(digits)}× ${sc.kind}`;
+}
+
+function speedCompareBarWidth(pct) {
+  const sc = speedCompareFromDelta(pct);
+  if (!sc) return 0;
+  if (sc.kind === 'faster') {
+    return Math.min(100, (sc.factor - 1) * 40);
+  }
+  return Math.min(100, (sc.factor - 1) * 40);
+}
+
+/** Signed × score for histograms: +N = N× faster, −N = N× slower. */
+function signedSpeedScore(pct) {
+  const sc = speedCompareFromDelta(pct);
+  if (!sc) return null;
+  const sign = sc.kind === 'faster' ? 1 : -1;
+  return sign * sc.factor;
+}
+
+const THUMB_SPEED_HIST_EDGES = [-5, -3, -2, -1, 0, 1, 2, 3, 5];
+
+function thumbSpeedHistBucket(score) {
+  if (score == null || Number.isNaN(score)) return null;
+  if (score <= THUMB_SPEED_HIST_EDGES[0]) return 0;
+  for (let i = 0; i < THUMB_SPEED_HIST_EDGES.length - 1; i++) {
+    if (score <= THUMB_SPEED_HIST_EDGES[i + 1]) return i + 1;
+  }
+  return THUMB_SPEED_HIST_EDGES.length;
+}
+
+function thumbSpeedHistLabels() {
+  const e = THUMB_SPEED_HIST_EDGES;
+  const labels = [`${e[0].toFixed(1)}+`];
+  for (let i = 0; i < e.length - 1; i++) {
+    labels.push(`${e[i].toFixed(1)}–${e[i + 1].toFixed(1)}`);
+  }
+  labels.push(`${e[e.length - 1].toFixed(1)}+`);
+  return labels;
+}
+
+function thumbSpeedHistBarColor(bucketIndex) {
+  // Buckets 0–4 are slower side (−5.0+ … −1–0); 5–9 are faster (0–1 … 5.0+).
+  if (bucketIndex <= 4) return '#f07178';
+  return '#3dd68c';
+}
+
 const CHART_GO_COLOR = '#5b9bd5';
 const CHART_FF_COLOR = '#6b7a90';
 
@@ -196,17 +264,18 @@ function thumbQualityLine(r) {
 
 function thumbStatsLine(r) {
   if (!timingComparableRow(r) || r.timingDeltaPct == null) return thumbQualityLine(r);
-  return `${thumbQualityLine(r)} · go ${r.goMediaMs?.toFixed(1) ?? '—'}ms write ${r.goMediaWriteMs?.toFixed(1) ?? '—'}ms ffmpeg ${r.ffmpegMs?.toFixed(1) ?? '—'}ms ${deltaPctCell(r.timingDeltaPct)}`;
+  return `${thumbQualityLine(r)} · go ${r.goMediaMs?.toFixed(1) ?? '—'}ms write ${r.goMediaWriteMs?.toFixed(1) ?? '—'}ms ffmpeg ${r.ffmpegMs?.toFixed(1) ?? '—'}ms ${speedCompareCell(r.timingDeltaPct)}`;
 }
 
-function deltaPctCell(pct) {
+function speedCompareCell(pct) {
   if (pct == null || Number.isNaN(pct)) return '—';
-  const cls = pct <= 0 ? 'delta-good' : 'delta-bad';
-  const sign = pct > 0 ? '+' : '';
-  const barW = Math.min(100, Math.abs(pct) * 100);
+  const sc = speedCompareFromDelta(pct);
+  if (!sc) return '—';
+  const cls = sc.kind === 'faster' ? 'delta-good' : 'delta-bad';
+  const barW = speedCompareBarWidth(pct);
   return `<span class="${cls} delta-pct">
     <span class="delta-bar"><span class="delta-bar-fill ${cls}" style="width:${barW}%"></span></span>
-    ${sign}${(pct * 100).toFixed(1)}%
+    ${sc.factor.toFixed(1)}× ${sc.kind}
   </span>`;
 }
 
@@ -341,7 +410,8 @@ function aggregateBuildModeByTier(modeRows) {
       n: rows.length,
       goWriteMed: medianOf(rows.map((r) => r.goMediaWriteMs)),
       ffMed: medianOf(rows.map((r) => r.ffmpegMs)),
-      deltaMed: medianOf(rows.map((r) => (r.timingDeltaPct != null ? r.timingDeltaPct * 100 : null))),
+      speedRatioMed: medianOf(rows.map((r) => speedRatioForChart(r.timingDeltaPct))),
+      timingDeltaMed: medianOf(rows.map((r) => r.timingDeltaPct)),
     };
   });
 }
@@ -351,9 +421,9 @@ function formatTierSummaryLine(tiers) {
     .filter((t) => t.n > 0 && t.goWriteMed != null)
     .map((t) => {
       const label = BUILD_MODE_LABELS[t.mode] || t.mode;
-      const delta =
-        t.deltaMed != null ? `, median ${t.deltaMed >= 0 ? '+' : ''}${t.deltaMed.toFixed(0)}% vs ffmpeg` : '';
-      return `${label}: ${t.goWriteMed.toFixed(0)} ms go+write${delta} (n=${t.n})`;
+      const speed =
+        t.timingDeltaMed != null ? `, median ${formatSpeedCompare(t.timingDeltaMed, 1)}` : '';
+      return `${label}: ${t.goWriteMed.toFixed(0)} ms go+write${speed} (n=${t.n})`;
     });
   if (!parts.length) return '';
   let line = parts.join(' · ');
@@ -421,7 +491,7 @@ function renderBuildModeTierSummaryCharts(modeRows) {
   rowWrap?.classList.remove('hidden');
 
   const axisLabels = BUILD_MODE_ORDER.map((m) => BUILD_MODE_AXIS_LABELS[m] || m);
-  const deltaVals = tiers.map((t) => t.deltaMed);
+  const speedVals = tiers.map((t) => t.speedRatioMed);
   const msVals = tiers.map((t) => t.goWriteMed);
   const msFF = tiers[0]?.ffMed;
 
@@ -430,9 +500,9 @@ function renderBuildModeTierSummaryCharts(modeRows) {
     data: {
       labels: axisLabels,
       datasets: [{
-        label: 'Median Δ% vs ffmpeg',
-        data: deltaVals,
-        backgroundColor: deltaVals.map((d) => (d != null && d <= 0 ? '#3dd68c' : '#f07178')), // Δ%: green=faster
+        label: 'Median speed vs ffmpeg',
+        data: speedVals,
+        backgroundColor: speedVals.map((d) => (d != null && d >= 1 ? '#3dd68c' : '#f07178')),
         borderRadius: 4,
       }],
     },
@@ -441,16 +511,17 @@ function renderBuildModeTierSummaryCharts(modeRows) {
         legend: { display: false },
         title: {
           display: true,
-          text: 'Median thumbnail Δ% vs ffmpeg (all fixtures)',
+          text: 'Median thumbnail speed vs ffmpeg (all fixtures)',
           color: '#e7ecf3',
           font: { size: 14 },
         },
       },
       scales: {
         y: {
-          ticks: { color: '#9aa8bc', callback: (v) => v + '%' },
+          beginAtZero: true,
+          ticks: { color: '#9aa8bc', callback: (v) => v + '×' },
           grid: { color: '#2a3544' },
-          title: { display: true, text: 'vs ffmpeg (negative = faster)', color: '#9aa8bc' },
+          title: { display: true, text: '× vs ffmpeg (higher = faster)', color: '#9aa8bc' },
         },
         x: { ticks: { color: '#e7ecf3' }, grid: { display: false } },
       },
@@ -532,23 +603,23 @@ function renderBuildModeCharts(modeRows) {
     return modeRows.find((r) => r.assetId === assetId && r.thumbPreset === thumbPreset && r.buildMode === mode);
   };
 
-  const deltaDatasets = BUILD_MODE_ORDER.map((mode, i) => ({
+  const speedDatasets = BUILD_MODE_ORDER.map((mode, i) => ({
     label: BUILD_MODE_LABELS[mode] || mode,
     data: keys.map((k) => {
       const row = findRow(k, mode);
-      return row ? row.timingDeltaPct * 100 : null;
+      return row ? speedRatioForChart(row.timingDeltaPct) : null;
     }),
     backgroundColor: colors[i],
     borderRadius: 3,
   }));
   chartInstances.push(new Chart(canvas, {
     type: 'bar',
-    data: { labels, datasets: deltaDatasets },
+    data: { labels, datasets: speedDatasets },
     options: buildModeChartLayoutOptions({
       plugins: {
         title: {
           display: true,
-          text: 'Δ% vs ffmpeg — every video fixture × preset',
+          text: 'Speed vs ffmpeg — every video fixture × preset',
           color: '#e7ecf3',
           font: { size: 14 },
         },
@@ -559,9 +630,10 @@ function renderBuildModeCharts(modeRows) {
           grid: { color: '#2a3544' },
         },
         y: {
-          ticks: { color: '#9aa8bc', callback: (v) => v + '%' },
+          beginAtZero: true,
+          ticks: { color: '#9aa8bc', callback: (v) => v + '×' },
           grid: { color: '#2a3544' },
-          title: { display: true, text: 'vs ffmpeg (0% = tie, negative = faster)', color: '#9aa8bc' },
+          title: { display: true, text: '× vs ffmpeg (1× = tie, higher = faster)', color: '#9aa8bc' },
         },
       },
     }),
@@ -708,17 +780,13 @@ function renderCharts(report) {
     }),
   }));
 
-  const deltas = results
-    .filter((r) => r.timingDeltaPct != null && timingComparableRow(r) && timingGateRow(r))
-    .map((r) => r.timingDeltaPct * 100);
-  const histBins = [-100, -50, -25, -10, 0, 10, 25, 50, 100, 200];
-  const histCounts = new Array(histBins.length - 1).fill(0);
-  for (const d of deltas) {
-    for (let i = 0; i < histBins.length - 1; i++) {
-      if (d >= histBins[i] && d < histBins[i + 1]) { histCounts[i]++; break; }
-    }
+  const histLabels = thumbSpeedHistLabels();
+  const histCounts = new Array(histLabels.length).fill(0);
+  for (const r of results) {
+    if (r.timingDeltaPct == null || !timingComparableRow(r) || !timingGateRow(r)) continue;
+    const bucket = thumbSpeedHistBucket(signedSpeedScore(r.timingDeltaPct));
+    if (bucket != null) histCounts[bucket]++;
   }
-  const histLabels = histBins.slice(0, -1).map((b, i) => `${b}…${histBins[i + 1]}%`);
   chartInstances.push(new Chart(document.getElementById('chart-timing-histogram'), {
     type: 'bar',
     data: {
@@ -726,7 +794,7 @@ function renderCharts(report) {
       datasets: [{
         label: 'checks',
         data: histCounts,
-        backgroundColor: histLabels.map((_, i) => (histBins[i] < 0 ? '#3dd68c' : '#f07178')),
+        backgroundColor: histLabels.map((_, i) => thumbSpeedHistBarColor(i)),
         borderRadius: 3,
       }],
     },
@@ -736,7 +804,17 @@ function renderCharts(report) {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        title: { display: true, text: 'Thumbnail Δ% distribution (gated rows)', color: '#e7ecf3', font: { size: 13 } },
+        title: { display: true, text: 'Thumbnail speed vs ffmpeg (gated rows)', color: '#e7ecf3', font: { size: 13 } },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const label = items[0]?.label ?? '';
+              if (label.endsWith('+') && label.startsWith('-')) return `${label} (5× or more slower)`;
+              if (label.endsWith('+')) return `${label} (5× or more faster)`;
+              return `${label}× vs ffmpeg`;
+            },
+          },
+        },
       },
       scales: {
         x: { beginAtZero: true, grid: { color: '#2a3544' }, ticks: { color: '#9aa8bc' } },
@@ -790,7 +868,7 @@ function renderReport(report) {
   document.getElementById('meta').textContent =
     `${s.generatedAt} · seed ${s.seedCommit.slice(0, 7)} · ${s.ffmpegVersion}`;
   const t = s.timing || {};
-  let timingLine = `Thumbnail gate rows: ${t.comparableRows || 0} · avg Δ ${((t.avgTimingDeltaPct || 0) * 100).toFixed(1)}% · median Δ ${((t.medianTimingDeltaPct || 0) * 100).toFixed(1)}% (vs ffmpeg, in-process)`;
+  let timingLine = `Thumbnail gate rows: ${t.comparableRows || 0} · avg ${formatSpeedCompare(t.avgTimingDeltaPct)} · median ${formatSpeedCompare(t.medianTimingDeltaPct)} (vs ffmpeg, in-process)`;
   if (s.previousRun) {
     const pr = s.previousRun;
     timingLine += ` · prev run ${pr.generatedAt} (${pr.timingRegressions} timing regressions, ${pr.statusRegressions} status regressions)`;
@@ -801,7 +879,7 @@ function renderReport(report) {
       s.timingRelaxed
         .map(
           (r) =>
-            `${r.assetId} ${r.check} Δ${(r.timingDeltaPct * 100).toFixed(0)}% (cap ${(r.timingGateLimitPct * 100).toFixed(0)}%)`,
+            `${r.assetId} ${r.check} ${formatSpeedCompare(r.timingDeltaPct, 0)} (cap ${formatSpeedCompare(r.timingGateLimitPct, 0)})`,
         )
         .join('; ');
   }
@@ -826,7 +904,7 @@ function renderReport(report) {
   }
   const extra = document.createElement('div');
   extra.className = 'card';
-  extra.innerHTML = `<div class="label">avg Δ timing</div><div class="value ${(t.avgTimingDeltaPct || 0) <= 0 ? 'delta-good' : 'delta-bad'}">${((t.avgTimingDeltaPct || 0) * 100).toFixed(1)}%</div>`;
+  extra.innerHTML = `<div class="label">avg speed vs ffmpeg</div><div class="value ${(t.avgTimingDeltaPct || 0) <= 0 ? 'delta-good' : 'delta-bad'}">${formatSpeedCompare(t.avgTimingDeltaPct)}</div>`;
   cards.appendChild(extra);
 
   const checks = ['duration', 'probe', 'tags', 'artwork', 'lyrics', 'subtitles', 'thumbnail_small', 'thumbnail_large'];
@@ -914,7 +992,7 @@ function renderReport(report) {
         <td class="status-${r.status}">${r.status}${stReg}</td>
         <td class="metric-col">${timingComparableRow(r) ? metricBar(r.goMediaMs || 0, maxMs, 'go', (v) => `${v.toFixed(2)}`, `go-media ${r.goMediaMs?.toFixed(2)} ms`) + reg : '—'}</td>
         <td class="metric-col">${timingComparableRow(r) && r.ffmpegMs ? metricBar(r.ffmpegMs, maxMs, 'ff', (v) => `${v.toFixed(2)}`, `ffmpeg ${r.ffmpegMs.toFixed(2)} ms`) : '—'}</td>
-        <td>${timingGateRow(r) && timingComparableRow(r) ? deltaPctCell(r.timingDeltaPct) : '—'}</td>
+        <td>${timingGateRow(r) && timingComparableRow(r) ? speedCompareCell(r.timingDeltaPct) : '—'}</td>
         <td>${qualityBar(r.durationDeltaSec, 1, false)}</td>
         <td>${r.psnr ? qualityBar(r.psnr, maxPsnr, true) : '—'}</td>
         <td>${r.ssim ? qualityBar(r.ssim, 1, true) : '—'}</td>
@@ -993,7 +1071,7 @@ function renderReport(report) {
       }
       tr.innerHTML = `<td>${r.tier ?? '—'}</td><td>${r.assetId}</td><td>${r.thumbPreset}</td><td>${BUILD_MODE_LABELS[r.buildMode] || r.buildMode}</td>
         <td>${r.goMediaWriteMs?.toFixed(1) ?? '—'}</td><td>${r.ffmpegMs?.toFixed(1) ?? '—'}</td>
-        <td class="${pctClass}">${(r.timingDeltaPct * 100).toFixed(0)}%</td>
+        <td class="${pctClass}">${formatSpeedCompare(r.timingDeltaPct, 1)}</td>
         <td>${inc}</td>
         <td class="${deltaClass}">${gateCell}</td>`;
       modeTbody.appendChild(tr);
@@ -1015,11 +1093,11 @@ function renderReport(report) {
     tbody.innerHTML = '';
     for (const r of rows) {
       const tr = document.createElement('tr');
-      const deltaClass = r.deltaPct <= 0.1 ? 'delta-good' : 'delta-bad';
+      const deltaClass = (r.deltaPct ?? 1) <= 0 ? 'delta-good' : 'delta-bad';
       tr.innerHTML = `<td>${r.assetId}</td><td>${r.preset}</td><td>${r.scaler}</td>
         <td>${r.goMediaMs?.toFixed(1) ?? '—'}</td><td>${r.goWriteMs?.toFixed(1) ?? '—'}</td>
         <td>${r.ffmpegMs?.toFixed(1) ?? '—'}</td>
-        <td class="${deltaClass}">${r.deltaPct != null ? (r.deltaPct * 100).toFixed(0) + '%' : '—'}</td>
+        <td class="${deltaClass}">${r.deltaPct != null ? formatSpeedCompare(r.deltaPct, 1) : '—'}</td>
         <td>${r.psnr?.toFixed(1) ?? '—'}</td><td>${r.ssim?.toFixed(3) ?? '—'}</td>`;
       tbody.appendChild(tr);
     }
@@ -1030,6 +1108,68 @@ function renderReport(report) {
   }
   renderCharts(report);
   renderBuildModeCharts(modeRows);
+  requestAnimationFrame(() => {
+    if (!document.getElementById('view-statistics')?.classList.contains('hidden')) {
+      resizeCharts();
+    }
+  });
+}
+
+function resizeCharts() {
+  for (const c of chartInstances) {
+    try {
+      c.resize();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+}
+
+const REPORT_VIEW_KEY = 'compare-report-view';
+
+function setReportView(view) {
+  const stats = document.getElementById('view-statistics');
+  const data = document.getElementById('view-data');
+  const tabs = document.querySelectorAll('.view-toggle [data-view]');
+  const isStats = view === 'statistics';
+  if (stats) {
+    stats.classList.toggle('hidden', !isStats);
+    stats.hidden = !isStats;
+  }
+  if (data) {
+    data.classList.toggle('hidden', isStats);
+    data.hidden = isStats;
+  }
+  tabs.forEach((btn) => {
+    const active = btn.dataset.view === view;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  if (isStats) {
+    requestAnimationFrame(resizeCharts);
+  }
+}
+
+function initReportViewToggle() {
+  document.querySelectorAll('.view-toggle [data-view]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setReportView(btn.dataset.view);
+      try {
+        sessionStorage.setItem(REPORT_VIEW_KEY, btn.dataset.view);
+      } catch (_) {
+        /* ignore */
+      }
+    });
+  });
+  let initial = 'statistics';
+  try {
+    const saved = sessionStorage.getItem(REPORT_VIEW_KEY);
+    if (saved === 'data' || saved === 'statistics') initial = saved;
+  } catch (_) {
+    /* ignore */
+  }
+  if (document.body.classList.contains('capture-mode')) initial = 'statistics';
+  setReportView(initial);
 }
 
 async function loadReport() {
@@ -1039,6 +1179,7 @@ async function loadReport() {
 }
 
 initLightbox();
+initReportViewToggle();
 loadReport().catch((e) => {
   document.getElementById('meta').textContent = 'Failed to load report: ' + e;
 });

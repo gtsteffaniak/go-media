@@ -1,7 +1,6 @@
 package avi
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"image"
@@ -183,15 +182,9 @@ func parseAVCCExtra(strf []byte) *mp4.AVCDecoderConfiguration {
 	if int(biSize) >= len(strf) {
 		return nil
 	}
-	extra := strf[biSize:]
-	if len(extra) < 7 || extra[0] != 1 {
-		return nil
-	}
-	var cfg mp4.AVCDecoderConfiguration
-	if _, err := mp4.Unmarshal(bytes.NewReader(extra), uint64(len(extra)), &cfg, mp4.Context{}); err != nil {
-		return nil
-	}
-	return &cfg
+	// mp4.Unmarshal needs box context that raw extradata lacks, so the
+	// record is parsed directly.
+	return h264.ParseAVCConfigRecord(strf[biSize:])
 }
 
 func looksAnnexB(b []byte) bool {
