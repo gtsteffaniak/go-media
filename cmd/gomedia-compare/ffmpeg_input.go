@@ -21,6 +21,9 @@ func ffmpegThumbInput(assetPath, assetID string) (input string, cleanup func(), 
 		}
 		return sidecar, cleanup, nil
 	}
+	if isStillImageAsset(assetID) {
+		return assetPath, cleanup, nil
+	}
 	if !tsLikeContainer(assetPath) {
 		return assetPath, cleanup, nil
 	}
@@ -63,9 +66,25 @@ func stillImageFFmpegSidecar(assetPath, assetID string) (string, bool) {
 		return filepath.Join(dir, "heif_jpeg_thumb_embed.jpg"), true
 	case "heic_jpeg_irot":
 		return filepath.Join(dir, "heic_jpeg_irot_display.jpg"), true
+	case "heic_phone_primary":
+		return filepath.Join(dir, "heic_phone_primary_display.png"), true
 	case "raw_dng_preview":
 		return filepath.Join(dir, "raw_dng_preview_embed.jpg"), true
 	default:
 		return "", false
+	}
+}
+
+// ffmpegScaleViaFilterComplex is true when ffmpeg's demuxer already uses a complex
+// filtergraph (HEIC/HEIF/AVIF containers), so -vf cannot be combined with decode.
+func ffmpegScaleViaFilterComplex(assetPath, assetID string) bool {
+	if _, ok := stillImageFFmpegSidecar(assetPath, assetID); ok {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(assetPath)) {
+	case ".heic", ".heif", ".avif":
+		return true
+	default:
+		return false
 	}
 }

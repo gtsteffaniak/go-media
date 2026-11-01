@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gtsteffaniak/go-media/internal/heifthumb"
@@ -80,7 +81,7 @@ func TestPrimaryDisplayRotationUsesPrimaryNotThumbnail(t *testing.T) {
 func TestPrimaryDisplayRotationRealHEICOptional(t *testing.T) {
 	path := os.Getenv("GOMEDIA_TEST_HEIC")
 	if path == "" {
-		t.Skip("set GOMEDIA_TEST_HEIC to run against a local HEIC sample")
+		path = filepath.Join("..", "..", "test", "data", "reference_soundboard.heic")
 	}
 	f, err := os.Open(path)
 	if err != nil {

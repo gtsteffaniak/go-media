@@ -48,7 +48,8 @@ The gate has no Matroska or WebM tag fixtures, so MKV/WebM tags are not compared
 | Large quality | JPEG quality **90** | `-q:v` **5** |
 | H.264 seek | `SeekPercent` **10** (sync sample nearest 10% of **video track**, skipping a tiny black/flat keyframe) | `-ss` = `H264KeyframeTimeSec(10)`; `-skip_frame nokey` + `-skip_loop_filter all` |
 | Other video seek | `SeekPercent` = `10%` of **format** duration | `-ss` = `format.duration × 10%` |
-| HEIC / HEIF stills | Synth ISOBMFF with embedded JPEG (`heic_jpeg_thumb`, `heif_jpeg_thumb`, `heic_jpeg_irot`) | ffmpeg compares against display-aligned sidecar JPEGs (`heic_jpeg_irot` uses `transpose=2` = 90° CCW to match primary `irot=1`). Pinned ffmpeg 9.0.2 has no HEIF muxer, so HEVC-primary stills are not generated at runtime (same idea as the checked-in WMV3 reference). |
+| HEIC / HEIF stills | Synth embedded-JPEG fixtures plus `heic_phone_primary` from pinned `test/data/reference_soundboard.heic` | Synth fixtures use display-aligned sidecar JPEGs for ffmpeg; phone HEIC uses a go-media display PNG sidecar for ffmpeg (ffmpeg 9 tile decode ≠ go-media full grid). |
+| AVIF still (`avif_coded`) | One JPEG frame from the same seed clip as video fixtures (`seedFrameJPEG` @ 2s, 320×180) | Encoded AV1-in-AVIF with the same encoder as `mp4_av1`; not the orange FLAC cover art. |
 | H.264 decode | intra keyframe (IDR or open-GOP intra/recovery point), deblock off (`fast=true`) | matches skip flags above |
 | Threads | n/a | `-threads 1` (timing fairness) |
 | MJPEG / VP8 | container paths in `internal/thumb` | ffmpeg full decode + same scale/q |

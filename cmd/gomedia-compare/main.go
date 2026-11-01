@@ -157,6 +157,7 @@ func loadAssetManifest(assetsDir string) ([]Asset, error) {
 		{"heic_jpeg_thumb", "image/heic_jpeg_thumb.heic", "image", "HEIC embedded JPEG thumb", nil},
 		{"heif_jpeg_thumb", "image/heif_jpeg_thumb.heif", "image", "HEIF embedded JPEG thumb", nil},
 		{"heic_jpeg_irot", "image/heic_jpeg_irot.heic", "image", "HEIC embedded JPEG + irot", nil},
+		{"heic_phone_primary", "image/heic_phone_primary.heic", "image", "HEIC HEVC primary (pinned phone)", nil},
 		{"raw_dng_preview", "image/raw_dng_preview.dng", "image", "RAW DNG embedded JPEG preview", nil},
 		{"mjpeg_mp4", "video/mjpeg.mp4", "video", "MJPEG in MP4", nil},
 		{"mp3_cbr", "audio/mp3_cbr.mp3", "audio", "MP3 CBR", nil},

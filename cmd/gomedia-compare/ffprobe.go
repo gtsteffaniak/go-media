@@ -225,9 +225,8 @@ func ffmpegThumbnailPreset(a Asset, dest string, seekSec float64, preset thumbna
 	defer cleanup()
 	path := inputPath
 	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
-	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s",
+	scale := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s",
 		preset.MaxWidth, preset.MaxHeight, scaleFlags)
-	qv := ffmpegQScale(preset.Quality)
 	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
 	if keyframeOnly {
 		args = append(args, "-skip_frame", "nokey", "-skip_loop_filter", "all")
@@ -241,7 +240,13 @@ func ffmpegThumbnailPreset(a Asset, dest string, seekSec float64, preset thumbna
 	if seekSec > 0.001 && inputFirst {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
 	}
-	args = append(args, "-frames:v", "1", "-vf", vf, "-q:v", fmt.Sprintf("%d", qv), dest)
+	qv := ffmpegQScale(preset.Quality)
+	if ffmpegScaleViaFilterComplex(a.Path, a.ID) {
+		args = append(args, "-filter_complex", "[0:v]"+scale+"[out]", "-map", "[out]", "-frames:v", "1",
+			"-q:v", fmt.Sprintf("%d", qv), dest)
+	} else {
+		args = append(args, "-frames:v", "1", "-vf", scale, "-q:v", fmt.Sprintf("%d", qv), dest)
+	}
 	return exec.Command(ffmpeg, args...).Run()
 }
 
@@ -267,7 +272,7 @@ func ffmpegRasterPNG(a Asset, dest string, seekSec float64, preset thumbnailPres
 	defer cleanup()
 	path := inputPath
 	scaleFlags := ffmpegThumbScaleFlags(preset, keyframeOnly)
-	vf := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s",
+	scale := fmt.Sprintf("scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:%s",
 		preset.MaxWidth, preset.MaxHeight, scaleFlags)
 	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
 	if keyframeOnly {
@@ -283,7 +288,11 @@ func ffmpegRasterPNG(a Asset, dest string, seekSec float64, preset thumbnailPres
 	if seekSec > 0.001 && inputFirst {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", seekSec))
 	}
-	args = append(args, "-frames:v", "1", "-vf", vf, dest)
+	if ffmpegScaleViaFilterComplex(a.Path, a.ID) {
+		args = append(args, "-filter_complex", "[0:v]"+scale+"[out]", "-map", "[out]", "-frames:v", "1", dest)
+	} else {
+		args = append(args, "-frames:v", "1", "-vf", scale, dest)
+	}
 	return exec.Command(ffmpeg, args...).Run()
 }
 

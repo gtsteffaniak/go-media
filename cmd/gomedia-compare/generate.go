@@ -84,9 +84,13 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	mp4AV1Args := append([]string{"-i", clip}, av1Vid...)
 	mkvAV1Args := append([]string{"-i", clip}, append(av1Vid, "-f", "matroska")...)
 	webmAV1Args := append([]string{"-i", clip}, av1Vid...)
-	avifArgs := []string{"-i", coverPNG, "-c:v", av1Enc, "-frames:v", "1"}
+	avifStill := filepath.Join(outDir, "_avif_still.jpg")
+	if err := seedFrameJPEG(ffmpeg, clip, avifStill, 320, 180); err != nil {
+		return nil, fmt.Errorf("avif still frame: %w", err)
+	}
+	avifArgs := []string{"-i", avifStill, "-c:v", av1Enc, "-frames:v", "1"}
 	if av1Enc == "libaom-av1" {
-		avifArgs = []string{"-i", coverPNG, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}
+		avifArgs = []string{"-i", avifStill, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}
 	}
 
 	type spec struct {

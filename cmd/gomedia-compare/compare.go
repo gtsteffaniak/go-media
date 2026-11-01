@@ -440,7 +440,7 @@ func relReportPath(abs string) string {
 // preview (HEIC, RAW) rather than timed media.
 func isStillImageAsset(id string) bool {
 	switch id {
-	case "heic_jpeg_thumb", "heif_jpeg_thumb", "heic_jpeg_irot",
+	case "heic_jpeg_thumb", "heif_jpeg_thumb", "heic_jpeg_irot", "heic_phone_primary",
 		"raw_dng_preview", "avif_coded":
 		return true
 	}

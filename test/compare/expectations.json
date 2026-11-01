@@ -1262,6 +1262,46 @@
       "expect": "supported"
     },
     {
+      "assetId": "heic_phone_primary",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_phone_primary",
+      "check": "duration",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_phone_primary",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_phone_primary",
+      "check": "probe",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_phone_primary",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_phone_primary",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "heic_phone_primary",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "heic_phone_primary",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
       "assetId": "raw_dng_preview",
       "check": "artwork",
       "expect": "skipped"

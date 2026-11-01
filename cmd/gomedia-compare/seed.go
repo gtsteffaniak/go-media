@@ -19,6 +19,11 @@ const (
 	// since ffmpeg cannot encode WMV3. See copyReferenceWMV3.
 	seedWMV3FileName = "reference_1080_10s_wmv3.wmv"
 	seedWMV3SHA256   = "3aac947c163d24b4aa136f15cd842a7f18f96ba2ec38969841dcf6c31c4e2684"
+
+	// referenceSoundboardHEIC is a real iPhone-style HEVC-primary still (irot metadata).
+	// Pinned because ffmpeg 9.0.2 has no HEIF muxer (same pattern as WMV3).
+	referenceSoundboardHEIC    = "reference_soundboard.heic"
+	referenceSoundboardHEICSHA = "eca52795e2acb6123f40ef47b59611f1c4d20762bfff443ac929a47800a11a49"
 )
 
 // seedID is the short identifier shown in the report footer.
@@ -27,6 +32,21 @@ var seedID = seedSHA256[:12]
 // seedSourcePath is the checked-in reference clip.
 func seedSourcePath() string {
 	return filepath.Join(findRepoRoot("."), "test", "data", seedFileName)
+}
+
+func referenceSoundboardHEICPath() string {
+	return filepath.Join(findRepoRoot("."), "test", "data", referenceSoundboardHEIC)
+}
+
+// copyReferenceSoundboardHEIC installs the checked-in phone HEIC still.
+func copyReferenceSoundboardHEIC(dst string) error {
+	src := referenceSoundboardHEICPath()
+	if ok, err := fileMatchesSHA256(src, referenceSoundboardHEICSHA); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("%s checksum mismatch (expected %s)", src, referenceSoundboardHEICSHA)
+	}
+	return copyFile(src, dst)
 }
 
 // ensureSeed copies the checked-in reference clip into destDir and verifies

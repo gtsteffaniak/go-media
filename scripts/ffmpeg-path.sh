@@ -78,13 +78,23 @@ find_ffmpeg_bindir() {
 		return 0
 	fi
 
-	# Gate / explicit pin: require FFMPEG_DIR; do not fall back to PATH (avoids silent version skew).
+	# Gate: prefer pinned FFMPEG_DIR (CI static build). When that dir is missing (common on
+	# macOS Homebrew), accept PATH only if ffmpeg/ffprobe match FFMPEG_VERSION.
 	if [[ -n "${FFMPEG_DIR:-}" && "${COMPARE_GATE:-}" == "1" ]]; then
 		if dir=$(_ffmpeg_bindir_if_usable "${FFMPEG_DIR}"); then
 			printf '%s\n' "$dir"
 			return 0
 		fi
-		echo "COMPARE_GATE: FFMPEG_DIR=${FFMPEG_DIR} has no usable ffmpeg/ffprobe" >&2
+		local gate_ver="${FFMPEG_VERSION:-9.0.2}"
+		if dir=$(_ffmpeg_scan_path); then
+			local ff="$dir/ffmpeg" fp="$dir/ffprobe"
+			if ffmpeg_pair_matches_version "$ff" "$fp" "$gate_ver"; then
+				echo "COMPARE_GATE: using PATH ffmpeg at $dir (FFMPEG_DIR=${FFMPEG_DIR} not installed)" >&2
+				printf '%s\n' "$dir"
+				return 0
+			fi
+		fi
+		echo "COMPARE_GATE: FFMPEG_DIR=${FFMPEG_DIR} has no usable ffmpeg/ffprobe (need ffmpeg $gate_ver on PATH or run make ffmpeg on Linux)" >&2
 		return 1
 	fi
 

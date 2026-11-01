@@ -7,14 +7,12 @@ import (
 
 	"github.com/gtsteffaniak/go-media/internal/heifthumb"
 	"github.com/gtsteffaniak/go-media/internal/rawpreview"
+	"github.com/gtsteffaniak/go-media/pkg/media"
 )
 
 // appendImageCompareAssets builds HEIC/HEIF/RAW still fixtures from the reference
 // clip frame so report thumbnails share the same source imagery as video fixtures.
-//
-// Coded HEVC-primary HEIC is not generated here: pinned ffmpeg 9.0.2 has no HEIF
-// muxer (same as WMV3 encode). Add a checksum-pinned file under test/data when
-// a coded-primary fixture is needed.
+// HEVC-primary phone HEIC uses test/data/reference_soundboard.heic (pinned; no HEIF mux in ffmpeg).
 func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 	dir := filepath.Join(outDir, "image")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -71,12 +69,43 @@ func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 		return nil, err
 	}
 
-	return []Asset{
+	phonePath := filepath.Join(dir, "heic_phone_primary.heic")
+	if err := copyReferenceSoundboardHEIC(phonePath); err != nil {
+		return nil, fmt.Errorf("heic phone reference: %w", err)
+	}
+	phoneDisplayPNG := filepath.Join(dir, "heic_phone_primary_display.png")
+	if err := seedPhoneHEICDisplayPNG(phonePath, phoneDisplayPNG); err != nil {
+		return nil, fmt.Errorf("heic phone display sidecar: %w", err)
+	}
+
+	assets := []Asset{
 		{ID: "heic_jpeg_thumb", Path: heicPath, Category: "image", Description: "HEIC embedded JPEG thumbnail"},
 		{ID: "heif_jpeg_thumb", Path: heifPath, Category: "image", Description: "HEIF (mif1) embedded JPEG thumbnail"},
 		{ID: "heic_jpeg_irot", Path: irotPath, Category: "image", Description: "HEIC embedded JPEG + primary irot (90° CCW)"},
+		{ID: "heic_phone_primary", Path: phonePath, Category: "image", Description: "HEIC HEVC primary still (pinned phone reference)"},
 		{ID: "raw_dng_preview", Path: dngPath, Category: "image", Description: "DNG-style TIFF embedded JPEG preview"},
-	}, nil
+	}
+	return assets, nil
+}
+
+// seedPhoneHEICDisplayPNG writes a display-oriented lossless raster for ffmpeg.
+// Pinned ffmpeg decodes this tiled HEIC as low-res tiles, not the full grid go-media uses.
+func seedPhoneHEICDisplayPNG(phonePath, pngOut string) error {
+	f, err := os.Open(phonePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	opt := media.ThumbnailOptions{MaxWidth: 8192, MaxHeight: 8192, Quality: 95}
+	png, err := media.ThumbnailRasterPNG(f, st.Size(), opt)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(pngOut, png, 0o644)
 }
 
 // seedFrameJPEG writes one baseline 4:2:0 JPEG frame from the seed clip.
