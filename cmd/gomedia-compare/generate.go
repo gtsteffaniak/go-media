@@ -337,7 +337,7 @@ func av1VideoEncodeArgs(enc string) []string {
 	case "libsvtav1":
 		return append([]string{"-preset", "12", "-crf", "40"}, out...)
 	case "libaom-av1":
-		return append([]string{"-cpu-used", "8", "-crf", "40"}, out...)
+		return append([]string{"-cpu-used", "8", "-row-mt", "1", "-crf", "40"}, out...)
 	default:
 		return append([]string{"-crf", "40"}, out...)
 	}
