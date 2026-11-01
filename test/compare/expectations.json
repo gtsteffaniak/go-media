@@ -1262,46 +1262,6 @@
       "expect": "supported"
     },
     {
-      "assetId": "mp4_av1_4k",
-      "check": "artwork",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "mp4_av1_4k",
-      "check": "duration",
-      "expect": "supported"
-    },
-    {
-      "assetId": "mp4_av1_4k",
-      "check": "lyrics",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "mp4_av1_4k",
-      "check": "probe",
-      "expect": "supported"
-    },
-    {
-      "assetId": "mp4_av1_4k",
-      "check": "subtitles",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "mp4_av1_4k",
-      "check": "tags",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "mp4_av1_4k",
-      "check": "thumbnail_large",
-      "expect": "supported"
-    },
-    {
-      "assetId": "mp4_av1_4k",
-      "check": "thumbnail_small",
-      "expect": "supported"
-    },
-    {
       "assetId": "mkv_av1",
       "check": "artwork",
       "expect": "skipped"

@@ -80,6 +80,15 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		return nil, err
 	}
 
+	av1Vid := av1VideoEncodeArgs(av1Enc)
+	mp4AV1Args := append([]string{"-i", clip}, av1Vid...)
+	mkvAV1Args := append([]string{"-i", clip}, append(av1Vid, "-f", "matroska")...)
+	webmAV1Args := append([]string{"-i", clip}, av1Vid...)
+	avifArgs := []string{"-i", coverPNG, "-c:v", av1Enc, "-frames:v", "1"}
+	if av1Enc == "libaom-av1" {
+		avifArgs = []string{"-i", coverPNG, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}
+	}
+
 	type spec struct {
 		id, cat, desc, out string
 		args               []string
@@ -108,16 +117,10 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 			[]string{"-i", clip, "-c:v", hevcEnc, "-tag:v", "hvc1", "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "28", "-an"}, nil},
 		{"mkv_hevc", "video", "MKV HEVC", "video/mkv_hevc.mkv",
 			[]string{"-i", clip, "-c:v", hevcEnc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "28", "-an", "-f", "matroska"}, nil},
-		{"mp4_av1", "video", "MP4 AV1 1080p", "video/mp4_av1.mp4",
-			[]string{"-i", clip, "-vf", "scale=1920:1080", "-c:v", av1Enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "35", "-an"}, nil},
-		{"mp4_av1_4k", "video", "MP4 AV1 4K", "video/mp4_av1_4k.mp4",
-			[]string{"-i", clip, "-vf", "scale=3840:2160", "-c:v", av1Enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "40", "-an"}, nil},
-		{"mkv_av1", "video", "MKV AV1", "video/mkv_av1.mkv",
-			[]string{"-i", clip, "-c:v", av1Enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "35", "-an", "-f", "matroska"}, nil},
-		{"webm_av1", "video", "WebM AV1", "video/webm_av1.webm",
-			[]string{"-i", clip, "-c:v", av1Enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-crf", "35", "-an"}, nil},
-		{"avif_coded", "video", "AVIF AV1 primary", "image/avif_coded.avif",
-			[]string{"-i", coverPNG, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}, nil},
+		{"mp4_av1", "video", "MP4 AV1", "video/mp4_av1.mp4", mp4AV1Args, nil},
+		{"mkv_av1", "video", "MKV AV1", "video/mkv_av1.mkv", mkvAV1Args, nil},
+		{"webm_av1", "video", "WebM AV1", "video/webm_av1.webm", webmAV1Args, nil},
+		{"avif_coded", "video", "AVIF AV1 primary", "image/avif_coded.avif", avifArgs, nil},
 		{"avi_mjpeg", "video", "AVI MJPEG", "video/avi_mjpeg.avi",
 			[]string{"-i", clip, "-c:v", "mjpeg", "-q:v", "3", "-an", "-f", "avi"}, nil},
 		{"avi_mpeg4", "video", "AVI MPEG-4 Part 2", "video/avi_mpeg4.avi",
@@ -325,6 +328,19 @@ func pickEncoder(set map[string]bool, names ...string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no encoder among %v", names)
+}
+
+// av1VideoEncodeArgs returns fast AV1 encode flags for compare fixtures (gate wall time).
+func av1VideoEncodeArgs(enc string) []string {
+	out := []string{"-c:v", enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-an"}
+	switch enc {
+	case "libsvtav1":
+		return append([]string{"-preset", "12", "-crf", "40"}, out...)
+	case "libaom-av1":
+		return append([]string{"-cpu-used", "8", "-crf", "40"}, out...)
+	default:
+		return append([]string{"-crf", "40"}, out...)
+	}
 }
 
 // runFF executes ffmpeg with the given arguments.
