@@ -132,7 +132,7 @@ MP4 sample entries (AV1, ProRes, PCM, AC-3, E-AC-3, Opus, FLAC) and MKV codec ID
 | FLAC `PICTURE` | `.flac` | ✅ |
 | Vorbis cover (METADATA_BLOCK_PICTURE) | `.ogg` | 🟡 |
 | MKV attachments | `.mkv`, `.webm` | 📋 |
-| HEIC/HEIF/AVIF embedded JPEG (thumbnail API) | `.heic`, `.heif`, `.avif` | ✅ | Not `EmbeddedArtwork()`; use `Thumbnail()`. AVIF without embedded JPEG decodes the AV1 primary item (including grids) |
+| HEIC/HEIF/AVIF embedded JPEG (thumbnail API) | `.heic`, `.heif`, `.avif` | ✅ — Not `EmbeddedArtwork()`; use `Thumbnail()`. AVIF without embedded JPEG decodes the AV1 primary item (including grids) |
 
 ---
 

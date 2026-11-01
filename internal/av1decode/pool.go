@@ -9,6 +9,7 @@ import (
 )
 
 type pooledDecoder struct {
+	mu      sync.Mutex
 	dec     *Decoder
 	maxUnit int
 }
@@ -31,13 +32,11 @@ func DecodeSampleCached(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, error) 
 	key := configCacheKey(av1CExtradata)
 	poolMu.Lock()
 	p := pool[key]
-	var cached *Decoder
-	if p != nil {
-		cached = p.dec
-	}
 	poolMu.Unlock()
-	if cached != nil {
-		ycc, err := cached.DecodeSample(av1CExtradata, sample)
+	if p != nil {
+		p.mu.Lock()
+		ycc, err := p.dec.DecodeSample(av1CExtradata, sample)
+		p.mu.Unlock()
 		if err == nil {
 			return ycc, nil
 		}
@@ -47,18 +46,24 @@ func DecodeSampleCached(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, error) 
 		return nil, err
 	}
 	poolMu.Lock()
-	defer poolMu.Unlock()
 	p = pool[key]
 	if p == nil || len(unit) > p.maxUnit {
-		if p != nil {
-			p.dec.Close()
-		}
 		dec, err := NewDecoderFromProbe(unit)
 		if err != nil {
+			poolMu.Unlock()
 			return nil, err
 		}
+		old := p
 		p = &pooledDecoder{dec: dec, maxUnit: len(unit)}
 		pool[key] = p
+		if old != nil {
+			old.mu.Lock()
+			old.dec.Close()
+			old.mu.Unlock()
+		}
 	}
+	poolMu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.dec.DecodeSample(av1CExtradata, sample)
 }
