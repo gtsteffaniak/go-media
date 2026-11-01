@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gtsteffaniak/go-media/internal/heifthumb"
 	"github.com/gtsteffaniak/go-media/internal/rawpreview"
@@ -85,15 +86,29 @@ func appendImageCompareAssets(ffmpeg, hevcEnc, clip, outDir string) ([]Asset, er
 }
 
 func generateHEICCodedStill(ffmpeg, hevcEnc, clip, dir string) ([]Asset, error) {
-	_, muxFmt, ok := ffmpegHEIFContainer(ffmpeg)
-	if !ok {
-		return nil, fmt.Errorf("ffmpeg has no HEIC/HEIF demuxer")
-	}
 	heicPath := filepath.Join(dir, "heic_coded.heic")
-	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-ss", "2", "-i", clip, "-frames:v", "1", "-vf", "scale=480:-2",
-		"-c:v", hevcEnc, "-tag:v", "hvc1", "-f", muxFmt, heicPath); err != nil {
-		return nil, err
+	muxFmt, ok := ffmpegHEIFContainer(ffmpeg)
+	if !ok {
+		muxFmt = "heif"
+	}
+	var muxErr error
+	tried := map[string]bool{}
+	for _, try := range []string{muxFmt, "heif", "heic"} {
+		try = strings.TrimSpace(try)
+		if try == "" || tried[try] {
+			continue
+		}
+		tried[try] = true
+		muxErr = runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+			"-ss", "2", "-i", clip, "-frames:v", "1", "-vf", "scale=480:-2",
+			"-c:v", hevcEnc, "-tag:v", "hvc1", "-f", try, heicPath)
+		if muxErr == nil {
+			muxFmt = try
+			break
+		}
+	}
+	if muxErr != nil {
+		return nil, fmt.Errorf("heic/heif coded still mux: %w", muxErr)
 	}
 	out := []Asset{
 		{ID: "heic_coded", Path: heicPath, Category: "image", Description: "HEIC HEVC primary still (ffmpeg mux)"},

@@ -11,27 +11,44 @@ func ffmpegHasDemuxer(ffmpeg, format string) bool {
 	if err != nil {
 		return false
 	}
-	return set[format]
+	if set[format] {
+		return true
+	}
+	demux, err := ffmpegDemuxerSet(ffmpeg)
+	if err != nil {
+		return false
+	}
+	return demux[format]
 }
 
-// ffmpegHEIFContainer returns demuxer/muxer short names for Apple HEIC/HEIF stills.
-// ffmpeg 9.x often registers only "heif" even for .heic files.
-func ffmpegHEIFContainer(ffmpeg string) (demux, mux string, ok bool) {
-	set, err := ffmpegFormatSet(ffmpeg)
-	if err != nil {
-		return "", "", false
+// ffmpegHEIFContainer returns a mux short name when ffmpeg lists HEIC/HEIF support.
+func ffmpegHEIFContainer(ffmpeg string) (muxFmt string, ok bool) {
+	formats, _ := ffmpegFormatSet(ffmpeg)
+	muxers, _ := ffmpegMuxerSet(ffmpeg)
+	for _, name := range []string{"heic", "heif"} {
+		if formats[name] || muxers[name] {
+			return name, true
+		}
 	}
-	if set["heic"] {
-		return "heic", "heic", true
-	}
-	if set["heif"] {
-		return "heif", "heif", true
-	}
-	return "", "", false
+	return "", false
 }
 
 func ffmpegFormatSet(ffmpeg string) (map[string]bool, error) {
-	out, err := exec.Command(ffmpeg, "-hide_banner", "-formats").Output()
+	return ffmpegFlagListingSet(ffmpeg, "-formats", "DE")
+}
+
+func ffmpegDemuxerSet(ffmpeg string) (map[string]bool, error) {
+	return ffmpegFlagListingSet(ffmpeg, "-demuxers", "D")
+}
+
+func ffmpegMuxerSet(ffmpeg string) (map[string]bool, error) {
+	return ffmpegFlagListingSet(ffmpeg, "-muxers", "E")
+}
+
+// ffmpegFlagListingSet parses ffmpeg -formats / -demuxers / -muxers output.
+// Those listings are written to stderr on most builds; use CombinedOutput.
+func ffmpegFlagListingSet(ffmpeg, flag, enabledIn string) (map[string]bool, error) {
+	out, err := exec.Command(ffmpeg, "-hide_banner", flag).CombinedOutput()
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +59,7 @@ func ffmpegFormatSet(ffmpeg string) (map[string]bool, error) {
 			continue
 		}
 		flags := fields[0]
-		if strings.ContainsAny(flags, "DE") {
+		if strings.ContainsAny(flags, enabledIn) {
 			set[fields[1]] = true
 		}
 	}
