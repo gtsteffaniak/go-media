@@ -61,6 +61,9 @@ func sniffISOBrand(major string, compat []string) (format.ID, bool) {
 	if hasBrand(major, compat, "avif", "avis") {
 		return format.AVIF, true
 	}
+	if hasBrand(major, compat, "jxl ", "jxll", "jxlc", "jbrd") {
+		return format.JXL, true
+	}
 	if hasBrand(major, compat, "heic", "heix", "heim", "heis", "hevc", "hevx", "mif1", "msf1") {
 		if major == "mif1" || major == "msf1" || hasBrand(major, compat, "mif1", "msf1") {
 			return format.HEIF, true

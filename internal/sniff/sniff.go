@@ -22,6 +22,12 @@ func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 	if len(buf) < 4 {
 		return "", errs.NotMedia
 	}
+	if buf[0] == 0xFF && buf[1] == 0x0A {
+		return format.JXL, nil
+	}
+	if len(buf) >= 8 && bytes.Equal(buf[4:8], []byte("JXL ")) {
+		return format.JXL, nil
+	}
 	if id, ok := sniffMPEGTS(r, size); ok {
 		return id, nil
 	}
