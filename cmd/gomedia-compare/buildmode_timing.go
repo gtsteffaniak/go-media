@@ -80,7 +80,7 @@ func collectBuildModeTimings(assets []Asset, flat []CheckResult, repoRoot string
 		BuildModePuregoPGOSIMD: 3,
 	}
 	for _, a := range assets {
-		if a.Category != "video" {
+		if a.Category != "video" && a.Category != "image" {
 			continue
 		}
 		for _, preset := range thumbnailPresets {
