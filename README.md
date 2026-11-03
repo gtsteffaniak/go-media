@@ -55,7 +55,7 @@ To build the same report locally, run `make compare` (see [`test/compare/README.
 | **WMV3** (VC-1 Simple & Main) | ASF, WMV | Intra decoder, bit-exact with ffmpeg |
 | **MJPEG** | MP4, MOV, MKV, AVI | Direct frame extract |
 | **HEVC** Main, MP4/MKV/HEIC | MP4, MKV, HEIC | [gen2brain/h265](https://github.com/gen2brain/h265), IRAP keyframe thumbs |
-| **HEIC / HEIF**, camera **RAW** | HEIC, HEIF, AVIF, CR2, CR3, NEF, DNG… | Embedded JPEG preview; HEIC without JPEG uses HEVC decode |
+| **HEIC / HEIF**, camera **RAW** | HEIC, HEIF, AVIF, CR2, CR3, NEF, DNG… | Embedded JPEG preview; HEIC without JPEG uses HEVC decode, AVIF uses AV1 decode; irot/imir and color tags applied like ffmpeg |
 
 > [!NOTE]
 > Per-format detail, partial support and ffmpeg equivalents are in **[Supported capabilities](docs/SUPPORTED_CAPABILITIES.md)**.
