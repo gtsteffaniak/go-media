@@ -3,6 +3,8 @@ package thumb
 import (
 	"image"
 	"image/draw"
+
+	"github.com/gtsteffaniak/go-media/internal/heifthumb"
 )
 
 // normRotation maps a display rotation to 0, 90, 180 or 270 degrees
@@ -113,4 +115,90 @@ func rotateYCbCr(src *image.YCbCr, r int) *image.YCbCr {
 		SubsampleRatio: src.SubsampleRatio,
 		Rect:           image.Rect(0, 0, dw, dh),
 	}
+}
+
+// orientation is the display transform still to apply to the scaled
+// thumbnail: a counter-clockwise rotation followed by an optional
+// left-to-right mirror. Any of the eight HEIF irot/imir combinations reduces
+// to this form, because a top-to-bottom flip equals a 180° turn plus a
+// left-to-right flip.
+type orientation struct {
+	rot   int  // degrees counter-clockwise (ffprobe sign convention)
+	hflip bool // mirror left-to-right after rotating
+}
+
+// orientationFromHEIF maps HEIF irot/imir to an orientation the way ffmpeg's
+// autorotate renders it (rotate first, then imir axis 0 = vflip, axis 1 =
+// hflip). Verified against ffmpeg 9.0.2 for all 12 irot×imir combinations
+// produced by avifenc --irot/--imir.
+func orientationFromHEIF(t heifthumb.Transform) orientation {
+	o := orientation{rot: normRotation(t.Rotation)}
+	if t.Mirror {
+		o.hflip = true
+		if t.MirrorAxis == 0 {
+			o.rot = normRotation(o.rot + 180)
+		}
+	}
+	return o
+}
+
+// orientImage applies o to the (already scaled) thumbnail.
+func orientImage(img image.Image, o orientation) image.Image {
+	img = rotateImage(img, o.rot)
+	if o.hflip {
+		img = hflipImage(img)
+	}
+	return img
+}
+
+// hflipImage mirrors img left-to-right. YCbCr 4:4:4, and 4:2:0 with an even
+// width, flip plane by plane; other images go through RGBA.
+func hflipImage(img image.Image) image.Image {
+	if ycc, ok := img.(*image.YCbCr); ok && ycc.Rect.Min == (image.Point{}) {
+		w, h := ycc.Rect.Dx(), ycc.Rect.Dy()
+		switch {
+		case ycc.SubsampleRatio == image.YCbCrSubsampleRatio444:
+			out := &image.YCbCr{SubsampleRatio: ycc.SubsampleRatio, Rect: ycc.Rect}
+			out.Y, out.YStride = flipPlane(ycc.Y, ycc.YStride, w, h)
+			out.Cb, out.CStride = flipPlane(ycc.Cb, ycc.CStride, w, h)
+			out.Cr, _ = flipPlane(ycc.Cr, ycc.CStride, w, h)
+			return out
+		case ycc.SubsampleRatio == image.YCbCrSubsampleRatio420 && w%2 == 0:
+			ch := (h + 1) / 2
+			out := &image.YCbCr{SubsampleRatio: ycc.SubsampleRatio, Rect: ycc.Rect}
+			out.Y, out.YStride = flipPlane(ycc.Y, ycc.YStride, w, h)
+			out.Cb, out.CStride = flipPlane(ycc.Cb, ycc.CStride, w/2, ch)
+			out.Cr, _ = flipPlane(ycc.Cr, ycc.CStride, w/2, ch)
+			return out
+		}
+	}
+	b := img.Bounds()
+	src, ok := img.(*image.RGBA)
+	if !ok || src.Rect.Min != (image.Point{}) {
+		src = image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+		draw.Draw(src, src.Rect, img, b.Min, draw.Src)
+	}
+	w, h := src.Rect.Dx(), src.Rect.Dy()
+	dst := image.NewRGBA(src.Rect)
+	for y := 0; y < h; y++ {
+		s := src.Pix[y*src.Stride : y*src.Stride+4*w]
+		d := dst.Pix[y*dst.Stride : y*dst.Stride+4*w]
+		for x := 0; x < w; x++ {
+			copy(d[4*(w-1-x):4*(w-x)], s[4*x:4*x+4])
+		}
+	}
+	return dst
+}
+
+// flipPlane mirrors one w×h 8-bit plane left-to-right into a tight buffer.
+func flipPlane(src []byte, stride, w, h int) ([]byte, int) {
+	dst := make([]byte, w*h)
+	for y := 0; y < h; y++ {
+		s := src[y*stride : y*stride+w]
+		d := dst[y*w : y*w+w]
+		for x, v := range s {
+			d[w-1-x] = v
+		}
+	}
+	return dst, w
 }

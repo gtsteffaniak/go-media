@@ -10,7 +10,7 @@ A pure-Go media library API to handle thumbnail generation, probing, metadata, a
 [![CGO_ENABLED=0](https://img.shields.io/badge/cgo-none-success)](#design-principles)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**[📊 Live comparison report](https://gtsteffaniak.github.io/go-media/)** · [Examples](examples/README.md) · [Capabilities](docs/SUPPORTED_CAPABILITIES.md) · [Docs](#documentation)
+**[📊 Live comparison report](https://gtsteffaniak.github.io/go-media/)** · [Examples](docs/examples.md) · [Capabilities](docs/SUPPORTED_CAPABILITIES.md) · [Docs](#documentation)
 
 </div>
 
@@ -55,7 +55,7 @@ To build the same report locally, run `make compare` (see [`test/compare/README.
 | **WMV3** (VC-1 Simple & Main) | ASF, WMV | Intra decoder, bit-exact with ffmpeg |
 | **MJPEG** | MP4, MOV, MKV, AVI | Direct frame extract |
 | **HEVC** Main, MP4/MKV/HEIC | MP4, MKV, HEIC | [gen2brain/h265](https://github.com/gen2brain/h265), IRAP keyframe thumbs |
-| **HEIC / HEIF**, camera **RAW** | HEIC, HEIF, AVIF, CR2, CR3, NEF, DNG… | Embedded JPEG preview; HEIC without JPEG uses HEVC decode |
+| **HEIC / HEIF**, camera **RAW** | HEIC, HEIF, AVIF, CR2, CR3, NEF, DNG… | Embedded JPEG preview; HEIC without JPEG uses HEVC decode, AVIF uses AV1 decode; irot/imir and color tags applied like ffmpeg |
 
 > [!NOTE]
 > Per-format detail, partial support and ffmpeg equivalents are in **[Supported capabilities](docs/SUPPORTED_CAPABILITIES.md)**.
@@ -107,7 +107,7 @@ func main() {
 }
 ```
 
-More recipes, including subtitles, tags, artwork, custom thumbnail sizes, caching and ffmpeg fallback, are in **[examples/README.md](examples/README.md)**.
+More recipes, including subtitles, tags, artwork, custom thumbnail sizes, caching and ffmpeg fallback, are in **[docs/examples.md](docs/examples.md)**.
 
 Try it from the command line:
 
@@ -138,7 +138,7 @@ go run . thumb clip.mkv --large thumb.jpg
 
 | Doc | What's inside |
 |---|---|
-| [Examples](examples/README.md) | Copy-paste recipes for every API |
+| [Examples](docs/examples.md) | Copy-paste recipes for every API |
 | [Supported capabilities](docs/SUPPORTED_CAPABILITIES.md) | Full format and feature matrix with ffmpeg equivalents |
 | [Quality & CI](docs/QUALITY.md) | Test matrix, the ffmpeg comparison gate and fuzzing |
 | [Comparison harness](test/compare/README.md) | How the report is generated and how to run it locally |

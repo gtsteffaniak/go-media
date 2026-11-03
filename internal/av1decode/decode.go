@@ -2,7 +2,6 @@ package av1decode
 
 import (
 	"errors"
-	"fmt"
 	"image"
 
 	goav1 "github.com/gtsteffaniak/go-av1"
@@ -39,15 +38,23 @@ func (d *Decoder) Close() {
 }
 
 // DecodeSample decodes one keyframe using optional av1C extradata and sample bytes.
+// The returned picture is a copy (safe to keep after the next call) tagged with
+// the sequence header's matrix_coefficients and color_range, mapped the way
+// ffmpeg's swscale does (see sequenceColor).
 func (d *Decoder) DecodeSample(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, error) {
 	if d == nil || d.kd == nil {
 		return nil, errs.UnsupProfile("av1 keyframe", "decoder closed")
 	}
-	img, err := d.kd.DecodeSample(ConfigOBUs(av1CExtradata), sample)
+	cfg := ConfigOBUs(av1CExtradata)
+	img, err := d.kd.DecodeSample(cfg, sample)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return PictureThumbYCbCr(img), nil
+	th := PictureThumbYCbCr(img)
+	if th != nil {
+		th.CS, th.RNG = sequenceColor(cfg, sample)
+	}
+	return th, nil
 }
 
 // ProbeTemporalUnit builds a low-overhead temporal unit for KeyframeDecoder sizing.
@@ -76,7 +83,11 @@ func ConfigOBUs(av1CExtradata []byte) []byte {
 	return p.ConfigOBUs
 }
 
-// PictureThumbYCbCr copies a decoded AV1 keyframe into ThumbYCbCr.
+// PictureThumbYCbCr copies a decoded AV1 keyframe into ThumbYCbCr. The planes of
+// img alias decoder memory, so the copy must be taken before the decoder is used
+// again. KeyframeImage carries no color_config, so the result is tagged with the
+// untagged-input default (BT.601 limited); Decoder.DecodeSample replaces that
+// with the sequence header's matrix and range.
 func PictureThumbYCbCr(img goav1.KeyframeImage) *h264.ThumbYCbCr {
 	if img.Width <= 0 || img.Height <= 0 {
 		return nil
@@ -126,47 +137,4 @@ func mapErr(err error) error {
 		msg = "decode failed"
 	}
 	return errs.UnsupProfile("av1 keyframe", msg)
-}
-
-// DecodeAVIFFile decodes the primary AVIF item (still or grid) from a full file buffer.
-func DecodeAVIFFile(data []byte) (*h264.ThumbYCbCr, error) {
-	primary, err := container.ParseAVIF(data)
-	if err != nil {
-		return nil, mapErr(fmt.Errorf("avif: %w", err))
-	}
-	if primary.IsGrid {
-		return decodeAVIFGrid(data)
-	}
-	unit, err := container.TemporalUnitFromAVIF(primary)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	dec, err := NewDecoderFromProbe(unit)
-	if err != nil {
-		return nil, err
-	}
-	defer dec.Close()
-	img, err := dec.kd.DecodeTemporalUnit(unit)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	return PictureThumbYCbCr(img), nil
-}
-
-func decodeAVIFGrid(data []byte) (*h264.ThumbYCbCr, error) {
-	grid, err := goav1.ParseAVIFGrid(data)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	probe := grid.TileUnits[0]
-	dec, err := NewDecoderFromProbe(probe)
-	if err != nil {
-		return nil, err
-	}
-	defer dec.Close()
-	img, err := goav1.DecodeAVIFGridKeyframe(dec.kd, data)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	return PictureThumbYCbCr(img), nil
 }

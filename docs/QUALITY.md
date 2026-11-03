@@ -1,6 +1,6 @@
 # Quality and CI
 
-[← Back to README](../README.md) · [Examples](../examples/README.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
+[← Back to README](../README.md) · [Examples](examples.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
 
 go-media's regression safety lives in the repo: every pull request is tested on two architectures, compared against a pinned ffmpeg, and fuzzed.
 

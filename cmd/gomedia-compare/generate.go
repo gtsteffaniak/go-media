@@ -93,6 +93,18 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		avifArgs = []string{"-i", avifStill, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}
 	}
 
+	// Color-tagged AV1 fixtures: the scale filter converts the seed to the
+	// tagged matrix and range so ffmpeg (which honors the tags) and go-media
+	// see the same samples.
+	tag := func(matrix, rng string) []string {
+		ff := map[string]string{"bt709": "bt709", "bt601": "smpte170m", "full": "pc", "limited": "tv"}
+		return []string{"-vf", "scale=out_color_matrix=" + matrix + ":out_range=" + rng + ",format=yuv420p",
+			"-colorspace", ff[matrix], "-color_primaries", ff[matrix], "-color_trc", ff[matrix], "-color_range", ff[rng]}
+	}
+	avifBT709Args := append(append([]string{}, avifArgs...), tag("bt709", "limited")...)
+	avifFullArgs := append(append([]string{}, avifArgs...), tag("bt601", "full")...)
+	mp4AV1BT709FullArgs := append(append([]string{"-i", clip}, tag("bt709", "full")...), av1Vid...)
+
 	type spec struct {
 		id, cat, desc, out string
 		args               []string
@@ -125,6 +137,9 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		{"mkv_av1", "video", "MKV AV1", "video/mkv_av1.mkv", mkvAV1Args, nil},
 		{"webm_av1", "video", "WebM AV1", "video/webm_av1.webm", webmAV1Args, nil},
 		{"avif_coded", "image", "AVIF AV1 primary", "image/avif_coded.avif", avifArgs, nil},
+		{"avif_bt709", "image", "AVIF AV1 BT.709 limited", "image/avif_bt709.avif", avifBT709Args, nil},
+		{"avif_full_range", "image", "AVIF AV1 BT.601 full range", "image/avif_full_range.avif", avifFullArgs, nil},
+		{"mp4_av1_bt709_full", "video", "MP4 AV1 BT.709 full range", "video/mp4_av1_bt709_full.mp4", mp4AV1BT709FullArgs, nil},
 		{"avi_mjpeg", "video", "AVI MJPEG", "video/avi_mjpeg.avi",
 			[]string{"-i", clip, "-c:v", "mjpeg", "-q:v", "3", "-an", "-f", "avi"}, nil},
 		{"avi_mpeg4", "video", "AVI MPEG-4 Part 2", "video/avi_mpeg4.avi",

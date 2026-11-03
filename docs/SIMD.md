@@ -1,6 +1,6 @@
 # SIMD (`GOEXPERIMENT=simd`)
 
-[← Back to README](../README.md) · [Examples](../examples/README.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
+[← Back to README](../README.md) · [Examples](examples.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
 
 > [!WARNING]
 > SIMD kernels are experimental and off in production builds. Ship `CGO_ENABLED=0 go build -pgo=default.pgo`.

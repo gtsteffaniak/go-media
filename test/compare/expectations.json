@@ -1500,6 +1500,166 @@
       "assetId": "avif_coded",
       "check": "thumbnail_small",
       "expect": "supported"
+    },
+    {
+      "assetId": "avif_bt709",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_bt709",
+      "check": "duration",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_bt709",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_bt709",
+      "check": "probe",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_bt709",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_bt709",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_bt709",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avif_bt709",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avif_full_range",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_full_range",
+      "check": "duration",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_full_range",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_full_range",
+      "check": "probe",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_full_range",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_full_range",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_full_range",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avif_full_range",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avif_irot_imir",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_irot_imir",
+      "check": "duration",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_irot_imir",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_irot_imir",
+      "check": "probe",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_irot_imir",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_irot_imir",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "avif_irot_imir",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "avif_irot_imir",
+      "check": "thumbnail_small",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1_bt709_full",
+      "check": "artwork",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1_bt709_full",
+      "check": "duration",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1_bt709_full",
+      "check": "lyrics",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1_bt709_full",
+      "check": "probe",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1_bt709_full",
+      "check": "subtitles",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1_bt709_full",
+      "check": "tags",
+      "expect": "skipped"
+    },
+    {
+      "assetId": "mp4_av1_bt709_full",
+      "check": "thumbnail_large",
+      "expect": "supported"
+    },
+    {
+      "assetId": "mp4_av1_bt709_full",
+      "check": "thumbnail_small",
+      "expect": "supported"
     }
   ]
 }
