@@ -1,6 +1,6 @@
 # Thumbnail performance
 
-[← Back to README](../README.md) · [Examples](../examples/README.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
+[← Back to README](../README.md) · [Examples](examples.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
 
 > [!TIP]
 > The live report at [gtsteffaniak.github.io/go-media](https://gtsteffaniak.github.io/go-media/) compares the three build tiers side by side for each video fixture with timing data.

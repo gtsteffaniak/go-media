@@ -6,7 +6,8 @@ Notes for wiring codec libraries into go-media thumbnails (reusable when adding 
 
 - **VP9:** [gtsteffaniak/go-vpx](https://github.com/gtsteffaniak/go-vpx) (`internal/vp9decode`) — libvpx-derived pure Go, bit-exact gate vs libvpx.
 - **HEVC:** [gen2brain/h265](https://github.com/gen2brain/h265) (`internal/hevcdecode`) — MIT, pure Go with plan9 `GOARCH` assembly (AVX2/AVX-512 on amd64). Thumbnail path uses `hevc.Decoder` + `heic.DecodeColor` for HEIF stills without embedded JPEG.
-- **AV1:** [gtsteffaniak/go-av1](https://github.com/gtsteffaniak/go-av1) (`internal/av1decode`) — MIT, pure Go with optional `GOEXPERIMENT=simd` hot paths (runtime AVX2 dispatch, scalar fallbacks). Uses `KeyframeDecoder` with film grain skipped and 8-bit thumb output; container helpers for MP4/MKV/WebM/AVIF when go-media demux is not used.
+- **AV1 (video):** [gtsteffaniak/go-av1](https://github.com/gtsteffaniak/go-av1) (`internal/av1decode`) — MIT, pure Go with optional `GOEXPERIMENT=simd` hot paths. Uses `KeyframeDecoder` with film grain skipped and 8-bit thumb output, plus container helpers for MP4/MKV/WebM.
+- **AV1 (AVIF):** [gen2brain/gav1d](https://github.com/gen2brain/gav1d) (`internal/av1decode/avif.go`) — BSD-2-Clause, pure Go with SIMD for amd64/arm64/riscv64. Uses `avif.DecodeColor` for stills and grids. Film grain is applied (not skippable).
 
 Wrap third-party decoders in a thin `internal/*decode` package: map errors to `errs.Unsupported` / `ErrUnsupportedProfile`, convert planes to `h264.ThumbYCbCr`, and keep the public API on `pkg/media` / `internal/thumb`.
 

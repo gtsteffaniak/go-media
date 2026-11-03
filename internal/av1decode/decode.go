@@ -2,7 +2,6 @@ package av1decode
 
 import (
 	"errors"
-	"fmt"
 	"image"
 
 	goav1 "github.com/gtsteffaniak/go-av1"
@@ -126,47 +125,4 @@ func mapErr(err error) error {
 		msg = "decode failed"
 	}
 	return errs.UnsupProfile("av1 keyframe", msg)
-}
-
-// DecodeAVIFFile decodes the primary AVIF item (still or grid) from a full file buffer.
-func DecodeAVIFFile(data []byte) (*h264.ThumbYCbCr, error) {
-	primary, err := container.ParseAVIF(data)
-	if err != nil {
-		return nil, mapErr(fmt.Errorf("avif: %w", err))
-	}
-	if primary.IsGrid {
-		return decodeAVIFGrid(data)
-	}
-	unit, err := container.TemporalUnitFromAVIF(primary)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	dec, err := NewDecoderFromProbe(unit)
-	if err != nil {
-		return nil, err
-	}
-	defer dec.Close()
-	img, err := dec.kd.DecodeTemporalUnit(unit)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	return PictureThumbYCbCr(img), nil
-}
-
-func decodeAVIFGrid(data []byte) (*h264.ThumbYCbCr, error) {
-	grid, err := goav1.ParseAVIFGrid(data)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	probe := grid.TileUnits[0]
-	dec, err := NewDecoderFromProbe(probe)
-	if err != nil {
-		return nil, err
-	}
-	defer dec.Close()
-	img, err := goav1.DecodeAVIFGridKeyframe(dec.kd, data)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	return PictureThumbYCbCr(img), nil
 }

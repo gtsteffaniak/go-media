@@ -507,7 +507,7 @@ func buildInfo() {
 ```
 
 > [!IMPORTANT]
-> SIMD is only compiled in with `GOEXPERIMENT=simd` and is experimental. Production builds should use `CGO_ENABLED=0 go build -pgo=default.pgo`. See [Profiling](../docs/PROFILING.md) and [SIMD](../docs/SIMD.md).
+> SIMD is only compiled in with `GOEXPERIMENT=simd` and is experimental. Production builds should use `CGO_ENABLED=0 go build -pgo=default.pgo`. See [Profiling](PROFILING.md) and [SIMD](SIMD.md).
 
 ---
 
@@ -521,4 +521,4 @@ go run . duration song.flac
 go run . thumb    clip.mp4 --small --seek 25 thumb.jpg
 ```
 
-See [Supported capabilities](../docs/SUPPORTED_CAPABILITIES.md) for exactly which formats each function handles.
+See [Supported capabilities](SUPPORTED_CAPABILITIES.md) for exactly which formats each function handles.

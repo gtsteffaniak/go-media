@@ -10,7 +10,7 @@ A pure-Go media library API to handle thumbnail generation, probing, metadata, a
 [![CGO_ENABLED=0](https://img.shields.io/badge/cgo-none-success)](#design-principles)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**[📊 Live comparison report](https://gtsteffaniak.github.io/go-media/)** · [Examples](examples/README.md) · [Capabilities](docs/SUPPORTED_CAPABILITIES.md) · [Docs](#documentation)
+**[📊 Live comparison report](https://gtsteffaniak.github.io/go-media/)** · [Examples](docs/examples.md) · [Capabilities](docs/SUPPORTED_CAPABILITIES.md) · [Docs](#documentation)
 
 </div>
 
@@ -107,7 +107,7 @@ func main() {
 }
 ```
 
-More recipes, including subtitles, tags, artwork, custom thumbnail sizes, caching and ffmpeg fallback, are in **[examples/README.md](examples/README.md)**.
+More recipes, including subtitles, tags, artwork, custom thumbnail sizes, caching and ffmpeg fallback, are in **[docs/examples.md](docs/examples.md)**.
 
 Try it from the command line:
 
@@ -138,7 +138,7 @@ go run . thumb clip.mkv --large thumb.jpg
 
 | Doc | What's inside |
 |---|---|
-| [Examples](examples/README.md) | Copy-paste recipes for every API |
+| [Examples](docs/examples.md) | Copy-paste recipes for every API |
 | [Supported capabilities](docs/SUPPORTED_CAPABILITIES.md) | Full format and feature matrix with ffmpeg equivalents |
 | [Quality & CI](docs/QUALITY.md) | Test matrix, the ffmpeg comparison gate and fuzzing |
 | [Comparison harness](test/compare/README.md) | How the report is generated and how to run it locally |

@@ -1,11 +1,11 @@
 # Supported capabilities
 
-[← Back to README](../README.md) · [Examples](../examples/README.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
+[← Back to README](../README.md) · [Examples](examples.md) · [Live report](https://gtsteffaniak.github.io/go-media/)
 
 What **go-media** implements in pure Go (`CGO_ENABLED=0`). This is **not** a ffmpeg compatibility matrix: it documents library behavior. Where validation or a common fallback exists, the **ffmpeg / ffprobe** equivalent is listed for comparison.
 
 > [!TIP]
-> Anything marked ❌ returns a typed error (`ErrUnsupported` or `ErrUnsupportedProfile`), so callers can fall back to [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) or ffmpeg. See [the fallback example](../examples/README.md#fall-back-to-ffmpeg-when-go-media-says-no).
+> Anything marked ❌ returns a typed error (`ErrUnsupported` or `ErrUnsupportedProfile`), so callers can fall back to [go-ffmpeg](https://github.com/gtsteffaniak/go-ffmpeg) or ffmpeg. See [the fallback example](examples.md#fall-back-to-ffmpeg-when-go-media-says-no).
 
 **Import:** `github.com/gtsteffaniak/go-media/pkg/media`. **Verified against:** ffmpeg 9.0.2 on every commit ([live report](https://gtsteffaniak.github.io/go-media/), [harness](../test/compare/README.md)).
 
@@ -224,7 +224,7 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | **MPEG-4 Part 2** shape, sprites/GMC, data partitioning, RVLC, NEWPRED, reduced resolution, scalability, Studio, short header (H.263) | — | ❌ | `ErrUnsupportedProfile` naming the tool |
 | **VP9** profile 0, 8-bit 4:2:0 | `.webm`, `.mkv` | ✅ | Keyframe by default, `Exact` decodes forward to the seek frame. Pure-Go VP9 decode (`gtsteffaniak/go-vpx`, a fork of `thesyncim/govpx` with an edge-context fix; BSD-3 libvpx port, via `internal/vp9decode`); bit-exact with libvpx on every frame of the gate fixture |
 | **HEVC** Main / Main 10 / Main Still Picture, 4:2:0 (8–10-bit) intra IRAP/IDR | MP4/MOV (`hvc1`/`hev1`), MKV (`V_MPEGH/ISO/HEVC`), HEIC/HEIF primary image | ✅ | `gen2brain/h265` via `internal/hevcdecode`; keyframe snap by default; Main 10 decoded to 8-bit thumbs; 4:2:2/4:4:4/monochrome per h265 decoder |
-| **AV1** 8/10/12-bit 4:2:0 intra keyframe | MP4/MOV (`av01`), MKV/WebM (`V_AV1`), AVIF primary still/grid | ✅ | [gtsteffaniak/go-av1](https://github.com/gtsteffaniak/go-av1) via `internal/av1decode`; keyframe at or before seek (same as HEVC); film grain skipped; high bit depth rounded to 8-bit; `Exact` not honored (keyframe-only decoder) |
+| **AV1** 8/10/12-bit 4:2:0 intra keyframe | MP4/MOV (`av01`), MKV/WebM (`V_AV1`), AVIF primary still/grid | ✅ | MP4/MKV/WebM via [gtsteffaniak/go-av1](https://github.com/gtsteffaniak/go-av1), AVIF via [gen2brain/gav1d](https://github.com/gen2brain/gav1d) (both in `internal/av1decode`); keyframe at or before seek (same as HEVC); film grain skipped on video, applied on AVIF; high bit depth rounded to 8-bit; `Exact` not honored (keyframe-only decoder) |
 
 ### Cover art instead of video frame
 
