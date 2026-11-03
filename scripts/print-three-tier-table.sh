@@ -15,20 +15,18 @@ rows = r.get("buildModeTimings") or []
 modes = ["purego", "purego_pgo", "purego_pgo_simd"]
 labels = {"purego": "T1 no PGO", "purego_pgo": "T2 production (+PGO)", "purego_pgo_simd": "T3 +SIMD (diag)"}
 
-def format_speed_compare(pct, digits=1):
-    """Match report_site/app.js formatSpeedCompare (timingDeltaPct is a fraction)."""
+def speed_paren(pct, digits=1):
+    """Parenthetical speed factor: (3.6×) faster, (-1.2×) slower."""
     if pct is None:
-        return "—"
+        return "(—)"
     denom = 1 + pct
     if denom <= 0:
-        return "—"
+        return "(—)"
     if pct <= 0:
         factor = 1 / denom
-        kind = "faster"
-    else:
-        factor = denom
-        kind = "slower"
-    return f"{factor:.{digits}f}× {kind}"
+        return f"({factor:.{digits}f}×)"
+    factor = denom
+    return f"(-{factor:.{digits}f}×)"
 
 by = {}
 for row in rows:
@@ -48,7 +46,7 @@ for asset, preset in keys:
             cols.append(f"{'—':>24}")
         else:
             ms = row["goMediaWriteMs"]
-            speed = format_speed_compare(row.get("timingDeltaPct"))
+            speed = speed_paren(row.get("timingDeltaPct"))
             cols.append(f"{ms:5.0f}ms {speed}".rjust(24))
     print(f"{asset:<28} {preset:<8} {ff:7.0f}ms  " + "  ".join(cols))
 PY

@@ -1,6 +1,10 @@
-# Comparison harness generated output
+# Comparison harness generated output (never commit)
+/.assets/
+/.seed/
+/report_site/
 cmd/gomedia-compare/.seed/
 cmd/gomedia-compare/.assets/
+cmd/gomedia-compare/report_site/
 cmd/gomedia-compare/gomedia-compare
 cmd/gomedia-compare/.cache/
 test/compare/report_site/data/

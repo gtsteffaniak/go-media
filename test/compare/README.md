@@ -2,14 +2,19 @@
 
 Developer tooling (not part of the library API) that:
 
-1. Copies the checked-in reference clip `test/data/reference_1080_10s.mp4` (SHA-256 pinned in `cmd/gomedia-compare/seed.go`)
-2. Generates a format matrix with ffmpeg (`cmd/gomedia-compare/generate.go` → `cmd/gomedia-compare/.assets/`, gitignored)
+1. Copies the checked-in reference clip `test/data/reference_1080_10s.mp4` (SHA-256 pinned in `cmd/gomedia-compare/seed.go`) plus other **primary** pins (WMV3, AV1, HEIC, JXL — see `seed.go` header)
+2. Generates the rest of the format matrix with ffmpeg into `cmd/gomedia-compare/.assets/` (**gitignored**; do not commit repo-root `.assets/`)
 3. Runs go-media vs ffprobe/ffmpeg for duration, probe, tags, artwork, lyrics, subtitles, and thumbnails (the diff gate below covers tags, artwork, lyrics, and subtitles)
 4. Writes a static dashboard to `report_site/` (`data/report.json` + HTML)
 
 ```bash
 # from repository root — uses ffmpeg on PATH when available (e.g. Homebrew)
 make compare
+
+# subset (skips full ffmpeg matrix; copies pinned files like test/data/zoltan_unsplash.jxl as needed)
+make compare assets=jxl
+make compare COMPARE_ASSETS=jxl_unsplash,heic
+# force full fixture regen while filtering checks: COMPARE_GENERATE=1 make compare assets=jxl
 
 # CI gate (pinned ffmpeg 9.0.2 on Linux)
 make ffmpeg
@@ -49,6 +54,8 @@ The gate has no Matroska or WebM tag fixtures, so MKV/WebM tags are not compared
 | H.264 seek | `SeekPercent` **10** (sync sample nearest 10% of **video track**, skipping a tiny black/flat keyframe) | `-ss` = `H264KeyframeTimeSec(10)`; `-skip_frame nokey` + `-skip_loop_filter all` |
 | Other video seek | `SeekPercent` = `10%` of **format** duration | `-ss` = `format.duration × 10%` |
 | HEIC / HEIF stills | Synth embedded-JPEG fixtures plus `heic_phone_primary` from pinned `test/data/reference_soundboard.heic` | Synth fixtures use display-aligned sidecar JPEGs for ffmpeg; phone HEIC uses pinned `test/data/reference_soundboard_display.png` (ffmpeg decode of the HEIC, not go-media). Sidecar-backed stills skip the thumbnail **timing** gate (ffmpeg input differs from go-media). Regenerate display PNG: `ffmpeg -y -i test/data/reference_soundboard.heic -frames:v 1 test/data/reference_soundboard_display.png`. |
+| JPEG XL (`.jxl`) | `jxl_unsplash` (`test/data/zoltan_unsplash.jxl`) | **Not** `reference_soundboard.heic` — that asset is `heic_phone_primary` only. go-media decodes `.jxl`. ffmpeg decodes `.jxl` when built with **libjxl**; otherwise ffmpeg scales pinned `zoltan_unsplash_display.png` (regenerate with ffmpeg: `ffmpeg -y -i test/data/zoltan_unsplash.jxl -frames:v 1 test/data/zoltan_unsplash_display.png`). Sidecar skips timing tiers; libjxl gives direct compare + tier table rows. |
+| AV1 video / AVIF still | `mp4_av1`, `mkv_av1`, `webm_av1`, `avif_coded` | Checked in under `test/data/compare_*` (pinned SHA-256); copied during generate instead of re-encoding with SVT-AV1. Re-pin after intentional fixture changes. |
 | AVIF still (`avif_coded`) | One JPEG frame from the same seed clip as video fixtures (`seedFrameJPEG` @ 2s, 320×180) | Encoded AV1-in-AVIF with the same encoder as `mp4_av1`; not the orange FLAC cover art. |
 | H.264 decode | intra keyframe (IDR or open-GOP intra/recovery point), deblock off (`fast=true`) | matches skip flags above |
 | Threads | n/a | `-threads 1` (timing fairness) |

@@ -77,12 +77,22 @@ func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 		return nil, fmt.Errorf("heic phone display sidecar: %w", err)
 	}
 
+	jxlPath := filepath.Join(dir, "zoltan_unsplash.jxl")
+	if err := copyReferenceJXLUnsplash(jxlPath); err != nil {
+		return nil, fmt.Errorf("jxl reference: %w", err)
+	}
+	jxlDisplay := filepath.Join(dir, "jxl_unsplash_display.png")
+	if err := copyReferenceJXLDisplayPNG(jxlDisplay); err != nil {
+		return nil, fmt.Errorf("jxl display sidecar: %w", err)
+	}
+
 	assets := []Asset{
 		{ID: "heic_jpeg_thumb", Path: heicPath, Category: "image", Description: "HEIC embedded JPEG thumbnail"},
 		{ID: "heif_jpeg_thumb", Path: heifPath, Category: "image", Description: "HEIF (mif1) embedded JPEG thumbnail"},
 		{ID: "heic_jpeg_irot", Path: irotPath, Category: "image", Description: "HEIC embedded JPEG + primary irot (90° CCW)"},
 		{ID: "heic_phone_primary", Path: phonePath, Category: "image", Description: "HEIC HEVC primary still (pinned phone reference)"},
 		{ID: "raw_dng_preview", Path: dngPath, Category: "image", Description: "DNG-style TIFF embedded JPEG preview"},
+		{ID: "jxl_unsplash", Path: jxlPath, Category: "image", Description: "JPEG XL still (pinned Unsplash photo)"},
 	}
 	return assets, nil
 }

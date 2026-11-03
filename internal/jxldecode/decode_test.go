@@ -10,12 +10,14 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/jxldecode"
 )
 
+const referenceJXL = "zoltan_unsplash.jxl"
+
 func testDataPath(name string) string {
 	return filepath.Join("..", "..", "test", "data", name)
 }
 
-func TestDecodePQGradient(t *testing.T) {
-	path := testDataPath("pq_gradient.jxl")
+func TestDecodeUnsplash(t *testing.T) {
+	path := testDataPath(referenceJXL)
 	f, err := os.Open(path)
 	if err != nil {
 		t.Skip(path, err)
@@ -35,7 +37,7 @@ func TestDecodePQGradient(t *testing.T) {
 }
 
 func TestDecodeUnsplashWithResize(t *testing.T) {
-	path := testDataPath("zoltan_unsplash.jxl")
+	path := testDataPath(referenceJXL)
 	f, err := os.Open(path)
 	if err != nil {
 		t.Skip(path, err)
@@ -56,7 +58,7 @@ func TestDecodeUnsplashWithResize(t *testing.T) {
 }
 
 func TestDecodeUnsplashJPEGRoundTrip(t *testing.T) {
-	path := testDataPath("zoltan_unsplash.jxl")
+	path := testDataPath(referenceJXL)
 	f, err := os.Open(path)
 	if err != nil {
 		t.Skip(path, err)

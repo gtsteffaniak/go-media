@@ -49,7 +49,8 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	}
 	av1Enc, err := pickEncoder(encoders, "libsvtav1", "libaom-av1", "av1")
 	if err != nil {
-		return nil, fmt.Errorf("av1 fixtures: %w", err)
+		// AV1 compare fixtures are checked in under test/data; encoding is optional.
+		av1Enc = ""
 	}
 	mpeg2Enc, err := pickEncoder(encoders, "mpeg2video")
 	if err != nil {
@@ -80,17 +81,20 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		return nil, err
 	}
 
-	av1Vid := av1VideoEncodeArgs(av1Enc)
-	mp4AV1Args := append([]string{"-i", clip}, av1Vid...)
-	mkvAV1Args := append([]string{"-i", clip}, append(av1Vid, "-f", "matroska")...)
-	webmAV1Args := append([]string{"-i", clip}, av1Vid...)
-	avifStill := filepath.Join(outDir, "_avif_still.jpg")
-	if err := seedFrameJPEG(ffmpeg, clip, avifStill, 320, 180); err != nil {
-		return nil, fmt.Errorf("avif still frame: %w", err)
-	}
-	avifArgs := []string{"-i", avifStill, "-c:v", av1Enc, "-frames:v", "1"}
-	if av1Enc == "libaom-av1" {
-		avifArgs = []string{"-i", avifStill, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}
+	var mp4AV1Args, mkvAV1Args, webmAV1Args, avifArgs []string
+	if av1Enc != "" {
+		av1Vid := av1VideoEncodeArgs(av1Enc)
+		mp4AV1Args = append([]string{"-i", clip}, av1Vid...)
+		mkvAV1Args = append([]string{"-i", clip}, append(av1Vid, "-f", "matroska")...)
+		webmAV1Args = append([]string{"-i", clip}, av1Vid...)
+		avifStill := filepath.Join(outDir, "_avif_still.jpg")
+		if err := seedFrameJPEG(ffmpeg, clip, avifStill, 320, 180); err != nil {
+			return nil, fmt.Errorf("avif still frame: %w", err)
+		}
+		avifArgs = []string{"-i", avifStill, "-c:v", av1Enc, "-frames:v", "1"}
+		if av1Enc == "libaom-av1" {
+			avifArgs = []string{"-i", avifStill, "-c:v", av1Enc, "-still-picture", "1", "-frames:v", "1"}
+		}
 	}
 
 	type spec struct {
@@ -171,6 +175,10 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		args = append(args, out)
 		if s.id == "asf_wmv3" {
 			if err := copyReferenceWMV3(out); err != nil {
+				return nil, fmt.Errorf("%s: %w", s.id, err)
+			}
+		} else if s.id == "mp4_av1" || s.id == "mkv_av1" || s.id == "webm_av1" || s.id == "avif_coded" {
+			if err := copyPinnedCompareAV1(s.id, out); err != nil {
 				return nil, fmt.Errorf("%s: %w", s.id, err)
 			}
 		} else if err := runFF(ffmpeg, args...); err != nil {
@@ -339,7 +347,7 @@ func av1VideoEncodeArgs(enc string) []string {
 	out := []string{"-c:v", enc, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30", "-an"}
 	switch enc {
 	case "libsvtav1":
-		return append([]string{"-preset", "12", "-crf", "40"}, out...)
+		return append([]string{"-preset", "12", "-crf", "40", "-svtav1-params", "log-level=0"}, out...)
 	case "libaom-av1":
 		return append([]string{"-cpu-used", "8", "-row-mt", "1", "-crf", "40"}, out...)
 	default:

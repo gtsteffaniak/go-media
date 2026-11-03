@@ -4,6 +4,11 @@ FFMPEG_VERSION ?= 9.0.2
 FFMPEG_DIR ?= $(HOME)/ffmpeg-$(FFMPEG_VERSION)
 COMPARE_REPORT_SITE ?= test/compare/report_site
 COMPARE_SERVER_PORT ?= 8765
+# Subset compare: make compare assets=jxl  or  COMPARE_ASSETS=jxl_unsplash,heic
+# Skips full fixture generation (no AV1/SVT encode spam). Force regen: COMPARE_GENERATE=1 make compare assets=jxl
+assets ?=
+COMPARE_ASSETS ?=
+COMPARE_GENERATE ?=
 export FFMPEG_VERSION
 
 .PHONY: test fixtures ffmpeg compare compare-gate ci vet server pgo check-pgo profile bench-thumb bench-micro bench-perf-gate ceiling-profile
@@ -21,7 +26,7 @@ ffmpeg:
 	bash scripts/install-ffmpeg.sh $(FFMPEG_VERSION)
 
 compare:
-	bash scripts/run-comparison.sh
+	COMPARE_ASSETS="$(if $(COMPARE_ASSETS),$(COMPARE_ASSETS),$(assets))" COMPARE_GENERATE="$(COMPARE_GENERATE)" bash scripts/run-comparison.sh
 
 compare-gate: ffmpeg
 	FFMPEG_DIR="$(FFMPEG_DIR)" CGO_ENABLED=0 COMPARE_GATE=1 bash scripts/run-comparison.sh

@@ -70,6 +70,13 @@ func stillImageFFmpegSidecar(assetPath, assetID string) (string, bool) {
 		return filepath.Join(dir, "heic_phone_primary_display.png"), true
 	case "raw_dng_preview":
 		return filepath.Join(dir, "raw_dng_preview_embed.jpg"), true
+	case "jxl_unsplash":
+		// Same pattern as heic_phone_primary: go-media reads .jxl; ffmpeg uses a display
+		// sidecar only when libjxl is unavailable. When libjxl works, ffmpeg decodes .jxl directly.
+		if ffmpegCanDecodeJPEGXL(assetPath) {
+			return "", false
+		}
+		return filepath.Join(dir, "jxl_unsplash_display.png"), true
 	default:
 		return "", false
 	}
@@ -84,6 +91,8 @@ func ffmpegScaleViaFilterComplex(assetPath, assetID string) bool {
 	switch strings.ToLower(filepath.Ext(assetPath)) {
 	case ".heic", ".heif", ".avif":
 		return true
+	case ".jxl":
+		return !ffmpegCanDecodeJPEGXL(assetPath)
 	default:
 		return false
 	}
