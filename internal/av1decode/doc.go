@@ -5,6 +5,9 @@
 //     6× less memory and far fewer allocations than gav1d on the same frames.
 //   - AVIF stills and grids use github.com/gen2brain/gav1d through avif.DecodeColor.
 //     It is 2–4× faster than go-av1 on AVIF and uses less memory there.
+//     clap/irot/imir are applied as ffmpeg's default autorotate does, the nclx
+//     matrix and range are honored as in the HEVC path, and the decoded area
+//     is bounded by MaxAVIFPixels.
 //
 // Output is 8-bit 4:2:0 planes in h264.ThumbYCbCr.
 package av1decode
