@@ -12,7 +12,14 @@ import (
 
 const maxReadBytes = 512 * 1024 * 1024
 
+// Bounds full-frame decode area for thumbnail vs full-raster callers.
+const (
+	maxThumbFramePixels  = 4096 * 4096
+	maxRasterFramePixels = 8192 * 8192
+)
+
 // Decode reads a JPEG XL file and returns a display-oriented raster.
+// JPEG XL codestreams carry display orientation; container EXIF orientation is ignored (ISO/IEC 18181).
 func Decode(r interface {
 	ReadAt([]byte, int64) (int, error)
 }, size int64, maxW, maxH int) (image.Image, error) {
@@ -28,19 +35,23 @@ func Decode(r interface {
 		return nil, err
 	}
 
-	img, err := jxl.Decode(bytes.NewReader(data))
+	opts := jxl.Options{FrameSizeLimit: framePixelLimit(maxW, maxH)}
+	img, err := jxl.Decode(bytes.NewReader(data), opts)
 	if err != nil {
 		return nil, err
-	}
-
-	if ex, exErr := jxl.DecodeExif(bytes.NewReader(data)); exErr == nil && ex != nil {
-		img = applyExifOrientation(img, ex.Orientation)
 	}
 
 	if maxW > 0 || maxH > 0 {
 		img = resizeFit(img, maxW, maxH)
 	}
 	return img, nil
+}
+
+func framePixelLimit(maxW, maxH int) int {
+	if maxW > 0 || maxH > 0 {
+		return maxThumbFramePixels
+	}
+	return maxRasterFramePixels
 }
 
 func resizeFit(src image.Image, maxW, maxH int) image.Image {
@@ -86,88 +97,5 @@ func resizeFit(src image.Image, maxW, maxH int) image.Image {
 
 	dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), src, b, draw.Over, nil)
-	return dst
-}
-
-func applyExifOrientation(src image.Image, orientation int) image.Image {
-	switch orientation {
-	case 1, 0:
-		return src
-	case 2:
-		return flipHorizontal(src)
-	case 3:
-		return rotate180(src)
-	case 4:
-		return flipVertical(src)
-	case 5:
-		return rotate270(flipHorizontal(src))
-	case 6:
-		return rotate90(src)
-	case 7:
-		return rotate90(flipHorizontal(src))
-	case 8:
-		return rotate270(src)
-	default:
-		return src
-	}
-}
-
-func rotate90(src image.Image) image.Image {
-	b := src.Bounds()
-	w, h := b.Dx(), b.Dy()
-	dst := image.NewRGBA(image.Rect(0, 0, h, w))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			dst.Set(h-1-y, x, src.At(b.Min.X+x, b.Min.Y+y))
-		}
-	}
-	return dst
-}
-
-func rotate180(src image.Image) image.Image {
-	b := src.Bounds()
-	w, h := b.Dx(), b.Dy()
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			dst.Set(w-1-x, h-1-y, src.At(b.Min.X+x, b.Min.Y+y))
-		}
-	}
-	return dst
-}
-
-func rotate270(src image.Image) image.Image {
-	b := src.Bounds()
-	w, h := b.Dx(), b.Dy()
-	dst := image.NewRGBA(image.Rect(0, 0, h, w))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			dst.Set(y, w-1-x, src.At(b.Min.X+x, b.Min.Y+y))
-		}
-	}
-	return dst
-}
-
-func flipHorizontal(src image.Image) image.Image {
-	b := src.Bounds()
-	w, h := b.Dx(), b.Dy()
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			dst.Set(w-1-x, y, src.At(b.Min.X+x, b.Min.Y+y))
-		}
-	}
-	return dst
-}
-
-func flipVertical(src image.Image) image.Image {
-	b := src.Bounds()
-	w, h := b.Dx(), b.Dy()
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			dst.Set(x, h-1-y, src.At(b.Min.X+x, b.Min.Y+y))
-		}
-	}
 	return dst
 }

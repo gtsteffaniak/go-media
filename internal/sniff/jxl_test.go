@@ -1,6 +1,7 @@
 package sniff_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,5 +27,16 @@ func TestDetectJXLContainer(t *testing.T) {
 	}
 	if id != format.JXL {
 		t.Fatalf("Detect() = %q, want jxl", id)
+	}
+}
+
+func TestDetectJXLContainerPartialSignatureNotJXL(t *testing.T) {
+	// "JXL " at offset 4 without the full 12-byte signature must not match.
+	buf := append([]byte{0, 0, 0, 0}, []byte("JXL ")...)
+	buf = append(buf, 0, 0, 0, 0)
+	r := bytes.NewReader(buf)
+	id, err := sniff.Detect(r, int64(len(buf)))
+	if err == nil && id == format.JXL {
+		t.Fatalf("Detect() = %q, want not jxl for partial signature", id)
 	}
 }
