@@ -9,8 +9,12 @@ import (
 	"path/filepath"
 )
 
-// The seed is the single reference clip every comparison fixture is derived
-// from. It is checked into the repo (test/data) and verified by SHA-256.
+// Checked-in primary compare inputs (test/data/, SHA-256 pinned below):
+//   - reference_1080_10s.mp4 — seed clip; all other video/audio fixtures are ffmpeg-derived from a 5s trim
+//   - reference_1080_10s_wmv3.wmv — WMV3 (no ffmpeg encoder)
+//   - reference_soundboard.heic + reference_soundboard_display.png — phone HEIC
+//
+// Generated matrix: cmd/gomedia-compare/.assets/ (gitignored).
 const (
 	seedFileName = "reference_1080_10s.mp4"
 	seedSHA256   = "406e43b9b133af8de0027427f922ed3c5bcd647d018f25ddb0b7e200c4dade02"
@@ -84,6 +88,34 @@ func copyReferenceSoundboardDisplayPNG(dst string) error {
 		return fmt.Errorf("%s checksum mismatch (expected %s)", src, referenceSoundboardDisplayPNGSHA)
 	}
 	return copyFile(src, dst)
+}
+
+// ensurePinnedAssetsForSelectors installs checked-in test/data files into .assets when
+// running a subset compare without regenerating the full ffmpeg matrix.
+func ensurePinnedAssetsForSelectors(assetsDir, selectorsRaw string) error {
+	tokens := parseAssetSelectors(selectorsRaw)
+	if len(tokens) == 0 {
+		return nil
+	}
+	imgDir := filepath.Join(assetsDir, "image")
+	if err := os.MkdirAll(imgDir, 0o755); err != nil {
+		return err
+	}
+	if assetMatchesAnySelector("heic_phone_primary", tokens) {
+		heic := filepath.Join(imgDir, "heic_phone_primary.heic")
+		if _, err := os.Stat(heic); err != nil {
+			if err := copyReferenceSoundboardHEIC(heic); err != nil {
+				return fmt.Errorf("heic phone pinned fixture: %w", err)
+			}
+		}
+		display := filepath.Join(imgDir, "heic_phone_primary_display.png")
+		if _, err := os.Stat(display); err != nil {
+			if err := copyReferenceSoundboardDisplayPNG(display); err != nil {
+				return fmt.Errorf("heic phone display sidecar: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 // ensureSeed copies the checked-in reference clip into destDir and verifies

@@ -59,6 +59,8 @@ func validateGate(exp ExpectationsFile, report FullReport) error {
 				report.Summary.FFmpegVersion, exp.FFmpegVersionPrefix)
 		}
 	}
+	allowed := allowedAssetIDSet(report.Assets)
+
 	byKey := map[string]CheckResult{}
 	for _, r := range report.Results {
 		byKey[r.AssetID+"/"+string(r.Check)] = r
@@ -80,6 +82,9 @@ func validateGate(exp ExpectationsFile, report FullReport) error {
 	var diffs []string
 	for _, c := range exp.Cases {
 		if !expectationCaseApplies(c) {
+			continue
+		}
+		if len(allowed) > 0 && !allowed[c.AssetID] {
 			continue
 		}
 		key := c.AssetID + "/" + string(c.Check)
@@ -104,9 +109,13 @@ func validateGate(exp ExpectationsFile, report FullReport) error {
 		if seen[key] {
 			continue
 		}
+		assetID := key[:strings.Index(key, "/")]
+		if len(allowed) > 0 && !allowed[assetID] {
+			continue
+		}
 		diffs = append(diffs, fmt.Sprintf("%s: unexpected result (not in expectations)", key))
 	}
-	if err := validateBuildModeTimings(exp, report); err != nil {
+	if err := validateBuildModeTimings(exp, report, allowed); err != nil {
 		diffs = append(diffs, err.Error())
 	}
 	if len(diffs) == 0 {
@@ -117,7 +126,7 @@ func validateGate(exp ExpectationsFile, report FullReport) error {
 
 // validateBuildModeTimings requires tier-2 purego+PGO subprocess timings to pass the gate
 // for every video thumbnail row collected on amd64.
-func validateBuildModeTimings(exp ExpectationsFile, report FullReport) error {
+func validateBuildModeTimings(exp ExpectationsFile, report FullReport, allowed map[string]bool) error {
 	if len(report.BuildModeTimings) == 0 {
 		return nil
 	}
@@ -127,6 +136,9 @@ func validateBuildModeTimings(exp ExpectationsFile, report FullReport) error {
 	}
 	var fails []string
 	for _, row := range report.BuildModeTimings {
+		if len(allowed) > 0 && !allowed[row.AssetID] {
+			continue
+		}
 		if row.BuildMode != BuildModePuregoPGO {
 			continue
 		}
@@ -137,6 +149,9 @@ func validateBuildModeTimings(exp ExpectationsFile, report FullReport) error {
 		expectSupported := false
 		for _, c := range exp.Cases {
 			if !expectationCaseApplies(c) {
+				continue
+			}
+			if len(allowed) > 0 && !allowed[c.AssetID] {
 				continue
 			}
 			if c.AssetID+"/"+string(c.Check) == key && c.Expect == StatusSupported {
