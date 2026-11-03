@@ -38,15 +38,23 @@ func (d *Decoder) Close() {
 }
 
 // DecodeSample decodes one keyframe using optional av1C extradata and sample bytes.
+// The returned picture is a copy (safe to keep after the next call) tagged with
+// the sequence header's matrix_coefficients and color_range, mapped the way
+// ffmpeg's swscale does (see sequenceColor).
 func (d *Decoder) DecodeSample(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, error) {
 	if d == nil || d.kd == nil {
 		return nil, errs.UnsupProfile("av1 keyframe", "decoder closed")
 	}
-	img, err := d.kd.DecodeSample(ConfigOBUs(av1CExtradata), sample)
+	cfg := ConfigOBUs(av1CExtradata)
+	img, err := d.kd.DecodeSample(cfg, sample)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return PictureThumbYCbCr(img), nil
+	th := PictureThumbYCbCr(img)
+	if th != nil {
+		th.CS, th.RNG = sequenceColor(cfg, sample)
+	}
+	return th, nil
 }
 
 // ProbeTemporalUnit builds a low-overhead temporal unit for KeyframeDecoder sizing.
@@ -75,7 +83,11 @@ func ConfigOBUs(av1CExtradata []byte) []byte {
 	return p.ConfigOBUs
 }
 
-// PictureThumbYCbCr copies a decoded AV1 keyframe into ThumbYCbCr.
+// PictureThumbYCbCr copies a decoded AV1 keyframe into ThumbYCbCr. The planes of
+// img alias decoder memory, so the copy must be taken before the decoder is used
+// again. KeyframeImage carries no color_config, so the result is tagged with the
+// untagged-input default (BT.601 limited); Decoder.DecodeSample replaces that
+// with the sequence header's matrix and range.
 func PictureThumbYCbCr(img goav1.KeyframeImage) *h264.ThumbYCbCr {
 	if img.Width <= 0 || img.Height <= 0 {
 		return nil
