@@ -11,7 +11,7 @@ require (
 	github.com/gen2brain/h265 v0.2.4
 	github.com/gen2brain/jxl v0.2.0
 	github.com/gen2brain/vpx v0.2.1
-	github.com/gtsteffaniak/go-av1 v0.0.0-20261101031208-03767868b89d
+	github.com/gtsteffaniak/go-av1 v1.0.0
 	github.com/gtsteffaniak/go-vpx v1.0.1
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0

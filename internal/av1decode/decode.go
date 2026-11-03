@@ -4,8 +4,8 @@ import (
 	"errors"
 	"image"
 
-	goav1 "github.com/gtsteffaniak/go-av1"
-	"github.com/gtsteffaniak/go-av1/container"
+	"github.com/gtsteffaniak/go-av1/pkg/container"
+	"github.com/gtsteffaniak/go-av1/pkg/decode"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/h264"
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
@@ -13,14 +13,14 @@ import (
 
 // Decoder reuses go-av1 KeyframeDecoder scratch across samples from one file.
 type Decoder struct {
-	kd *goav1.KeyframeDecoder
+	kd *decode.KeyframeDecoder
 }
 
 // NewDecoderFromProbe sizes decode state from a representative temporal unit.
 func NewDecoderFromProbe(probe []byte) (*Decoder, error) {
-	kd, err := goav1.NewKeyframeDecoder(probe,
-		goav1.KeyframeSkipFilmGrain(),
-		goav1.KeyframeOutput8Bit(),
+	kd, err := decode.NewKeyframeDecoder(probe,
+		decode.KeyframeSkipFilmGrain(),
+		decode.KeyframeOutput8Bit(),
 	)
 	if err != nil {
 		return nil, mapErr(err)
@@ -88,7 +88,7 @@ func ConfigOBUs(av1CExtradata []byte) []byte {
 // again. KeyframeImage carries no color_config, so the result is tagged with the
 // untagged-input default (BT.601 limited); Decoder.DecodeSample replaces that
 // with the sequence header's matrix and range.
-func PictureThumbYCbCr(img goav1.KeyframeImage) *h264.ThumbYCbCr {
+func PictureThumbYCbCr(img decode.KeyframeImage) *h264.ThumbYCbCr {
 	if img.Width <= 0 || img.Height <= 0 {
 		return nil
 	}
@@ -121,7 +121,7 @@ func mapErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, goav1.ErrNotAVIFGrid) {
+	if errors.Is(err, decode.ErrNotAVIFGrid) {
 		return errs.Unsup("thumbnail", "avif: "+err.Error())
 	}
 	var ue *errs.UnsupportedError

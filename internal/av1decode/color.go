@@ -1,7 +1,7 @@
 package av1decode
 
 import (
-	goav1 "github.com/gtsteffaniak/go-av1"
+	"github.com/gtsteffaniak/go-av1/pkg/av1"
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
@@ -33,21 +33,21 @@ func sequenceColorFromOBUs(src []byte) (yuv.ColorSpace, yuv.Range, bool) {
 	if len(src) == 0 {
 		return 0, 0, false
 	}
-	it := goav1.NewLowOverheadIterator(src)
+	it := av1.NewLowOverheadIterator(src)
 	for {
 		u, ok, err := it.Next()
 		if err != nil || !ok {
 			return 0, 0, false
 		}
 		switch u.Header.Type {
-		case goav1.OBUSequenceHeader:
-			sh, err := goav1.ParseSequenceHeader(u.Payload)
+		case av1.OBUSequenceHeader:
+			sh, err := av1.ParseSequenceHeader(u.Payload)
 			if err != nil {
 				return 0, 0, false
 			}
 			cs, rng := colorFromConfig(sh.ColorConfig.MatrixCoefficients, sh.ColorConfig.ColorRange)
 			return cs, rng, true
-		case goav1.OBUFrame, goav1.OBUFrameHeader, goav1.OBUTileGroup:
+		case av1.OBUFrame, av1.OBUFrameHeader, av1.OBUTileGroup:
 			// A sequence header must precede frame data; stop scanning the
 			// (potentially large) tile payload.
 			return 0, 0, false
