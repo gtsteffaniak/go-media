@@ -4,32 +4,144 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+
+	"github.com/gtsteffaniak/go-media/internal/errs"
 )
 
-const heicMetaScanLimit = 32 * 1024 * 1024
+// maxMetaBufferBytes caps how much of the top-level meta box ReadMeta keeps in
+// memory. Real HEIC/AVIF meta boxes are a few KiB (tens of KiB for large grids);
+// anything bigger is parsed child-by-child with ReadAt instead.
+const maxMetaBufferBytes = 1 << 20
+
+// Meta holds the bytes of a file's top-level meta box, read once with a
+// bounded top-level box-header walk, so the irot/imir lookup, the embedded
+// JPEG lookup and the coded-image decoder can share them.
+type Meta struct {
+	off   int64  // file offset of the meta box header
+	box   []byte // whole meta box (header included); nil when over the cap
+	start int64  // meta payload start (after box header and full-box fields)
+	end   int64  // meta box end
+}
+
+// ReadMeta walks the top-level box headers with ReadAt and reads only the meta
+// box. The returned Meta always records where meta lives; its bytes are kept
+// only when the box is at most 1 MiB.
+func ReadMeta(r io.ReaderAt, size int64) (*Meta, error) {
+	if size <= 0 {
+		return nil, errs.Corrupt
+	}
+	var off int64
+	var hdr [16]byte
+	for i := 0; off+8 <= size && i < maxTopBoxes; i++ {
+		typ, hl, bs, err := readBoxHeader(r, size, off, size, hdr[:])
+		if err != nil {
+			return nil, err
+		}
+		if typ == [4]byte{'m', 'e', 't', 'a'} {
+			m := &Meta{off: off, start: off + hl + 4, end: off + bs}
+			if m.start > m.end {
+				return nil, errs.Corrupt
+			}
+			if bs <= maxMetaBufferBytes {
+				b := make([]byte, bs)
+				if !readFullAt(r, b, off) {
+					return nil, errs.Corrupt
+				}
+				m.box = b
+			}
+			return m, nil
+		}
+		off += bs
+	}
+	return nil, errs.Unsup("thumbnail", "heif: no meta box")
+}
+
+// ReaderAt returns r with reads that fall inside the buffered meta box served
+// from memory, so later meta parsing (JPEGPreview, CodedPrimaryYCbCr) does not
+// read those bytes again. Reads outside meta go to r.
+func (m *Meta) ReaderAt(r io.ReaderAt) io.ReaderAt {
+	if m == nil || m.box == nil {
+		return r
+	}
+	return metaReaderAt{r: r, off: m.off, b: m.box}
+}
+
+type metaReaderAt struct {
+	r   io.ReaderAt
+	off int64
+	b   []byte
+}
+
+func (m metaReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	if off >= m.off && off+int64(len(p)) <= m.off+int64(len(m.b)) {
+		return copy(p, m.b[off-m.off:]), nil
+	}
+	return m.r.ReadAt(p, off)
+}
+
+// Transform is the primary item's display transform from its irot and imir
+// properties, applied in the order ffmpeg (and libavif/gav1d) apply them:
+// first rotate counter-clockwise by Rotation, then mirror.
+type Transform struct {
+	// Rotation is 0, 90, 180 or 270 degrees counter-clockwise (irot × 90).
+	Rotation int
+	// Mirror reports whether an imir property is present.
+	Mirror bool
+	// MirrorAxis is the imir axis bit: 0 flips top-to-bottom (vertical flip),
+	// 1 flips left-to-right (horizontal flip). This matches ffmpeg's mov
+	// demuxer (axis 0 → vflip, axis 1 → hflip) and libavif.
+	MirrorAxis uint8
+}
+
+// PrimaryTransform returns the primary item's irot/imir transform. ok is false
+// when the primary item has neither property (or meta cannot be parsed).
+func (m *Meta) PrimaryTransform(r io.ReaderAt, size int64) (Transform, bool) {
+	if m == nil {
+		return Transform{}, false
+	}
+	if m.box != nil {
+		return parsePrimaryTransform(m.box)
+	}
+	// Oversized meta: read only pitm and iprp, each capped like the buffer.
+	var pitm, iprp []byte
+	var hdr [16]byte
+	for off := m.start; off+8 <= m.end; {
+		typ, _, bs, err := readBoxHeader(r, size, off, m.end, hdr[:])
+		if err != nil {
+			break
+		}
+		switch string(typ[:]) {
+		case "pitm", "iprp":
+			if bs <= maxMetaBufferBytes {
+				b := make([]byte, bs)
+				if readFullAt(r, b, off) {
+					if typ[0] == 'p' {
+						pitm = b
+					} else {
+						iprp = b
+					}
+				}
+			}
+		}
+		off += bs
+	}
+	return primaryTransformFrom(pitm, iprp)
+}
 
 // PrimaryDisplayRotation reads the primary image item's irot property and returns
 // the counter-clockwise rotation in degrees (0, 90, 180, 270) to apply for display,
-// matching thumb.rotateImage / ffmpeg autorotate.
+// matching thumb.rotateImage / ffmpeg autorotate. Use ReadMeta and
+// Meta.PrimaryTransform to also get imir.
 func PrimaryDisplayRotation(r io.ReaderAt, size int64) (int, bool) {
-	if size <= 0 {
+	m, err := ReadMeta(r, size)
+	if err != nil {
 		return 0, false
 	}
-	scan := size
-	if scan > heicMetaScanLimit {
-		scan = heicMetaScanLimit
-	}
-	data := make([]byte, scan)
-	n, err := r.ReadAt(data, 0)
-	if err != nil && n == 0 {
-		return 0, false
-	}
-	data = data[:n]
-	irot, ok := parsePrimaryIrot(data)
+	t, ok := m.PrimaryTransform(r, size)
 	if !ok {
 		return 0, false
 	}
-	return irotDegrees(irot), true
+	return t.Rotation, true
 }
 
 // irotDegrees maps HEIF irot (0–3) to counter-clockwise degrees for display.
@@ -46,36 +158,41 @@ func irotDegrees(irot uint8) int {
 	}
 }
 
-func parsePrimaryIrot(data []byte) (uint8, bool) {
+func parsePrimaryTransform(data []byte) (Transform, bool) {
 	meta := findBMFFBox(data, "meta")
 	if meta == nil {
-		return 0, false
+		return Transform{}, false
 	}
-	primaryID := parsePITMItemID(findBMFFChildBox(meta, "pitm"))
-	if primaryID == 0 {
-		return 0, false
-	}
-	iprp := findBMFFChildBox(meta, "iprp")
-	if iprp == nil {
-		return 0, false
+	return primaryTransformFrom(findBMFFChildBox(meta, "pitm"), findBMFFChildBox(meta, "iprp"))
+}
+
+func primaryTransformFrom(pitm, iprp []byte) (Transform, bool) {
+	primaryID := parsePITMItemID(pitm)
+	if primaryID == 0 || iprp == nil {
+		return Transform{}, false
 	}
 	ipco := findBMFFChildBox(iprp, "ipco")
 	ipma := findBMFFChildBox(iprp, "ipma")
 	if ipco == nil || ipma == nil {
-		return 0, false
+		return Transform{}, false
 	}
 	properties := parseIPCOProperties(ipco)
-	indices := parseIPMAPropertyIndices(ipma, primaryID)
-	for _, idx := range indices {
+	var t Transform
+	found := false
+	for _, idx := range parseIPMAPropertyIndices(ipma, primaryID) {
 		if idx == 0 || int(idx) > len(properties) {
 			continue
 		}
-		prop := properties[idx-1]
-		if prop.typ == "irot" {
-			return prop.irot & 0x03, true
+		switch prop := properties[idx-1]; prop.typ {
+		case "irot":
+			t.Rotation = irotDegrees(prop.val)
+			found = true
+		case "imir":
+			t.Mirror, t.MirrorAxis = true, prop.val&0x01
+			found = true
 		}
 	}
-	return 0, false
+	return t, found
 }
 
 const maxBMFFRecursionDepth = 32
@@ -217,8 +334,8 @@ func parsePITMItemID(pitm []byte) uint32 {
 }
 
 type ipcoProperty struct {
-	typ  string
-	irot uint8
+	typ string
+	val uint8 // irot angle (low 2 bits) or imir axis (low bit)
 }
 
 func parseIPCOProperties(ipco []byte) []ipcoProperty {
@@ -235,9 +352,14 @@ func parseIPCOProperties(ipco []byte) []ipcoProperty {
 		}
 		child := payload[pos : pos+size]
 		prop := ipcoProperty{typ: string(child[4:8])}
-		if prop.typ == "irot" {
+		switch prop.typ {
+		case "irot":
 			if p := bmffBoxPayload(child); len(p) >= 1 {
-				prop.irot = p[0] & 0x03
+				prop.val = p[0] & 0x03
+			}
+		case "imir":
+			if p := bmffBoxPayload(child); len(p) >= 1 {
+				prop.val = p[0] & 0x01
 			}
 		}
 		props = append(props, prop)
