@@ -9,13 +9,8 @@ import (
 	"path/filepath"
 )
 
-// Checked-in primary compare inputs (test/data/, SHA-256 pinned below):
-//   - reference_1080_10s.mp4 — seed clip; all other video/audio fixtures are ffmpeg-derived from a 5s trim
-//   - reference_1080_10s_wmv3.wmv — WMV3 (no ffmpeg encoder)
-//   - reference_soundboard.heic + reference_soundboard_display.png — phone HEIC
-//   - zoltan_unsplash.jxl — JPEG XL (ffmpeg reference only when ffmpeg has libjxl)
-//
-// Generated matrix: cmd/gomedia-compare/.assets/ (gitignored).
+// The seed is the single reference clip every comparison fixture is derived
+// from. It is checked into the repo (test/data) and verified by SHA-256.
 const (
 	seedFileName = "reference_1080_10s.mp4"
 	seedSHA256   = "406e43b9b133af8de0027427f922ed3c5bcd647d018f25ddb0b7e200c4dade02"
@@ -35,8 +30,6 @@ const (
 	referenceSoundboardDisplayPNG    = "reference_soundboard_display.png"
 	referenceSoundboardDisplayPNGSHA = "4947957b6fae7025ff259067171c7884187563895530e98aea13796ab8785f6a"
 
-	referenceJXLUnsplash    = "zoltan_unsplash.jxl"
-	referenceJXLUnsplashSHA = "2ae663516f57453f4f3a5cf6917bd6f846759cf57f7cc7c62d0a79de86f64169"
 	// referenceAVIFIrotImir is the seed frame (t=2s, 320×180) encoded by
 	// avifenc 1.2.1 with irot=1 and imir axis 0 (display: transpose). Pinned
 	// because ffmpeg 9.0.2 cannot write irot/imir into AVIF.
@@ -58,10 +51,6 @@ func referenceSoundboardHEICPath() string {
 
 func referenceSoundboardDisplayPNGPath() string {
 	return filepath.Join(findRepoRoot("."), "test", "data", referenceSoundboardDisplayPNG)
-}
-
-func referenceJXLUnsplashPath() string {
-	return filepath.Join(findRepoRoot("."), "test", "data", referenceJXLUnsplash)
 }
 
 // copyReferenceSoundboardHEIC installs the checked-in phone HEIC still.
@@ -95,52 +84,6 @@ func copyReferenceSoundboardDisplayPNG(dst string) error {
 		return fmt.Errorf("%s checksum mismatch (expected %s)", src, referenceSoundboardDisplayPNGSHA)
 	}
 	return copyFile(src, dst)
-}
-
-func copyReferenceJXLUnsplash(dst string) error {
-	src := referenceJXLUnsplashPath()
-	if ok, err := fileMatchesSHA256(src, referenceJXLUnsplashSHA); err != nil {
-		return err
-	} else if !ok {
-		return fmt.Errorf("%s checksum mismatch (expected %s)", src, referenceJXLUnsplashSHA)
-	}
-	return copyFile(src, dst)
-}
-
-// ensurePinnedAssetsForSelectors installs checked-in test/data files into .assets when
-// running a subset compare without regenerating the full ffmpeg matrix.
-func ensurePinnedAssetsForSelectors(assetsDir, selectorsRaw string) error {
-	tokens := parseAssetSelectors(selectorsRaw)
-	if len(tokens) == 0 {
-		return nil
-	}
-	imgDir := filepath.Join(assetsDir, "image")
-	if err := os.MkdirAll(imgDir, 0o755); err != nil {
-		return err
-	}
-	if assetMatchesAnySelector("jxl_unsplash", tokens) {
-		dst := filepath.Join(imgDir, referenceJXLUnsplash)
-		if _, err := os.Stat(dst); err != nil {
-			if err := copyReferenceJXLUnsplash(dst); err != nil {
-				return fmt.Errorf("jxl pinned fixture: %w", err)
-			}
-		}
-	}
-	if assetMatchesAnySelector("heic_phone_primary", tokens) {
-		heic := filepath.Join(imgDir, "heic_phone_primary.heic")
-		if _, err := os.Stat(heic); err != nil {
-			if err := copyReferenceSoundboardHEIC(heic); err != nil {
-				return fmt.Errorf("heic phone pinned fixture: %w", err)
-			}
-		}
-		display := filepath.Join(imgDir, "heic_phone_primary_display.png")
-		if _, err := os.Stat(display); err != nil {
-			if err := copyReferenceSoundboardDisplayPNG(display); err != nil {
-				return fmt.Errorf("heic phone display sidecar: %w", err)
-			}
-		}
-	}
-	return nil
 }
 
 // ensureSeed copies the checked-in reference clip into destDir and verifies

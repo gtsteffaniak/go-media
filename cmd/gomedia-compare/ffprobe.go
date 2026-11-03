@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -343,8 +342,8 @@ func imagePSNR(a, b string) (float64, error) {
 			for _, field := range strings.Fields(line) {
 				if strings.HasPrefix(field, "psnr_avg:") {
 					v, _ := strconv.ParseFloat(strings.TrimPrefix(field, "psnr_avg:"), 64)
-					if v > 0 || strings.Contains(field, "inf") {
-						return sanitizeCompareMetric(v), nil
+					if v > 0 {
+						return v, nil
 					}
 				}
 			}
@@ -353,8 +352,8 @@ func imagePSNR(a, b string) (float64, error) {
 			for _, field := range strings.Fields(line) {
 				if strings.HasPrefix(field, "average:") {
 					v, _ := strconv.ParseFloat(strings.TrimPrefix(field, "average:"), 64)
-					if v > 0 || strings.Contains(field, "inf") {
-						return sanitizeCompareMetric(v), nil
+					if v > 0 {
+						return v, nil
 					}
 				}
 			}
@@ -391,16 +390,6 @@ func imageSSIM(a, b string) (float64, error) {
 		}
 	}
 	return 0, fmt.Errorf("ssim not found in ffmpeg output: %s", text)
-}
-
-func sanitizeCompareMetric(v float64) float64 {
-	if math.IsInf(v, 1) {
-		return 100
-	}
-	if math.IsInf(v, -1) || math.IsNaN(v) {
-		return 0
-	}
-	return v
 }
 
 // ffprobeKeyframeAtOrBefore returns the time (relative to the container

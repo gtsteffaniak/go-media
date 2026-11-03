@@ -23,15 +23,6 @@ GATE_ARGS=()
 if [[ "${COMPARE_GATE:-}" == "1" ]]; then
 	GATE_ARGS=(-gate -expectations "$EXPECTATIONS")
 fi
-ASSET_ARGS=()
-if [[ -n "${COMPARE_ASSETS:-}" ]]; then
-	ASSET_ARGS=(-only "$COMPARE_ASSETS")
-fi
-GEN_ARGS=()
-# Missing fixtures are generated; existing ones are reused. COMPARE_GENERATE=1 rebuilds all of them.
-if [[ "${COMPARE_GENERATE:-0}" == "1" ]]; then
-	GEN_ARGS=(-regenerate)
-fi
 
 PGO="$ROOT/default.pgo"
 COMPARE_BIN="${COMPARE_BIN:-$HARNESS/.cache/gomedia-compare}"
@@ -40,9 +31,9 @@ mkdir -p "$(dirname "$COMPARE_BIN")"
 # tier 3 is built with GOEXPERIMENT=simd only (no enable env).
 CGO_ENABLED=0 go build -pgo="$PGO" -o "$COMPARE_BIN" ./cmd/gomedia-compare
 if ((${#GATE_ARGS[@]} > 0)); then
-	CGO_ENABLED=0 "$COMPARE_BIN" -seed-dir "$HARNESS/.seed" -assets "$HARNESS/.assets" -report "$REPORT" ${GEN_ARGS[@]+"${GEN_ARGS[@]}"} ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"} "${GATE_ARGS[@]}"
+	CGO_ENABLED=0 "$COMPARE_BIN" -seed-dir "$HARNESS/.seed" -assets "$HARNESS/.assets" -report "$REPORT" "${GATE_ARGS[@]}"
 else
-	CGO_ENABLED=0 "$COMPARE_BIN" -seed-dir "$HARNESS/.seed" -assets "$HARNESS/.assets" -report "$REPORT" ${GEN_ARGS[@]+"${GEN_ARGS[@]}"} ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"}
+	CGO_ENABLED=0 "$COMPARE_BIN" -seed-dir "$HARNESS/.seed" -assets "$HARNESS/.assets" -report "$REPORT"
 fi
 if [[ -f "$REPORT/data/report.json" ]]; then
 	bash "$ROOT/scripts/print-three-tier-table.sh" || true

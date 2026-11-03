@@ -40,3 +40,15 @@ func TestDetectJXLContainerPartialSignatureNotJXL(t *testing.T) {
 		t.Fatalf("Detect() = %q, want not jxl for partial signature", id)
 	}
 }
+
+func TestDetectJXLCodestream(t *testing.T) {
+	// A bare JXL codestream starts with the 0xFF 0x0A signature (no container box).
+	buf := []byte{0xFF, 0x0A, 0x00, 0x00, 0x00, 0x00}
+	id, err := sniff.Detect(bytes.NewReader(buf), int64(len(buf)))
+	if err != nil {
+		t.Fatalf("Detect() error = %v, want jxl", err)
+	}
+	if id != format.JXL {
+		t.Fatalf("Detect() = %q, want jxl", id)
+	}
+}

@@ -12,7 +12,7 @@ func TestThumbnailJXLUnsplash(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "data", "zoltan_unsplash.jxl")
 	f, err := os.Open(path)
 	if err != nil {
-		t.Skip(path, err)
+		t.Fatal(path, err) // the fixture is tracked; a missing file must fail, not skip
 	}
 	defer f.Close()
 	st, err := f.Stat()
@@ -33,5 +33,25 @@ func TestThumbnailJXLUnsplash(t *testing.T) {
 	}
 	if res.Width <= 0 || res.Height <= 0 {
 		t.Fatalf("size %dx%d", res.Width, res.Height)
+	}
+}
+
+func TestProbeJXLUnsplash(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "data", "zoltan_unsplash.jxl")
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(path, err)
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := media.Probe(f, st.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.FormatName != "jxl" {
+		t.Fatalf("FormatName = %q, want jxl", info.FormatName)
 	}
 }

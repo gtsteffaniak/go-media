@@ -3,6 +3,8 @@ package jxldecode
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"image"
 
 	"github.com/gen2brain/jxl"
@@ -11,6 +13,9 @@ import (
 )
 
 const maxReadBytes = 512 * 1024 * 1024
+
+// ErrTooLarge reports a JPEG XL file above maxReadBytes; it is not decoded.
+var ErrTooLarge = errors.New("jxldecode: file exceeds 512 MiB size limit")
 
 // Bounds full-frame decode area for thumbnail vs full-raster callers.
 const (
@@ -26,11 +31,10 @@ func Decode(r interface {
 	if size <= 0 {
 		return nil, jxl.ErrInvalid
 	}
-	readSize := size
-	if readSize > maxReadBytes {
-		readSize = maxReadBytes
+	if size > maxReadBytes {
+		return nil, ErrTooLarge
 	}
-	data, err := ioat.ReadAll(r, size, 0, readSize)
+	data, err := ioat.ReadAll(r, size, 0, size)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +42,11 @@ func Decode(r interface {
 	opts := jxl.Options{FrameSizeLimit: framePixelLimit(maxW, maxH)}
 	img, err := jxl.Decode(bytes.NewReader(data), opts)
 	if err != nil {
+		if errors.Is(err, jxl.ErrFrameTooLarge) && (maxW > 0 || maxH > 0) {
+			// gen2brain/jxl has no downscaled decode, so a frame over the thumbnail pixel
+			// budget cannot be shrunk while decoding. Report that explicitly.
+			return nil, fmt.Errorf("jxldecode: frame exceeds thumbnail pixel budget (%d px): %w", maxThumbFramePixels, err)
+		}
 		return nil, err
 	}
 

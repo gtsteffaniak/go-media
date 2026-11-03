@@ -24,31 +24,21 @@ func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 	irotDisplay := filepath.Join(dir, "heic_jpeg_irot_display.jpg")
 	dngRef := filepath.Join(dir, "raw_dng_preview_embed.jpg")
 
-	if needsBuild(heicEmbed) {
-		if err := seedFrameJPEG(ffmpeg, clip, heicEmbed, 320, 180); err != nil {
-			return nil, fmt.Errorf("heic seed frame: %w", err)
-		}
+	if err := seedFrameJPEG(ffmpeg, clip, heicEmbed, 320, 180); err != nil {
+		return nil, fmt.Errorf("heic seed frame: %w", err)
 	}
-	if needsBuild(heifEmbed) {
-		if err := copyFile(heicEmbed, heifEmbed); err != nil {
-			return nil, err
-		}
+	if err := copyFile(heicEmbed, heifEmbed); err != nil {
+		return nil, err
 	}
-	if needsBuild(irotCoded) {
-		if err := seedFrameJPEG(ffmpeg, clip, irotCoded, 320, 180); err != nil {
-			return nil, fmt.Errorf("heic irot coded frame: %w", err)
-		}
+	if err := seedFrameJPEG(ffmpeg, clip, irotCoded, 320, 180); err != nil {
+		return nil, fmt.Errorf("heic irot coded frame: %w", err)
 	}
-	if needsBuild(irotDisplay) {
-		if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-			"-i", irotCoded, "-frames:v", "1", "-vf", "transpose=2", "-q:v", "3", irotDisplay); err != nil {
-			return nil, fmt.Errorf("heic irot display frame: %w", err)
-		}
+	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+		"-i", irotCoded, "-frames:v", "1", "-vf", "transpose=2", "-q:v", "3", irotDisplay); err != nil {
+		return nil, fmt.Errorf("heic irot display frame: %w", err)
 	}
-	if needsBuild(dngRef) {
-		if err := seedFrameJPEG(ffmpeg, clip, dngRef, 640, 360); err != nil {
-			return nil, fmt.Errorf("dng seed frame: %w", err)
-		}
+	if err := seedFrameJPEG(ffmpeg, clip, dngRef, 640, 360); err != nil {
+		return nil, fmt.Errorf("dng seed frame: %w", err)
 	}
 
 	j320, err := os.ReadFile(heicEmbed)
@@ -65,46 +55,28 @@ func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 	irotPath := filepath.Join(dir, "heic_jpeg_irot.heic")
 	dngPath := filepath.Join(dir, "raw_dng_preview.dng")
 
-	if needsBuild(heicPath) {
-		if err := os.WriteFile(heicPath, heifthumb.SynthJPEGHEIF(j320, 2, 1), 0o644); err != nil {
-			return nil, err
-		}
+	if err := os.WriteFile(heicPath, heifthumb.SynthJPEGHEIF(j320, 2, 1), 0o644); err != nil {
+		return nil, err
 	}
-	if needsBuild(heifPath) {
-		if err := os.WriteFile(heifPath, heifthumb.SynthJPEGHEIFMIF1(j320, 2, 1), 0o644); err != nil {
-			return nil, err
-		}
+	if err := os.WriteFile(heifPath, heifthumb.SynthJPEGHEIFMIF1(j320, 2, 1), 0o644); err != nil {
+		return nil, err
 	}
-	if needsBuild(irotPath) {
-		if err := os.WriteFile(irotPath, heifthumb.SynthJPEGHEIFWithPrimaryIrot(j320, 2, 1, 1), 0o644); err != nil {
-			return nil, err
-		}
+	if err := os.WriteFile(irotPath, heifthumb.SynthJPEGHEIFWithPrimaryIrot(j320, 2, 1, 1), 0o644); err != nil {
+		return nil, err
 	}
-	if needsBuild(dngPath) {
-		if err := os.WriteFile(dngPath, rawpreview.SynthTIFFJPEG(j640), 0o644); err != nil {
-			return nil, err
-		}
+	if err := os.WriteFile(dngPath, rawpreview.SynthTIFFJPEG(j640), 0o644); err != nil {
+		return nil, err
 	}
 
 	phonePath := filepath.Join(dir, "heic_phone_primary.heic")
-	if needsBuild(phonePath) {
-		if err := copyReferenceSoundboardHEIC(phonePath); err != nil {
-			return nil, fmt.Errorf("heic phone reference: %w", err)
-		}
+	if err := copyReferenceSoundboardHEIC(phonePath); err != nil {
+		return nil, fmt.Errorf("heic phone reference: %w", err)
 	}
 	phoneDisplayPNG := filepath.Join(dir, "heic_phone_primary_display.png")
-	if needsBuild(phoneDisplayPNG) {
-		if err := copyReferenceSoundboardDisplayPNG(phoneDisplayPNG); err != nil {
-			return nil, fmt.Errorf("heic phone display sidecar: %w", err)
-		}
+	if err := copyReferenceSoundboardDisplayPNG(phoneDisplayPNG); err != nil {
+		return nil, fmt.Errorf("heic phone display sidecar: %w", err)
 	}
 
-	jxlPath := filepath.Join(dir, "zoltan_unsplash.jxl")
-	if needsBuild(jxlPath) {
-		if err := copyReferenceJXLUnsplash(jxlPath); err != nil {
-			return nil, fmt.Errorf("jxl reference: %w", err)
-		}
-	}
 	avifIrotPath := filepath.Join(dir, "avif_irot_imir.avif")
 	if err := copyReferenceAVIFIrotImir(avifIrotPath); err != nil {
 		return nil, fmt.Errorf("avif irot/imir reference: %w", err)
@@ -117,7 +89,6 @@ func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 		{ID: "heic_jpeg_irot", Path: irotPath, Category: "image", Description: "HEIC embedded JPEG + primary irot (90° CCW)"},
 		{ID: "heic_phone_primary", Path: phonePath, Category: "image", Description: "HEIC HEVC primary still (pinned phone reference)"},
 		{ID: "raw_dng_preview", Path: dngPath, Category: "image", Description: "DNG-style TIFF embedded JPEG preview"},
-		{ID: "jxl_unsplash", Path: jxlPath, Category: "image", Description: "JPEG XL still (pinned Unsplash photo)"},
 	}
 	return assets, nil
 }

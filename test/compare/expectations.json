@@ -1660,46 +1660,6 @@
       "assetId": "mp4_av1_bt709_full",
       "check": "thumbnail_small",
       "expect": "supported"
-    },
-    {
-      "assetId": "jxl_unsplash",
-      "check": "artwork",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "jxl_unsplash",
-      "check": "duration",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "jxl_unsplash",
-      "check": "lyrics",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "jxl_unsplash",
-      "check": "probe",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "jxl_unsplash",
-      "check": "subtitles",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "jxl_unsplash",
-      "check": "tags",
-      "expect": "skipped"
-    },
-    {
-      "assetId": "jxl_unsplash",
-      "check": "thumbnail_large",
-      "expect": "supported"
-    },
-    {
-      "assetId": "jxl_unsplash",
-      "check": "thumbnail_small",
-      "expect": "supported"
     }
   ]
 }

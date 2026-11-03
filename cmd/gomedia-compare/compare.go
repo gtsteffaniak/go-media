@@ -235,19 +235,6 @@ func checkThumbnailPresetOnce(a Asset, thumbDir string, preset thumbnailPresetCo
 
 	tr, gErr := media.Thumbnail(f, f.Size(), opt)
 
-	if ffmpegCannotReferenceJXL(a.Path) {
-		// No libjxl in this ffmpeg: nothing to compare against. Judge go-media alone.
-		if gErr != nil {
-			res.goErr = gErr
-			res.Status = classifyGoErr(gErr)
-			res.Detail = gErr.Error()
-			return res
-		}
-		res.Status = StatusSupported
-		res.Detail = "go-media decode only (ffmpeg has no JPEG XL decoder; install ffmpeg with libjxl for a reference)"
-		return res
-	}
-
 	base := a.ID + "_" + preset.Name
 	goPath := filepath.Join(thumbDir, base+"_go.jpg")
 	ffPath := filepath.Join(thumbDir, base+"_ff.jpg")
@@ -459,7 +446,7 @@ func relReportPath(abs string) string {
 func isStillImageAsset(id string) bool {
 	switch id {
 	case "heic_jpeg_thumb", "heif_jpeg_thumb", "heic_jpeg_irot", "heic_phone_primary",
-		"raw_dng_preview", "avif_coded", "avif_bt709", "avif_full_range", "avif_irot_imir", "jxl_unsplash":
+		"raw_dng_preview", "avif_coded", "avif_bt709", "avif_full_range", "avif_irot_imir":
 		return true
 	}
 	return false
