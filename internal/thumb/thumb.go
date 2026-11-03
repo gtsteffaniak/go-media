@@ -22,6 +22,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"slices"
 	"strings"
 
@@ -77,11 +78,11 @@ func Generate(r interface {
 	ReadAt([]byte, int64) (int, error)
 }, size int64, opt Options) (Result, error) {
 	normalizeOptions(&opt)
-	img, src, rot, err := sourceImage(r, size, opt)
+	img, src, o, err := sourceImage(r, size, opt)
 	if err != nil {
 		return Result{}, err
 	}
-	return encodeImageRaster(img, fitOptions(opt, rot), src, rot)
+	return encodeImageRaster(img, fitOptions(opt, o.rot), src, o)
 }
 
 // fitOptions returns opt with MaxWidth and MaxHeight swapped when rot turns
@@ -93,23 +94,24 @@ func fitOptions(opt Options, rot int) Options {
 	return opt
 }
 
-// sourceImage decodes embedded art or a video frame without encoding. rot is
-// the display rotation still to apply to the scaled image (MP4 tkhd matrix).
+// sourceImage decodes embedded art or a video frame without encoding. The
+// returned orientation is the display transform still to apply to the scaled
+// image (MP4 tkhd rotation, HEIF irot/imir).
 func sourceImage(r interface {
 	ReadAt([]byte, int64) (int, error)
-}, size int64, opt Options) (image.Image, string, int, error) {
-	var rot int
-	img, src, err := decodeSource(r, size, opt, &rot)
+}, size int64, opt Options) (image.Image, string, orientation, error) {
+	var o orientation
+	img, src, err := decodeSource(r, size, opt, &o)
 	if err != nil {
-		return nil, "", 0, err
+		return nil, "", orientation{}, err
 	}
-	return img, src, rot, nil
+	return img, src, o, nil
 }
 
-// decodeSource does the work of sourceImage, storing the MP4 rotation in rot.
+// decodeSource does the work of sourceImage, storing the display transform in o.
 func decodeSource(r interface {
 	ReadAt([]byte, int64) (int, error)
-}, size int64, opt Options, rot *int) (image.Image, string, error) {
+}, size int64, opt Options, o *orientation) (image.Image, string, error) {
 	if opt.PreferEmbedded {
 		if data, mime, err := tagread.Artwork(r, size); err == nil {
 			img, err := decodeBytes(data, mime, opt.MaxWidth, opt.MaxHeight, opt.Fast)
@@ -132,8 +134,8 @@ func decodeSource(r interface {
 		if err != nil {
 			return nil, "", err
 		}
-		*rot = src.Rotation()
-		opt = fitOptions(opt, *rot)
+		o.rot = src.Rotation()
+		opt = fitOptions(opt, o.rot)
 		if b, ok := src.MJPEGFrame(opt.SeekPercent); ok {
 			img, err := decodeBytes(b, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
 			if err != nil {
@@ -348,11 +350,17 @@ func decodeSource(r interface {
 		}
 		return yimg, "decode", nil
 	case format.HEIC, format.HEIF:
-		if deg, ok := heifthumb.PrimaryDisplayRotation(r, size); ok {
-			*rot = deg
+		// One bounded top-level walk reads the meta box; irot/imir are parsed
+		// from it once and the JPEG/coded paths reuse the buffered bytes.
+		var mr io.ReaderAt = r
+		if meta, err := heifthumb.ReadMeta(r, size); err == nil {
+			if t, ok := meta.PrimaryTransform(r, size); ok {
+				*o = orientationFromHEIF(t)
+			}
+			mr = meta.ReaderAt(r)
 		}
-		opt = fitOptions(opt, *rot)
-		data, err := heifthumb.JPEGPreview(r, size, opt.MaxWidth, opt.MaxHeight)
+		opt = fitOptions(opt, o.rot)
+		data, err := heifthumb.JPEGPreview(mr, size, opt.MaxWidth, opt.MaxHeight)
 		if err == nil {
 			img, err := decodeBytes(data, "image/jpeg", opt.MaxWidth, opt.MaxHeight, opt.Fast)
 			if err != nil {
@@ -364,7 +372,7 @@ func decodeSource(r interface {
 		if !errors.As(err, &ue) {
 			return nil, "", err
 		}
-		if yimg, err := heifthumb.CodedPrimaryYCbCr(r, size); err != nil {
+		if yimg, err := heifthumb.CodedPrimaryYCbCr(mr, size); err != nil {
 			return nil, "", err
 		} else if yimg != nil {
 			return yimg, "decode", nil
@@ -433,8 +441,9 @@ func decodeBytes(data []byte, mime string, maxW, maxH int, fast bool) (image.Ima
 	return img, nil
 }
 
-// encodeImageRaster scales img to fit opt, turns it by rot, and encodes it.
-func encodeImageRaster(img image.Image, opt Options, src string, rot int) (Result, error) {
+// encodeImageRaster scales img to fit opt, applies the display transform o,
+// and encodes it.
+func encodeImageRaster(img image.Image, opt Options, src string, o orientation) (Result, error) {
 	mode := scalerFromOptions(opt)
 	jpegOut := opt.Format == "" || opt.Format == "jpeg"
 	if t, ok := img.(*h264.ThumbYCbCr); ok && opt.Format != "png" {
@@ -461,7 +470,7 @@ func encodeImageRaster(img image.Image, opt Options, src string, rot int) (Resul
 			img = scaleImage(img, opt.MaxWidth, opt.MaxHeight, mode)
 		}
 	}
-	img = rotateImage(img, rot)
+	img = orientImage(img, o)
 	var buf bytes.Buffer
 	if jpegOut {
 		b := img.Bounds()

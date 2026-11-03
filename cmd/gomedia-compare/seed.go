@@ -37,6 +37,11 @@ const (
 
 	referenceJXLUnsplash    = "zoltan_unsplash.jxl"
 	referenceJXLUnsplashSHA = "2ae663516f57453f4f3a5cf6917bd6f846759cf57f7cc7c62d0a79de86f64169"
+	// referenceAVIFIrotImir is the seed frame (t=2s, 320×180) encoded by
+	// avifenc 1.2.1 with irot=1 and imir axis 0 (display: transpose). Pinned
+	// because ffmpeg 9.0.2 cannot write irot/imir into AVIF.
+	referenceAVIFIrotImir    = "avif/irot1_imir0.avif"
+	referenceAVIFIrotImirSHA = "95c62f0e77003cb5b032a0b37bf7e33927bbb53beb66fa9d3a05d38f6892dd16"
 )
 
 // seedID is the short identifier shown in the report footer.
@@ -66,6 +71,17 @@ func copyReferenceSoundboardHEIC(dst string) error {
 		return err
 	} else if !ok {
 		return fmt.Errorf("%s checksum mismatch (expected %s)", src, referenceSoundboardHEICSHA)
+	}
+	return copyFile(src, dst)
+}
+
+// copyReferenceAVIFIrotImir installs the checked-in rotated+mirrored AVIF.
+func copyReferenceAVIFIrotImir(dst string) error {
+	src := filepath.Join(findRepoRoot("."), "test", "data", filepath.FromSlash(referenceAVIFIrotImir))
+	if ok, err := fileMatchesSHA256(src, referenceAVIFIrotImirSHA); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("%s checksum mismatch (expected %s)", src, referenceAVIFIrotImirSHA)
 	}
 	return copyFile(src, dst)
 }

@@ -105,7 +105,13 @@ func appendImageCompareAssets(ffmpeg, clip, outDir string) ([]Asset, error) {
 			return nil, fmt.Errorf("jxl reference: %w", err)
 		}
 	}
+	avifIrotPath := filepath.Join(dir, "avif_irot_imir.avif")
+	if err := copyReferenceAVIFIrotImir(avifIrotPath); err != nil {
+		return nil, fmt.Errorf("avif irot/imir reference: %w", err)
+	}
+
 	assets := []Asset{
+		{ID: "avif_irot_imir", Path: avifIrotPath, Category: "image", Description: "AVIF AV1 primary + irot 90° CCW + imir axis 0 (pinned avifenc)"},
 		{ID: "heic_jpeg_thumb", Path: heicPath, Category: "image", Description: "HEIC embedded JPEG thumbnail"},
 		{ID: "heif_jpeg_thumb", Path: heifPath, Category: "image", Description: "HEIF (mif1) embedded JPEG thumbnail"},
 		{ID: "heic_jpeg_irot", Path: irotPath, Category: "image", Description: "HEIC embedded JPEG + primary irot (90° CCW)"},

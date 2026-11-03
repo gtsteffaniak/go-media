@@ -1,4 +1,9 @@
 // Package heifthumb reads embedded JPEG thumbnails from HEIF/HEIC/AVIF ISOBMFF files.
+//
+// ReadMeta walks only top-level box headers and buffers the meta box (up to
+// 1 MiB); Meta.ReaderAt lets the irot/imir, JPEG preview and coded-primary
+// paths share those bytes. PrimaryTransform reports irot and imir, which
+// callers apply in ffmpeg's order: rotate counter-clockwise, then mirror.
 package heifthumb
 
 import (

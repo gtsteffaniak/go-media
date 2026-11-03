@@ -37,4 +37,9 @@ Thumbnail HEVC decode uses **[gen2brain/h265](https://github.com/gen2brain/h265)
 
 ## AV1 keyframe decode (`internal/av1decode`)
 
-Thumbnail AV1/AVIF decode uses **[gtsteffaniak/go-av1](https://github.com/gtsteffaniak/go-av1)** (MIT), a pure-Go AV1 decoder with optional `GOEXPERIMENT=simd` kernels (same experiment model as go-vpx). go-media depends on a pre-release commit until the module is tagged (`go.mod` pseudo-version); bump to a tagged release after go-av1 is published. Wrapped for MP4/MKV/WebM sync/keyframe seek and AVIF primary/grid stills. Film grain synthesis is skipped; 10/12-bit output is down-converted to 8-bit YCbCr for JPEG/WebP thumbs.
+Thumbnail AV1 decode uses two pure-Go decoders:
+
+- **[gtsteffaniak/go-av1](https://github.com/gtsteffaniak/go-av1)** (MIT) for MP4/MKV/WebM keyframes via `KeyframeDecoder`, with film grain skipped. It uses much less memory than gav1d on video.
+- **[gen2brain/gav1d](https://github.com/gen2brain/gav1d)** (BSD-2-Clause) for AVIF stills and grids via `avif.DecodeColor`. It is a bit-exact port of dav1d, 2–4× faster than go-av1 on AVIF, and applies film grain (not skippable).
+
+10/12-bit output is down-converted to 8-bit YCbCr for JPEG/WebP thumbs.
