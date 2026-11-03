@@ -14,35 +14,37 @@ func main() {
 	assetsDir := fs.String("assets", ".assets", "generated fixture output (gitignored)")
 	reportDir := fs.String("report", "report_site", "static report site root")
 	doSeed := fs.Bool("fetch-seed", true, "download/verify seed before generate")
-	doGen := fs.Bool("generate", true, "regenerate asset matrix with ffmpeg")
+	doGen := fs.Bool("generate", true, "generate missing asset matrix entries with ffmpeg")
+	regen := fs.Bool("regenerate", false, "re-run ffmpeg for every generated fixture even if it already exists (AV1 fixtures are always pinned)")
 	doRun := fs.Bool("run", true, "run comparisons and write report")
 	expectationsPath := fs.String("expectations", "", "path to expectations.json (required with -gate)")
 	gate := fs.Bool("gate", false, "exit non-zero when results differ from expectations")
+	assetSelectors := fs.String("only", "", "comma-separated asset selectors (exact id or prefix, e.g. jxl,jxl_unsplash); empty = all")
 	_ = fs.Parse(os.Args[1:])
+	forceRegenerate = *regen
 
-	if err := runAll(*seedDir, *assetsDir, *reportDir, *doSeed, *doGen, *doRun, *expectationsPath, *gate); err != nil {
+	if err := runAll(*seedDir, *assetsDir, *reportDir, *doSeed, *doGen, *doRun, *expectationsPath, *gate, *assetSelectors); err != nil {
 		fmt.Fprintf(os.Stderr, "compare: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 // runAll orchestrates seed fetch, asset generation, comparison, and report output.
-func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks bool, expectationsPath string, gate bool) error {
+func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks bool, expectationsPath string, gate bool, assetSelectors string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	// When invoked from repo root via script, paths are under test/compare.
-	base := cwd
-	if _, err := os.Stat(filepath.Join(base, "go.mod")); err != nil {
-		cmdDir := filepath.Join(cwd, "cmd", "gomedia-compare")
-		if st, err := os.Stat(cmdDir); err == nil && st.IsDir() {
-			base = cmdDir
+	repoRoot := findRepoRoot(cwd)
+	seedDir = resolveComparePath(repoRoot, seedDir)
+	assetsDir = resolveComparePath(repoRoot, assetsDir)
+	reportDir = resolveComparePath(repoRoot, reportDir)
+
+	if !generate {
+		if err := ensurePinnedAssetsForSelectors(assetsDir, assetSelectors); err != nil {
+			return err
 		}
 	}
-	seedDir = absUnder(base, seedDir)
-	assetsDir = absUnder(base, assetsDir)
-	reportDir = absUnder(base, reportDir)
 
 	var seedPath string
 	if fetchSeed {
@@ -67,6 +69,23 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 		}
 	}
 
+	assets, err = filterAssets(assets, assetSelectors)
+	if err != nil {
+		return err
+	}
+	if tokens := parseAssetSelectors(assetSelectors); len(tokens) > 0 {
+		fmt.Printf("compare: asset filter %q → %d asset(s)\n", assetSelectors, len(assets))
+		for _, a := range assets {
+			if a.ID == "jxl_unsplash" {
+				if ffmpegCanDecodeJPEGXL(a.Path) {
+					fmt.Println("compare: jxl_unsplash — ffmpeg reference decodes .jxl directly (libjxl)")
+				} else {
+					fmt.Println("compare: jxl_unsplash — ffmpeg has no JPEG XL decoder; go-media decode only (install ffmpeg with libjxl for a reference)")
+				}
+			}
+		}
+	}
+
 	if !runChecks {
 		return nil
 	}
@@ -80,7 +99,6 @@ func runAll(seedDir, assetsDir, reportDir string, fetchSeed, generate, runChecks
 	thumbDir := filepath.Join(reportDir, "media", "thumbs")
 	_scalerBenchmarks = runScalerBenchmarks(assets, thumbDir)
 	flat := flattenResults(nested)
-	repoRoot := findRepoRoot(base)
 	_buildModeTimings = collectBuildModeTimings(assets, flat, repoRoot)
 	if err := writeReport(reportDir, assets, nested); err != nil {
 		return err
@@ -127,6 +145,23 @@ func absUnder(base, p string) string {
 	return filepath.Join(base, p)
 }
 
+// resolveComparePath maps default harness flags to stable repo locations.
+// Checked-in primary media lives under test/data/; generated matrix under cmd/gomedia-compare/.assets/.
+func resolveComparePath(repoRoot, p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	harness := filepath.Join(repoRoot, "cmd", "gomedia-compare")
+	switch filepath.Clean(p) {
+	case ".assets", ".seed":
+		return filepath.Join(harness, p)
+	case "report_site":
+		return filepath.Join(repoRoot, "test", "compare", "report_site")
+	default:
+		return filepath.Join(repoRoot, p)
+	}
+}
+
 // loadAssetManifest rebuilds the asset list from a prior generate run.
 func loadAssetManifest(assetsDir string) ([]Asset, error) {
 	var ids = []struct {
@@ -159,6 +194,7 @@ func loadAssetManifest(assetsDir string) ([]Asset, error) {
 		{"heic_jpeg_irot", "image/heic_jpeg_irot.heic", "image", "HEIC embedded JPEG + irot", nil},
 		{"heic_phone_primary", "image/heic_phone_primary.heic", "image", "HEIC HEVC primary (pinned phone)", nil},
 		{"raw_dng_preview", "image/raw_dng_preview.dng", "image", "RAW DNG embedded JPEG preview", nil},
+		{"jxl_unsplash", "image/zoltan_unsplash.jxl", "image", "JPEG XL still (pinned Unsplash)", nil},
 		{"mjpeg_mp4", "video/mjpeg.mp4", "video", "MJPEG in MP4", nil},
 		{"mp3_cbr", "audio/mp3_cbr.mp3", "audio", "MP3 CBR", nil},
 		{"mp3_vbr", "audio/mp3_vbr.mp3", "audio", "MP3 VBR", nil},

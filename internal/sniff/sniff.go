@@ -11,6 +11,11 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/ioat"
 )
 
+// ISO/IEC 18181-3 container signature box (12 bytes).
+var jxlContainerSignature = []byte{
+	0x00, 0x00, 0x00, 0x0C, 'J', 'X', 'L', ' ', 0x0D, 0x0A, 0x87, 0x0A,
+}
+
 // Detect reads a prefix from r and returns the container format.
 func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 	if size < 4 {
@@ -21,6 +26,12 @@ func Detect(r io.ReaderAt, size int64) (format.ID, error) {
 	buf = buf[:n]
 	if len(buf) < 4 {
 		return "", errs.NotMedia
+	}
+	if buf[0] == 0xFF && buf[1] == 0x0A {
+		return format.JXL, nil
+	}
+	if len(buf) >= len(jxlContainerSignature) && bytes.Equal(buf[:len(jxlContainerSignature)], jxlContainerSignature) {
+		return format.JXL, nil
 	}
 	if id, ok := sniffMPEGTS(r, size); ok {
 		return id, nil

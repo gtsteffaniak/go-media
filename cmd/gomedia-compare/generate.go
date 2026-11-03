@@ -57,9 +57,11 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	}
 
 	clip := filepath.Join(outDir, "_seed_clip.mp4")
-	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-i", seedPath, "-t", "5", "-c", "copy", clip); err != nil {
-		return nil, fmt.Errorf("seed clip: %w", err)
+	if needsBuild(clip) {
+		if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+			"-i", seedPath, "-t", "5", "-c", "copy", clip); err != nil {
+			return nil, fmt.Errorf("seed clip: %w", err)
+		}
 	}
 
 	aviMPEG4Args := []string{"-i", clip, "-c:v", mpeg4Enc, "-g", "30", "-q:v", "3", "-an", "-f", "avi"}
@@ -70,14 +72,18 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	audioSrc := "sine=frequency=440:duration=5"
 
 	coverPNG := filepath.Join(outDir, "_cover.png")
-	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-f", "lavfi", "-i", "color=c=orange:s=320x320:d=0.1", "-frames:v", "1", coverPNG); err != nil {
-		return nil, err
+	if needsBuild(coverPNG) {
+		if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+			"-f", "lavfi", "-i", "color=c=orange:s=320x320:d=0.1", "-frames:v", "1", coverPNG); err != nil {
+			return nil, err
+		}
 	}
 
 	lyrics := filepath.Join(outDir, "_lyrics.lrc")
-	if err := os.WriteFile(lyrics, []byte("[00:00.00]Test lyrics line\n[00:02.00]Second line\n"), 0o644); err != nil {
-		return nil, err
+	if needsBuild(lyrics) {
+		if err := os.WriteFile(lyrics, []byte("[00:00.00]Test lyrics line\n[00:02.00]Second line\n"), 0o644); err != nil {
+			return nil, err
+		}
 	}
 
 	av1Vid := av1VideoEncodeArgs(av1Enc)
@@ -85,8 +91,10 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	mkvAV1Args := append([]string{"-i", clip}, append(av1Vid, "-f", "matroska")...)
 	webmAV1Args := append([]string{"-i", clip}, av1Vid...)
 	avifStill := filepath.Join(outDir, "_avif_still.jpg")
-	if err := seedFrameJPEG(ffmpeg, clip, avifStill, 320, 180); err != nil {
-		return nil, fmt.Errorf("avif still frame: %w", err)
+	if needsBuild(avifStill) {
+		if err := seedFrameJPEG(ffmpeg, clip, avifStill, 320, 180); err != nil {
+			return nil, fmt.Errorf("avif still frame: %w", err)
+		}
 	}
 	avifArgs := []string{"-i", avifStill, "-c:v", av1Enc, "-frames:v", "1"}
 	if av1Enc == "libaom-av1" {
@@ -169,12 +177,17 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		}
 		args := append([]string{"-y", "-hide_banner", "-loglevel", "error"}, s.args...)
 		args = append(args, out)
-		if s.id == "asf_wmv3" {
+		switch {
+		case !needsBuild(out):
+			// Already generated; reuse it (-regenerate / COMPARE_GENERATE=1 rebuilds).
+		case s.id == "asf_wmv3":
 			if err := copyReferenceWMV3(out); err != nil {
 				return nil, fmt.Errorf("%s: %w", s.id, err)
 			}
-		} else if err := runFF(ffmpeg, args...); err != nil {
-			return nil, fmt.Errorf("%s: %w", s.id, err)
+		default:
+			if err := runFF(ffmpeg, args...); err != nil {
+				return nil, fmt.Errorf("%s: %w", s.id, err)
+			}
 		}
 		assets = append(assets, Asset{ID: s.id, Path: out, Category: s.cat, Description: s.desc, Sidecars: s.sidecars})
 	}
@@ -188,12 +201,14 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 		return nil, err
 	}
 	mkvSubs := filepath.Join(outDir, "video/mkv_subtitles.mkv")
-	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-i", clip, "-i", subSRT,
-		"-map", "0:v", "-map", "1:s",
-		"-c", "copy", "-c:s", "srt",
-		mkvSubs); err != nil {
-		return nil, err
+	if needsBuild(mkvSubs) {
+		if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+			"-i", clip, "-i", subSRT,
+			"-map", "0:v", "-map", "1:s",
+			"-c", "copy", "-c:s", "srt",
+			mkvSubs); err != nil {
+			return nil, err
+		}
 	}
 	assets = append(assets, Asset{
 		ID: "mkv_subtitles", Path: mkvSubs, Category: "video",
@@ -202,14 +217,18 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 
 	// Sidecar subtitles: stem must match video base name for ExternalSubtitleTracks.
 	sampleMP4 := filepath.Join(outDir, "video/sample.mp4")
-	if err := copyFile(videoBase, sampleMP4); err != nil {
-		return nil, err
+	if needsBuild(sampleMP4) {
+		if err := copyFile(videoBase, sampleMP4); err != nil {
+			return nil, err
+		}
 	}
 	for _, name := range []string{"sample.en.srt", "sample.en.vtt", "sample.en.ass"} {
 		src := filepath.Join(outDir, "subtitles", name)
 		dst := filepath.Join(outDir, "video", name)
-		if err := copyFile(src, dst); err != nil {
-			return nil, err
+		if needsBuild(dst) {
+			if err := copyFile(src, dst); err != nil {
+				return nil, err
+			}
 		}
 	}
 	assets = append(assets, Asset{
@@ -225,22 +244,24 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	// MP4 with embedded mov_text (tx3g) + TTML (stpp). Pinned ffmpeg 9.0.2 cannot mux WebVTT into
 	// ISOBMFF; wvtt extract is covered by isobmff unit tests.
 	mp4Mov := filepath.Join(outDir, "video/_mp4_mov_text.mp4")
-	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-i", clip, "-i", subSRT,
-		"-map", "0:v", "-map", "1", "-c:v", "copy", "-c:s", "mov_text", mp4Mov); err != nil {
-		return nil, fmt.Errorf("mp4 mov_text: %w", err)
-	}
 	mp4TTML := filepath.Join(outDir, "video/_mp4_stpp.mp4")
-	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-i", clip, "-i", subSRT,
-		"-map", "0:v", "-map", "1", "-c:v", "copy", "-c:s", "ttml", mp4TTML); err != nil {
-		return nil, fmt.Errorf("mp4 ttml: %w", err)
-	}
 	mp4Embed := filepath.Join(outDir, "video/mp4_embedded_subs.mp4")
-	if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-		"-i", mp4Mov, "-i", mp4TTML,
-		"-map", "0:v", "-map", "0:s", "-map", "1:s", "-c", "copy", mp4Embed); err != nil {
-		return nil, fmt.Errorf("mp4_embedded_subs: %w", err)
+	if needsBuild(mp4Embed) {
+		if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+			"-i", clip, "-i", subSRT,
+			"-map", "0:v", "-map", "1", "-c:v", "copy", "-c:s", "mov_text", mp4Mov); err != nil {
+			return nil, fmt.Errorf("mp4 mov_text: %w", err)
+		}
+		if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+			"-i", clip, "-i", subSRT,
+			"-map", "0:v", "-map", "1", "-c:v", "copy", "-c:s", "ttml", mp4TTML); err != nil {
+			return nil, fmt.Errorf("mp4 ttml: %w", err)
+		}
+		if err := runFF(ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+			"-i", mp4Mov, "-i", mp4TTML,
+			"-map", "0:v", "-map", "0:s", "-map", "1:s", "-c", "copy", mp4Embed); err != nil {
+			return nil, fmt.Errorf("mp4_embedded_subs: %w", err)
+		}
 	}
 	assets = append(assets, Asset{
 		ID: "mp4_embedded_subs", Path: mp4Embed, Category: "video",
@@ -252,8 +273,10 @@ func generateAssets(seedPath, outDir string) ([]Asset, error) {
 	// Lyrics sidecar for FLAC
 	flacPath := filepath.Join(outDir, "audio/flac_tags.flac")
 	flacLyrics := strings.TrimSuffix(flacPath, filepath.Ext(flacPath)) + ".lrc"
-	if err := copyFile(lyrics, flacLyrics); err != nil {
-		return nil, err
+	if needsBuild(flacLyrics) {
+		if err := copyFile(lyrics, flacLyrics); err != nil {
+			return nil, err
+		}
 	}
 	for i := range assets {
 		if assets[i].ID == "flac_tags" {
@@ -292,13 +315,15 @@ func writeSampleSubtitles(srt, vtt, ass string) error {
 	srtBody := "1\n00:00:00,000 --> 00:00:02,000\nHello from SRT\n\n2\n00:00:02,000 --> 00:00:04,000\nSecond cue\n"
 	vttBody := "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello from VTT\n\n00:00:02.000 --> 00:00:04.000\nSecond cue\n"
 	assBody := "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,Hello from ASS\n"
-	if err := os.WriteFile(srt, []byte(srtBody), 0o644); err != nil {
-		return err
+	for _, f := range []struct{ path, body string }{{srt, srtBody}, {vtt, vttBody}, {ass, assBody}} {
+		if !needsBuild(f.path) {
+			continue
+		}
+		if err := os.WriteFile(f.path, []byte(f.body), 0o644); err != nil {
+			return err
+		}
 	}
-	if err := os.WriteFile(vtt, []byte(vttBody), 0o644); err != nil {
-		return err
-	}
-	return os.WriteFile(ass, []byte(assBody), 0o644)
+	return nil
 }
 
 // ffmpegEncoderSet lists encoder short names from ffmpeg -encoders.
@@ -345,6 +370,19 @@ func av1VideoEncodeArgs(enc string) []string {
 	default:
 		return append([]string{"-crf", "40"}, out...)
 	}
+}
+
+// forceRegenerate is set by -regenerate: rebuild every ffmpeg-generated fixture.
+var forceRegenerate bool
+
+// needsBuild reports whether a generated file must be (re)built. Existing outputs are
+// left alone unless -regenerate is set, so nothing that already exists is regenerated.
+func needsBuild(path string) bool {
+	if forceRegenerate {
+		return true
+	}
+	_, err := os.Stat(path)
+	return err != nil
 }
 
 // runFF executes ffmpeg with the given arguments.
