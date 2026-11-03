@@ -61,6 +61,10 @@ func sniffISOBrand(major string, compat []string) (format.ID, bool) {
 	if hasBrand(major, compat, "avif", "avis") {
 		return format.AVIF, true
 	}
+	// Only the "jxl " major/compatible brand; jxll/jxlc/jbrd are container box types, not brands.
+	if hasBrand(major, compat, "jxl ") {
+		return format.JXL, true
+	}
 	if hasBrand(major, compat, "heic", "heix", "heim", "heis", "hevc", "hevx", "mif1", "msf1") {
 		if major == "mif1" || major == "msf1" || hasBrand(major, compat, "mif1", "msf1") {
 			return format.HEIF, true

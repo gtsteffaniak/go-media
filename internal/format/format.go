@@ -26,6 +26,7 @@ const (
 	HEIC ID = "heic"
 	HEIF ID = "heif"
 	AVIF ID = "avif"
+	JXL  ID = "jxl"
 
 	CR2 ID = "cr2"
 	CR3 ID = "cr3"
@@ -37,6 +38,11 @@ const (
 	RAF ID = "raf"
 	PEF ID = "pef"
 )
+
+// IsJXLImage reports JPEG XL still images decoded by jxldecode.
+func IsJXLImage(id ID) bool {
+	return id == JXL
+}
 
 // IsHEIFImage reports ISO BMFF still-image brands handled by the HEIF thumb path.
 func IsHEIFImage(id ID) bool {

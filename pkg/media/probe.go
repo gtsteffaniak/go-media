@@ -99,13 +99,15 @@ func probeOther(r io.ReaderAt, size int64, id format.ID, info *ProbeInfo) (*Prob
 		info.FormatName = "heif"
 	case format.AVIF:
 		info.FormatName = "avif"
+	case format.JXL:
+		info.FormatName = "jxl"
 	case format.CR2, format.CR3, format.NEF, format.ARW, format.DNG, format.ORF, format.RW2, format.RAF, format.PEF:
 		info.FormatName = string(id)
 	default:
 		info.FormatName = string(id)
 	}
 
-	if format.IsHEIFImage(id) || format.IsCameraRAW(id) {
+	if format.IsHEIFImage(id) || format.IsJXLImage(id) || format.IsCameraRAW(id) {
 		return info, nil
 	}
 

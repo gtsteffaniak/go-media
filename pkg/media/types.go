@@ -19,6 +19,7 @@ const (
 	FormatHEIC Format = "heic"
 	FormatHEIF Format = "heif"
 	FormatAVIF Format = "avif"
+	FormatJXL  Format = "jxl"
 
 	FormatCR2 Format = "cr2"
 	FormatCR3 Format = "cr3"

@@ -36,6 +36,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/heifthumb"
 	"github.com/gtsteffaniak/go-media/internal/hevcdecode"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
+	"github.com/gtsteffaniak/go-media/internal/jxldecode"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 	ps "github.com/gtsteffaniak/go-media/internal/mpegps"
 	ts "github.com/gtsteffaniak/go-media/internal/mpegts"
@@ -377,6 +378,12 @@ func decodeSource(r interface {
 			return yimg, "decode", nil
 		}
 		return nil, "", err
+	case format.JXL:
+		img, err := jxldecode.Decode(r, size, opt.MaxWidth, opt.MaxHeight)
+		if err != nil {
+			return nil, "", err
+		}
+		return img, "decode", nil
 	case format.AVIF:
 		data, err := heifthumb.JPEGPreview(r, size, opt.MaxWidth, opt.MaxHeight)
 		if err == nil {
