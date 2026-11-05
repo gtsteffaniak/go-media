@@ -69,15 +69,16 @@ func mapThumbOptions(opt ThumbnailOptions) thumb.Options {
 		seek = opt.Seek
 	}
 	topt := thumb.Options{
-		MaxWidth:       opt.MaxWidth,
-		MaxHeight:      opt.MaxHeight,
-		SeekPercent:    seek,
-		Format:         opt.Format,
-		JPEGQuality:    opt.JPEGQuality,
-		Quality:        opt.Quality,
-		Fast:           opt.Fast,
-		PreferEmbedded: opt.PreferEmbedded,
-		Exact:          opt.Exact,
+		MaxWidth:        opt.MaxWidth,
+		MaxHeight:       opt.MaxHeight,
+		SeekPercent:     seek,
+		Format:          opt.Format,
+		JPEGQuality:     opt.JPEGQuality,
+		Quality:         opt.Quality,
+		Fast:            opt.Fast,
+		PreferEmbedded:  opt.PreferEmbedded,
+		Exact:           opt.Exact,
+		MaxSourcePixels: opt.MaxSourcePixels,
 	}
 	switch opt.Filter {
 	case ThumbnailFilterFast:

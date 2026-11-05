@@ -1,8 +1,10 @@
 package media_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gtsteffaniak/go-media/pkg/media"
@@ -53,5 +55,26 @@ func TestProbeJXLUnsplash(t *testing.T) {
 	}
 	if info.FormatName != "jxl" {
 		t.Fatalf("FormatName = %q, want jxl", info.FormatName)
+	}
+}
+
+func TestThumbnailJXLMaxSourcePixels(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "data", "zoltan_unsplash.jxl")
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(path, err)
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, box := range []int{0, 256, 16384} {
+		_, err = media.Thumbnail(f, st.Size(), media.ThumbnailOptions{
+			MaxWidth: box, MaxHeight: box, Format: "jpeg", MaxSourcePixels: 1000,
+		})
+		if !errors.Is(err, media.ErrUnsupported) || !strings.Contains(err.Error(), "1000 px") {
+			t.Fatalf("box %d: want ErrUnsupported naming the cap, got %v", box, err)
+		}
 	}
 }

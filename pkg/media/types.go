@@ -132,6 +132,15 @@ type ThumbnailOptions struct {
 	// the distance. Only VP8 and VP9 honor it today; other codecs always use
 	// the keyframe.
 	Exact bool
+	// MaxSourcePixels caps the original image area (width×height) go-media
+	// will decode, for formats whose decoder cannot downscale and must
+	// decode the full frame whatever MaxWidth/MaxHeight are. It applies
+	// equally to every box size, including full resolution. Today it is
+	// honored by JPEG XL. Images over it fail with an ErrUnsupported error
+	// naming the dimensions, after reading only a few KiB of header. Zero
+	// means no caller cap; the decoder's own ceiling (16384×16384 for JPEG
+	// XL) still applies.
+	MaxSourcePixels int64
 }
 
 // ThumbnailResult holds encoded image bytes and how they were obtained.
