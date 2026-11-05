@@ -62,6 +62,9 @@ type Options struct {
 	// Exact decodes forward to the frame at the seek time where the codec
 	// supports it (VP8, VP9). Default: keyframe at or before the seek time.
 	Exact bool
+	// MaxSourcePixels caps the original image area for decoders that must
+	// decode the full frame regardless of the box (JPEG XL). Zero: no cap.
+	MaxSourcePixels int64
 }
 
 // Result is a data type used by this package.
@@ -379,7 +382,7 @@ func decodeSource(r interface {
 		}
 		return nil, "", err
 	case format.JXL:
-		img, err := jxldecode.Decode(r, size, opt.MaxWidth, opt.MaxHeight)
+		img, err := jxldecode.DecodeWithOptions(r, size, opt.MaxWidth, opt.MaxHeight, jxldecode.Options{MaxPixels: opt.MaxSourcePixels})
 		if err != nil {
 			return nil, "", err
 		}
