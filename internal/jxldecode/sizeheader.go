@@ -72,10 +72,15 @@ func codestreamStart(p []byte) ([]byte, bool) {
 		case "jxlc":
 			return p[body:], true
 		case "jxlp":
-			if body+4 > len(p) {
+			// Bound the slice to this box so the bit reader cannot read the next box's header.
+			end := len(p)
+			if sz != 0 && sz <= uint64(len(p)-off) {
+				end = off + int(sz)
+			}
+			if body+4 > end {
 				return nil, false
 			}
-			return p[body+4:], true
+			return p[body+4 : end], true
 		}
 		if sz < hdr || sz == 0 {
 			return nil, false
