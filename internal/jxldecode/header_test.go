@@ -1,6 +1,8 @@
 package jxldecode_test
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -129,9 +131,12 @@ func TestDecodeRejectsOversizedFromPrefix(t *testing.T) {
 }
 
 func TestDecodeSameLimitForEveryBox(t *testing.T) {
-	// Images at or under the effective limit pass the probe for small and
-	// large boxes alike and fail only later because the synthetic stream
-	// has no frame data.
+	// Images at or under the effective limit must pass the probe for small
+	// and large boxes alike. The probe stage is asserted directly on the same
+	// prefix DecodeWithOptions uses. The decode stage is then asserted by
+	// checking that the reader was consumed to the end, which only happens
+	// after the probe accepted the header. The decode stage fails because the
+	// synthetic stream has no frame data.
 	cases := []struct {
 		opt  jxldecode.Options
 		dims [][2]int
@@ -141,17 +146,80 @@ func TestDecodeSameLimitForEveryBox(t *testing.T) {
 		// A cap above the decoder ceiling is clamped, not an error.
 		{jxldecode.Options{MaxPixels: 1 << 40}, [][2]int{{16384, 16384}}},
 	}
+	const size = 2 << 20
 	for _, c := range cases {
 		for _, d := range c.dims {
 			for _, box := range [][2]int{{0, 0}, {256, 256}, {8192, 8192}, {16384, 16384}} {
 				head := syntheticHeader(d[0], d[1])
-				pr := &paddedReader{head: head, size: int64(len(head))}
-				_, err := jxldecode.DecodeWithOptions(pr, pr.size, box[0], box[1], c.opt)
+
+				// Probe stage: DecodeConfig must accept the header from a
+				// prefix of the same size the decoder probes.
+				prefix := make([]byte, jxldecode.MaxProbeBytes)
+				copy(prefix, head)
+				cfg, err := jxl.DecodeConfig(bytes.NewReader(prefix))
+				if err != nil || cfg.Width != d[0] || cfg.Height != d[1] {
+					t.Fatalf("%+v %v: probe stage DecodeConfig = %+v, %v; want %dx%d", c.opt, d, cfg, err, d[0], d[1])
+				}
+
+				// Decode stage: the probe accepted it, so the file is read
+				// to the end and jxl.Decode fails on the missing frame data.
+				pr := &paddedReader{head: head, size: size}
+				_, err = jxldecode.DecodeWithOptions(pr, pr.size, box[0], box[1], c.opt)
 				if err == nil || errors.Is(err, errs.Unsupported) {
 					t.Fatalf("%+v %v box %v: want non-Unsupported error past the probe, got %v", c.opt, d, box, err)
 				}
+				if got := pr.max.Load(); got != size {
+					t.Fatalf("%+v %v box %v: decode stage not reached: read %d of %d bytes (%v)", c.opt, d, box, got, size, err)
+				}
 			}
 		}
+	}
+}
+
+// box encodes a 32-bit-size ISO BMFF box.
+func box(typ string, payload []byte) []byte {
+	b := binary.BigEndian.AppendUint32(nil, uint32(8+len(payload)))
+	b = append(b, typ...)
+	return append(b, payload...)
+}
+
+func TestDecodeRejectsOversizedBehindLargeBox(t *testing.T) {
+	// A multi-MiB leading box (ICC, Exif, XMP) must not force a full read.
+	// The codestream is located from box headers alone, and the header is
+	// rejected from its first 4 KiB.
+	cs := syntheticHeader(20000, 15000)
+	const freeLen = 2 << 20
+	var c []byte
+	c = append(c, box("JXL ", []byte{0x0D, 0x0A, 0x87, 0x0A})...)
+	c = append(c, box("ftyp", []byte("jxl \x00\x00\x00\x00jxl "))...)
+	c = append(c, box("free", make([]byte, freeLen))...)
+	jxlcOff := int64(len(c))
+	c = append(c, box("jxlc", cs)...)
+	const size = 64 << 20
+	pr := &paddedReader{head: c, size: size}
+	_, err := jxldecode.DecodeWithOptions(pr, size, 256, 256, capOpt)
+	if !errors.Is(err, errs.Unsupported) || !strings.Contains(err.Error(), "20000x15000") {
+		t.Fatalf("want errs.Unsupported naming 20000x15000, got %v", err)
+	}
+	// Box headers, then the codestream probe prefix (jxlc header is 8 bytes).
+	if got, want := pr.max.Load(), jxlcOff+8+4096; got > want {
+		t.Fatalf("read up to byte %d, want <= %d (box headers and probe prefix only)", got, want)
+	}
+}
+
+func TestDecodeHugeLargeSizeBoxTerminates(t *testing.T) {
+	// A largesize near 2^64 must not wrap the box walk to an earlier offset
+	// (which previously looped forever). The decode must return an error.
+	var c []byte
+	c = append(c, box("JXL ", []byte{0x0D, 0x0A, 0x87, 0x0A})...)
+	c = binary.BigEndian.AppendUint32(c, 1)
+	c = append(c, "free"...)
+	c = binary.BigEndian.AppendUint64(c, 0xFFFFFFFFFFFFFFF0)
+	c = append(c, make([]byte, 64)...)
+	const size = 1 << 20
+	pr := &paddedReader{head: c, size: size}
+	if _, err := jxldecode.DecodeWithOptions(pr, size, 256, 256, capOpt); err == nil {
+		t.Fatal("want error for a file with no decodable codestream")
 	}
 }
 

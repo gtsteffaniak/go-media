@@ -1,13 +1,11 @@
 package jxldecode
 
-import "encoding/binary"
-
-// headerSize reads the JPEG XL SizeHeader (ISO/IEC 18181-1 §A.2) from a bare
-// codestream or from the first jxlc/jxlp box of a container in prefix. It is
-// used only to name dimensions in errors for headers the decoder refuses.
-func headerSize(p []byte) (w, h int, ok bool) {
-	cs, ok := codestreamStart(p)
-	if !ok || len(cs) < 2 || cs[0] != 0xFF || cs[1] != 0x0A {
+// headerSize reads the JPEG XL SizeHeader (ISO/IEC 18181-1 §A.2) from the
+// start of a bare codestream prefix. Callers locate the codestream with
+// codestreamSpan first. It is used to reject oversized headers before the
+// decoder runs.
+func headerSize(cs []byte) (w, h int, ok bool) {
+	if len(cs) < 2 || cs[0] != 0xFF || cs[1] != 0x0A {
 		return 0, 0, false
 	}
 	br := bitReader{b: cs, pos: 16}
@@ -49,45 +47,6 @@ func headerSize(p []byte) (w, h int, ok bool) {
 		return 0, 0, false
 	}
 	return int(x), int(y), true
-}
-
-// codestreamStart returns the codestream bytes for a bare stream, or the
-// payload of the first jxlc/jxlp box of an ISO BMFF container.
-func codestreamStart(p []byte) ([]byte, bool) {
-	if len(p) >= 2 && p[0] == 0xFF && p[1] == 0x0A {
-		return p, true
-	}
-	for off := 0; off+8 <= len(p); {
-		sz := uint64(binary.BigEndian.Uint32(p[off:]))
-		typ := string(p[off+4 : off+8])
-		hdr := uint64(8)
-		if sz == 1 {
-			if off+16 > len(p) {
-				return nil, false
-			}
-			sz, hdr = binary.BigEndian.Uint64(p[off+8:]), 16
-		}
-		body := off + int(hdr)
-		switch typ {
-		case "jxlc":
-			return p[body:], true
-		case "jxlp":
-			// Bound the slice to this box so the bit reader cannot read the next box's header.
-			end := len(p)
-			if sz != 0 && sz <= uint64(len(p)-off) {
-				end = off + int(sz)
-			}
-			if body+4 > end {
-				return nil, false
-			}
-			return p[body+4 : end], true
-		}
-		if sz < hdr || sz == 0 {
-			return nil, false
-		}
-		off += int(sz)
-	}
-	return nil, false
 }
 
 type bitReader struct {

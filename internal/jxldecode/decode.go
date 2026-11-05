@@ -3,11 +3,14 @@
 // Decoding is pure Go; ffmpeg is not used as a fallback or reference for
 // JPEG XL; the limits below are documented here.
 //
-// Memory bounds: Decode first reads the SizeHeader from the first 4 KiB and
-// rejects images over the budget; otherwise jxl.DecodeConfig parses the header
-// from a bounded prefix (at most [MaxProbeBytes]). Either way oversized images
-// are rejected before the rest of the file is read. Only accepted files are read fully
-// (up to 512 MiB) and decoded.
+// Memory bounds: the codestream is located by reading container box headers
+// only, so large leading boxes (ICC, Exif, XMP) are skipped unread. The
+// SizeHeader is then checked from its first 4 KiB, and otherwise jxl.DecodeConfig
+// parses the header from a bounded prefix (at most [MaxProbeBytes]). Files
+// whose header is over budget are rejected before the rest of the file is read.
+// If the header cannot be probed (an unresolvable container layout, or a header
+// that extends past MaxProbeBytes), the file is read fully (up to 512 MiB) and
+// the header is checked in memory before decoding. Only accepted files are decoded.
 //
 // Pixel cap: gen2brain/jxl has no downscaled decode, so the whole frame is
 // always decoded, whatever box is requested. go-media sets no policy cap of
@@ -87,38 +90,30 @@ func DecodeWithOptions(r interface {
 	}
 	budget, src := opt.limit()
 
-	probeN := min(size, MaxProbeBytes)
-	// Fast path: the SizeHeader sits in the first bytes, so check it on a
-	// 4 KiB read before jxl.DecodeConfig. DecodeConfig keeps growing its
-	// buffer on a header it refuses, which would read the whole 1 MiB prefix.
-	head := make([]byte, min(probeN, 4096))
-	if _, err := r.ReadAt(head, 0); err != nil && !errors.Is(err, io.EOF) {
-		return nil, err
-	}
-	if w, h, ok := headerSize(head); ok && int64(w)*int64(h) > budget {
-		return nil, tooLarge(w, h, budget, src)
-	}
-	rest := io.NewSectionReader(r, int64(len(head)), probeN-int64(len(head)))
-	cfg, err := jxl.DecodeConfig(io.MultiReader(bytes.NewReader(head), rest))
-	if err != nil {
-		if errors.Is(err, jxl.ErrUnsupported) {
-			// Area is within budget here, so gen2brain/jxl refused another
-			// level-5 limit (ISO/IEC 18181-2): an edge over 2^18 px, more
-			// than 4 extra channels, a CMYK black channel, or ICC over 4 MiB.
-			return nil, errs.Unsup("thumbnail", "jxl: codestream needs level 10 (edge over 262144 px, over 4 extra channels, CMYK, or ICC over 4 MiB)")
-		}
-		if probeN == size {
+	// Probe the header before reading the payload. A header that cannot be
+	// probed (see probeHeader) leaves probed false and is checked below, on
+	// the bytes already in memory and before any canvas is allocated.
+	probed := false
+	if off, cl, ok := codestreamSpan(r, size); ok {
+		var err error
+		if probed, err = probeHeader(r, off, cl, budget, src); err != nil {
 			return nil, err
 		}
-		// Header did not fit the probe prefix (e.g. a very large ICC
-		// profile); fall through and let the decoder's frame limit apply.
-	} else if px := int64(cfg.Width) * int64(cfg.Height); px > budget {
-		return nil, tooLarge(cfg.Width, cfg.Height, budget, src)
 	}
 
 	data, err := ioat.ReadAll(r, size, 0, size)
 	if err != nil {
 		return nil, err
+	}
+
+	if !probed {
+		cfg, err := jxl.DecodeConfig(bytes.NewReader(data))
+		if err != nil {
+			return nil, configErr(err)
+		}
+		if px := int64(cfg.Width) * int64(cfg.Height); px > budget {
+			return nil, tooLarge(cfg.Width, cfg.Height, budget, src)
+		}
 	}
 
 	img, err := jxl.Decode(bytes.NewReader(data), jxl.Options{FrameSizeLimit: int(budget)})
@@ -138,6 +133,55 @@ func DecodeWithOptions(r interface {
 
 func tooLarge(w, h int, budget int64, src string) error {
 	return errs.Unsup("thumbnail", fmt.Sprintf("jxl: image %dx%d (%d px) exceeds %s of %d px (no downscaled decode)", w, h, int64(w)*int64(h), src, budget))
+}
+
+// probeHeader checks the codestream at [off, off+cl) against budget without
+// reading the payload. It returns probed=true when the header was parsed and
+// accepted. probed=false with a nil error means the header could not be
+// checked from the probe window (it extends past MaxProbeBytes); the caller
+// must check it after the full read.
+func probeHeader(r interface {
+	ReadAt([]byte, int64) (int, error)
+}, off, cl, budget int64, src string) (bool, error) {
+	probeN := min(cl, MaxProbeBytes)
+	// Fast path: the SizeHeader sits in the first bytes, so check it on a
+	// 4 KiB read before jxl.DecodeConfig. DecodeConfig keeps growing its
+	// buffer on a header it refuses, which would read the whole 1 MiB prefix.
+	head := make([]byte, min(probeN, 4096))
+	if _, err := r.ReadAt(head, off); err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	if w, h, ok := headerSize(head); ok && int64(w)*int64(h) > budget {
+		return false, tooLarge(w, h, budget, src)
+	}
+	rest := io.NewSectionReader(r, off+int64(len(head)), probeN-int64(len(head)))
+	cfg, err := jxl.DecodeConfig(io.MultiReader(bytes.NewReader(head), rest))
+	if err != nil {
+		if errors.Is(err, jxl.ErrUnsupported) {
+			return false, configErr(err)
+		}
+		if cl <= MaxProbeBytes {
+			// The whole codestream was in the probe window, so the error is definitive.
+			return false, err
+		}
+		// Header runs past the probe window (e.g. a very large ICC profile).
+		return false, nil
+	}
+	if px := int64(cfg.Width) * int64(cfg.Height); px > budget {
+		return false, tooLarge(cfg.Width, cfg.Height, budget, src)
+	}
+	return true, nil
+}
+
+// configErr maps gen2brain/jxl's level-5 refusal to errs.Unsupported.
+func configErr(err error) error {
+	if errors.Is(err, jxl.ErrUnsupported) {
+		// Area is within budget here, so gen2brain/jxl refused another
+		// level-5 limit (ISO/IEC 18181-2): an edge over 2^18 px, more
+		// than 4 extra channels, a CMYK black channel, or ICC over 4 MiB.
+		return errs.Unsup("thumbnail", "jxl: codestream needs level 10 (edge over 262144 px, over 4 extra channels, CMYK, or ICC over 4 MiB)")
+	}
+	return err
 }
 
 func resizeFit(src image.Image, maxW, maxH int) image.Image {
