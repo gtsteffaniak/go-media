@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/gtsteffaniak/go-media/internal/h264"
 )
@@ -16,21 +17,38 @@ import (
 // goroutine when it returns it.
 const maxPoolKeys = 8
 
+// maxIdlePixels bounds the total coded frame area (max_frame_width ×
+// max_frame_height from the sequence header) of idle pooled decoders across
+// every configuration. A KeyframeDecoder's arenas scale with that area: about
+// 265 MB for 3840×2160 and 1 GB for 7680×4320. Without a byte budget the pool
+// retained up to maxPoolKeys × GOMAXPROCS decoders for the life of the
+// process. The budget keeps one DCI 4K decoder (the largest MaxFrameLongSide ×
+// MaxFrameShortSide allows) or up to four 1080p decoders warm.
+var maxIdlePixels = int64(MaxFrameLongSide) * int64(MaxFrameShortSide)
+
+// idleTTL closes pooled decoders that have not been used for this long, so a
+// burst of AV1 thumbnails does not pin decoder memory forever.
+var idleTTL = 30 * time.Second
+
 // decoderPool is a bounded checkout/return pool of KeyframeDecoders per av1C
 // configuration. Every decoder is owned by exactly one goroutine between
 // checkout and checkin, so a decoder is never decoded on and closed
 // concurrently, and replacing an undersized decoder only touches the
 // caller's own instance.
 type decoderPool struct {
-	mu   sync.Mutex
-	keys map[string]*list.Element // value: *poolEntry
-	lru  *list.List               // front = most recently used
+	mu         sync.Mutex
+	keys       map[string]*list.Element // value: *poolEntry
+	lru        *list.List               // front = most recently used
+	idlePixels int64                    // sum of Decoder.pixels over every idle decoder
+	sweepTimer *time.Timer              // idle sweep timer, created on first use
+	sweepAt    time.Time                // when sweepTimer fires; zero when not armed
 }
 
 type poolEntry struct {
 	key     string
-	idle    []*Decoder
-	maxUnit []int // parallel to idle: probe size each idle decoder was sized for
+	idle    []*Decoder // oldest first
+	maxUnit []int      // parallel to idle: probe size each idle decoder was sized for
+	since   []time.Time
 	inUse   int
 	dead    bool // evicted: returned decoders are closed instead of pooled
 	cond    *sync.Cond
@@ -66,7 +84,8 @@ func (p *decoderPool) checkout(key string) (*poolEntry, *Decoder, int) {
 	for {
 		if n := len(e.idle); n > 0 {
 			d, m := e.idle[n-1], e.maxUnit[n-1]
-			e.idle, e.maxUnit = e.idle[:n-1], e.maxUnit[:n-1]
+			e.idle, e.maxUnit, e.since = e.idle[:n-1], e.maxUnit[:n-1], e.since[:n-1]
+			p.idlePixels -= d.pixels
 			e.inUse++
 			return e, d, m
 		}
@@ -103,10 +122,92 @@ func (p *decoderPool) evictLocked(el *list.Element) {
 	delete(p.keys, e.key)
 	e.dead = true
 	for _, d := range e.idle {
+		p.idlePixels -= d.pixels
 		d.Close()
 	}
-	e.idle, e.maxUnit = nil, nil
+	e.idle, e.maxUnit, e.since = nil, nil, nil
 	e.cond.Broadcast()
+}
+
+// dropOldestIdleLocked closes the oldest idle decoder of the least recently
+// used configuration that has one. It reports false when nothing is idle.
+func (p *decoderPool) dropOldestIdleLocked() bool {
+	for el := p.lru.Back(); el != nil; el = el.Prev() {
+		e := el.Value.(*poolEntry)
+		if len(e.idle) == 0 {
+			continue
+		}
+		d := e.idle[0]
+		e.idle, e.maxUnit, e.since = e.idle[1:], e.maxUnit[1:], e.since[1:]
+		p.idlePixels -= d.pixels
+		d.Close()
+		return true
+	}
+	return false
+}
+
+// keepIdleLocked reports whether d may be pooled, making room under
+// maxIdlePixels by closing older idle decoders first.
+func (p *decoderPool) keepIdleLocked(d *Decoder) bool {
+	if d.pixels <= 0 || d.pixels > maxIdlePixels {
+		return false
+	}
+	for p.idlePixels+d.pixels > maxIdlePixels {
+		if !p.dropOldestIdleLocked() {
+			return false
+		}
+	}
+	return true
+}
+
+// scheduleSweepLocked arms the sweep timer for the earliest idle expiry
+// (oldest since + idleTTL over every configuration), so a decoder is closed
+// about idleTTL after its last use rather than up to twice that.
+func (p *decoderPool) scheduleSweepLocked() {
+	if idleTTL <= 0 {
+		return
+	}
+	var oldest time.Time
+	for el := p.lru.Front(); el != nil; el = el.Next() {
+		e := el.Value.(*poolEntry)
+		if len(e.since) > 0 && (oldest.IsZero() || e.since[0].Before(oldest)) {
+			oldest = e.since[0] // since is oldest first
+		}
+	}
+	if oldest.IsZero() {
+		return
+	}
+	at := oldest.Add(idleTTL)
+	if !p.sweepAt.IsZero() && !p.sweepAt.After(at) {
+		return // already armed for this deadline or earlier
+	}
+	p.sweepAt = at
+	if p.sweepTimer == nil {
+		p.sweepTimer = time.AfterFunc(time.Until(at), p.sweep)
+	} else {
+		p.sweepTimer.Reset(time.Until(at))
+	}
+}
+
+func (p *decoderPool) sweep() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.sweepAt = time.Time{}
+	if idleTTL <= 0 {
+		return // expiry disabled
+	}
+	cutoff := time.Now().Add(-idleTTL)
+	for el := p.lru.Front(); el != nil; el = el.Next() {
+		e := el.Value.(*poolEntry)
+		n := 0
+		for n < len(e.idle) && !e.since[n].After(cutoff) {
+			p.idlePixels -= e.idle[n].pixels
+			e.idle[n].Close()
+			n++
+		}
+		e.idle, e.maxUnit, e.since = e.idle[n:], e.maxUnit[n:], e.since[n:]
+	}
+	p.scheduleSweepLocked()
 }
 
 // checkin returns a held decoder (nil when creation failed) and frees its slot.
@@ -114,11 +215,14 @@ func (p *decoderPool) checkin(e *poolEntry, d *Decoder, maxUnit int) {
 	p.mu.Lock()
 	e.inUse--
 	if d != nil {
-		if e.dead {
+		if e.dead || !p.keepIdleLocked(d) {
 			d.Close()
 		} else {
 			e.idle = append(e.idle, d)
 			e.maxUnit = append(e.maxUnit, maxUnit)
+			e.since = append(e.since, time.Now())
+			p.idlePixels += d.pixels
+			p.scheduleSweepLocked()
 		}
 	}
 	e.cond.Signal()

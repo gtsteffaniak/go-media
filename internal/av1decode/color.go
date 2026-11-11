@@ -2,6 +2,7 @@ package av1decode
 
 import (
 	"github.com/gtsteffaniak/go-av1/pkg/av1"
+	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
@@ -65,4 +66,38 @@ func colorFromConfig(matrix uint8, fullRange bool) (yuv.ColorSpace, yuv.Range) {
 		rng = yuv.FullRange
 	}
 	return cs, rng
+}
+
+// sequenceFrameSize returns the largest max_frame_width × max_frame_height
+// over every sequence header OBU in parts, in order. go-av1 keeps every
+// sequence header of a temporal unit and the decoder switches to the last
+// one it reads, so a small header followed by an oversized one must not pass
+// the frame-size check. err is non-nil when a sequence header fails checkFrameSize
+// or cannot be parsed; ok is false when no sequence header was found.
+func sequenceFrameSize(parts ...[]byte) (w, h int, ok bool, err error) {
+	for _, src := range parts {
+		it := av1.NewLowOverheadIterator(src)
+		for len(src) > 0 {
+			u, more, ierr := it.Next()
+			if ierr != nil || !more {
+				break
+			}
+			if u.Header.Type != av1.OBUSequenceHeader {
+				continue
+			}
+			sh, perr := av1.ParseSequenceHeader(u.Payload)
+			if perr != nil {
+				return 0, 0, false, errs.UnsupProfile("av1 keyframe", "invalid sequence header: "+perr.Error())
+			}
+			sw, shh := int(sh.MaxFrameWidth), int(sh.MaxFrameHeight)
+			if cerr := checkFrameSize(sw, shh); cerr != nil {
+				return 0, 0, false, cerr
+			}
+			if !ok || int64(sw)*int64(shh) > int64(w)*int64(h) {
+				w, h = sw, shh
+			}
+			ok = true
+		}
+	}
+	return w, h, ok, nil
 }

@@ -41,6 +41,11 @@ const (
 	// maxCollectBytes bounds the payload bytes kept for one seek (the VP8
 	// keyframe through the target frame).
 	maxCollectBytes = 256 << 20
+	// maxKeyLookahead bounds how many blocks of the track past the target the
+	// keyframe-only pass reads (headers only) looking for a first keyframe
+	// after the target, so a file without keyframe flags is not walked to
+	// EOF before the full-window fallback runs.
+	maxKeyLookahead = 1024
 	// maxBlockHeader is the largest block header read before the payload:
 	// track vint (up to 8), timecode (2), flags (1), lace count (1).
 	maxBlockHeader = 12
@@ -764,7 +769,25 @@ func msToTicks(ms int64, timecodeScale uint64) int64 {
 // VP8, frames from the last keyframe at or before target through the first
 // frame at or after target are kept. For MJPEG, only the latest frame at or
 // before target is kept (or the first frame when all are later).
-func collectSeekFrames(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint64, targetMs int64, vp8 bool) ([]videoFrame, error) {
+//
+// With keyOnly (VP8/VP9 keyframe mode, Exact false) only the keyframe the
+// decoder will stop at is kept: the last keyframe at or before targetMs, or
+// the first one after it. Keeping every frame through the target only to
+// discard them held up to maxCollectBytes of payload per call. A laced key
+// block before the target keeps its last lace, as the full window does. When
+// no keyframe is found by maxKeyLookahead blocks past the target, or a later
+// block is malformed, the full window is collected as before.
+func collectSeekFrames(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint64, targetMs int64, vp8, keyOnly bool) ([]videoFrame, error) {
+	if vp8 && keyOnly {
+		out, err := collectSeekWindow(r, ix, track, scale, targetMs, true, true)
+		if err != nil || len(out) > 0 {
+			return out, err
+		}
+	}
+	return collectSeekWindow(r, ix, track, scale, targetMs, vp8, false)
+}
+
+func collectSeekWindow(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint64, targetMs int64, vp8, keyOnly bool) ([]videoFrame, error) {
 	start, err := seekStartCluster(r, ix, track, msToTicks(targetMs, scale), vp8)
 	if err != nil {
 		return nil, err
@@ -773,12 +796,16 @@ func collectSeekFrames(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint
 	var out []videoFrame
 	var mjpegPick, mjpegFirst *videoFrame
 	var kept int64
+	pastTarget := 0 // keyOnly: blocks of track seen after targetMs
 	for {
 		bi, err := w.next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
+			if keyOnly && pastTarget > 0 {
+				break // let the full-window fallback, which stops at the target, run
+			}
 			return nil, err
 		}
 		if bi.track != track || bi.payloadLen <= 0 {
@@ -788,8 +815,24 @@ func collectSeekFrames(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint
 		if !vp8 && tsMs > targetMs && mjpegPick != nil {
 			break
 		}
+		if keyOnly {
+			if tsMs > targetMs {
+				if len(out) > 0 {
+					break
+				}
+				if pastTarget++; pastTarget > maxKeyLookahead {
+					break
+				}
+			}
+			if !bi.keyframe {
+				continue
+			}
+		}
 		frames, err := readFrames(r, bi)
 		if err != nil {
+			if keyOnly && pastTarget > 0 {
+				break
+			}
 			return nil, err
 		}
 		done := false
@@ -798,6 +841,16 @@ func collectSeekFrames(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint
 				continue
 			}
 			f := videoFrame{timestampMs: tsMs, keyframe: bi.keyframe, payload: fb}
+			if keyOnly {
+				// Keep the last lace before the target and the first at or
+				// after it, like the full window below.
+				out = append(out[:0], f)
+				if tsMs >= targetMs {
+					done = true
+					break
+				}
+				continue
+			}
 			if vp8 {
 				if f.keyframe && tsMs <= targetMs {
 					out = out[:0]

@@ -12,9 +12,15 @@ type FrameDecoder struct {
 	dec *govpx.VP9Decoder
 }
 
+// MaxDimension caps the frame width and height a VP9 frame header may
+// declare. govpx allocates frame buffers from the header before decoding
+// tiles, and with no cap a 25 MB WebM declaring 32768×32768 allocated about
+// 5 GB. 8192 covers 8K (7680×4320 and 8192×4320).
+var MaxDimension = 8192
+
 // NewFrameDecoder constructs a VP9 decoder for thumbnail seeking.
 func NewFrameDecoder() (*FrameDecoder, error) {
-	d, err := govpx.NewVP9Decoder(govpx.VP9DecoderOptions{})
+	d, err := govpx.NewVP9Decoder(govpx.VP9DecoderOptions{MaxWidth: MaxDimension, MaxHeight: MaxDimension})
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +61,9 @@ func mapDecodeErr(err error) error {
 	}
 	if errors.Is(err, govpx.ErrVP9NotImplemented) {
 		return errs.UnsupProfile("vp9 keyframe", "profile not supported (VP9 profile 0 8-bit 4:2:0 only)")
+	}
+	if errors.Is(err, govpx.ErrFrameRejected) {
+		return errs.UnsupProfile("vp9 keyframe", "frame size exceeds limit")
 	}
 	if errors.Is(err, govpx.ErrInvalidData) || errors.Is(err, govpx.ErrInvalidVP9Data) {
 		return errs.Corrupt

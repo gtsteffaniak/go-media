@@ -2,6 +2,7 @@ package av1decode
 
 import (
 	"errors"
+	"fmt"
 	"image"
 
 	"github.com/gtsteffaniak/go-av1/pkg/container"
@@ -13,11 +14,44 @@ import (
 
 // Decoder reuses go-av1 KeyframeDecoder scratch across samples from one file.
 type Decoder struct {
-	kd *decode.KeyframeDecoder
+	kd     *decode.KeyframeDecoder
+	pixels int64 // largest sequence max_frame_width × max_frame_height seen; 0 when unknown
+}
+
+// MaxFrameLongSide and MaxFrameShortSide cap the sequence header's
+// max_frame_width × max_frame_height for video thumbnails at DCI 4K in either
+// orientation (4096×2160 or 2160×4096), which covers 4K UHD (3840×2160). The check runs before the decoder is
+// built: go-av1 sizes its arenas from that area up front (about 265 MB at
+// 3840×2160, 285 MB at 4096×2160, 1 GB at 7680×4320, 4 GB at 16384×8192), so a larger stream, or a
+// tiny file declaring a huge frame, would otherwise allocate gigabytes.
+// Larger streams return an unsupported-profile error (media.ErrUnsupportedProfile)
+// so callers fall back to ffmpeg. Zero disables the cap.
+var (
+	MaxFrameLongSide  = 4096
+	MaxFrameShortSide = 2160
+)
+
+// checkFrameSize rejects a sequence frame size above the DCI 4K limit.
+func checkFrameSize(w, h int) error {
+	if MaxFrameLongSide <= 0 || MaxFrameShortSide <= 0 {
+		return nil
+	}
+	long, short := max(w, h), min(w, h)
+	if long > MaxFrameLongSide || short > MaxFrameShortSide {
+		return errs.UnsupProfile("av1 keyframe", fmt.Sprintf("frame %dx%d exceeds the %dx%d thumbnail limit", w, h, MaxFrameLongSide, MaxFrameShortSide))
+	}
+	return nil
 }
 
 // NewDecoderFromProbe sizes decode state from a representative temporal unit.
 func NewDecoderFromProbe(probe []byte) (*Decoder, error) {
+	// Every sequence header in probe is checked, not just the first: the
+	// decoder adopts the last one it reads and sizes its arenas from it.
+	w, h, _, err := sequenceFrameSize(probe)
+	if err != nil {
+		return nil, err
+	}
+	pixels := int64(w) * int64(h)
 	kd, err := decode.NewKeyframeDecoder(probe,
 		decode.KeyframeSkipFilmGrain(),
 		decode.KeyframeOutput8Bit(),
@@ -25,7 +59,7 @@ func NewDecoderFromProbe(probe []byte) (*Decoder, error) {
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return &Decoder{kd: kd}, nil
+	return &Decoder{kd: kd, pixels: pixels}, nil
 }
 
 // Close releases worker goroutines held by the underlying decoder.
@@ -46,6 +80,16 @@ func (d *Decoder) DecodeSample(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, 
 		return nil, errs.UnsupProfile("av1 keyframe", "decoder closed")
 	}
 	cfg := ConfigOBUs(av1CExtradata)
+	// A later sample may carry its own sequence headers; apply the same
+	// limit before go-av1 reads them, and keep the pool's area accounting at
+	// the largest header this decoder has seen.
+	w, h, _, err := sequenceFrameSize(cfg, sample)
+	if err != nil {
+		return nil, err
+	}
+	if px := int64(w) * int64(h); px > d.pixels {
+		d.pixels = px
+	}
 	img, err := d.kd.DecodeSample(cfg, sample)
 	if err != nil {
 		return nil, mapErr(err)

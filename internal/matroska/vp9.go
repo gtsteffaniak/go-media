@@ -17,16 +17,26 @@ func VP9PictureAtSeek(r interface {
 		seekPercent = 10
 	}
 	targetMs := int64(float64(h.durationMs()) * seekPercent / 100.0)
-	frames, err := collectVP9FramesForSeek(r, size, h.timecodeScale(), targetMs)
+	frames, err := collectVP9FramesForSeek(r, size, h.timecodeScale(), targetMs, !exact)
 	if err != nil || len(frames) == 0 {
 		return nil, err
 	}
-	return decodeVP9SeekPicture(frames, targetMs, exact)
+	pic, err := decodeVP9SeekPicture(frames, targetMs, exact)
+	if err == nil && pic == nil && !exact {
+		// The keyframe alone showed nothing (an invisible keyframe shown by
+		// a later frame): decode the full window from it instead.
+		frames, err = collectVP9FramesForSeek(r, size, h.timecodeScale(), targetMs, false)
+		if err != nil || len(frames) == 0 {
+			return nil, err
+		}
+		return decodeVP9SeekPicture(frames, targetMs, exact)
+	}
+	return pic, err
 }
 
 func collectVP9FramesForSeek(r interface {
 	ReadAt([]byte, int64) (int, error)
-}, size int64, scale uint64, targetMs int64) ([]videoFrame, error) {
+}, size int64, scale uint64, targetMs int64, keyOnly bool) ([]videoFrame, error) {
 	ix, err := indexSegment(r, size)
 	if err != nil {
 		return nil, err
@@ -35,7 +45,7 @@ func collectVP9FramesForSeek(r interface {
 	if !ok {
 		return nil, nil
 	}
-	return collectSeekFrames(r, ix, track, scale, targetMs, true)
+	return collectSeekFrames(r, ix, track, scale, targetMs, true, keyOnly)
 }
 
 func decodeVP9SeekPicture(frames []videoFrame, targetMs int64, exact bool) (*govpx.Image, error) {

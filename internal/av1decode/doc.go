@@ -7,6 +7,10 @@
 //     like the HEVC path (0 and 2 → BT.601, ffmpeg's swscale default).
 //     DecodeSampleCached keeps a bounded pool of up to GOMAXPROCS decoders per
 //     stream config, with an LRU over configs that closes only idle decoders.
+//     Idle decoders are capped at one 4K decoder's frame area in total and
+//     closed after 30 s unused. Sequence headers above DCI 4K, 4096×2160 (either
+//     orientation) are rejected with an unsupported-profile error before a
+//     decoder is built, so callers fall back to ffmpeg.
 //   - AVIF stills and grids use github.com/gen2brain/gav1d through avif.DecodeColor.
 //     It is 2–4× faster than go-av1 on AVIF and uses less memory there.
 //     clap/irot/imir are applied as ffmpeg's default autorotate does, the nclx
