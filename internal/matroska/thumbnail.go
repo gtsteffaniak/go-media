@@ -46,6 +46,13 @@ func VP8PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64,
 		return nil, false
 	}
 	pic := decodeVP8SeekPicture(frames, targetMs, exact)
+	if pic == nil && !exact {
+		// The keyframe alone showed nothing (an invisible keyframe shown by
+		// a later frame): decode the full window from it instead.
+		if frames, err = collectVP8FramesForSeek(r, size, h.timecodeScale(), targetMs, false); err == nil {
+			pic = decodeVP8SeekPicture(frames, targetMs, exact)
+		}
+	}
 	if pic == nil {
 		return nil, false
 	}
@@ -91,8 +98,21 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, h *Header, p ThumbnailParams) (*im
 	if err != nil {
 		return nil, false
 	}
+	// fullWindow re-collects every frame from the keyframe through the target
+	// when the keyframe alone showed nothing (an invisible keyframe shown by a
+	// later frame).
+	fullWindow := func() bool {
+		if p.Exact {
+			return false
+		}
+		frames, err = collectSeekFrames(r, ix, track, scale, targetMs, true, false)
+		return err == nil && len(frames) > 0
+	}
 	if codec == "V_VP8" {
 		pic := decodeVP8SeekPicture(frames, targetMs, p.Exact)
+		if pic == nil && fullWindow() {
+			pic = decodeVP8SeekPicture(frames, targetMs, p.Exact)
+		}
 		if pic == nil {
 			return nil, false
 		}
@@ -100,6 +120,9 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, h *Header, p ThumbnailParams) (*im
 	}
 	if codec == "V_VP9" {
 		pic, err := decodeVP9SeekPicture(frames, targetMs, p.Exact)
+		if err == nil && pic == nil && fullWindow() {
+			pic, err = decodeVP9SeekPicture(frames, targetMs, p.Exact)
+		}
 		if err != nil || pic == nil {
 			return nil, false
 		}

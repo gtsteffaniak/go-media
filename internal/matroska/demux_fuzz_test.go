@@ -48,6 +48,7 @@ func FuzzClusterWalk(f *testing.F) {
 		}
 		if ix, err := indexSegment(r, n); err == nil {
 			_, _ = collectSeekFrames(r, ix, 1, 1_000_000, 500, true, false)
+			_, _ = collectSeekFrames(r, ix, 1, 1_000_000, 500, true, true)
 			_, _ = collectSeekFrames(r, ix, 1, 1_000_000, 500, false, false)
 		}
 	})

@@ -21,7 +21,17 @@ func VP9PictureAtSeek(r interface {
 	if err != nil || len(frames) == 0 {
 		return nil, err
 	}
-	return decodeVP9SeekPicture(frames, targetMs, exact)
+	pic, err := decodeVP9SeekPicture(frames, targetMs, exact)
+	if err == nil && pic == nil && !exact {
+		// The keyframe alone showed nothing (an invisible keyframe shown by
+		// a later frame): decode the full window from it instead.
+		frames, err = collectVP9FramesForSeek(r, size, h.timecodeScale(), targetMs, false)
+		if err != nil || len(frames) == 0 {
+			return nil, err
+		}
+		return decodeVP9SeekPicture(frames, targetMs, exact)
+	}
+	return pic, err
 }
 
 func collectVP9FramesForSeek(r interface {
