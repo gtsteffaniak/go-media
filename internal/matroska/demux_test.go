@@ -285,7 +285,7 @@ func BenchmarkMKVSeekDemuxLong(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		fr, err := collectSeekFrames(r, ix, 1, 1_000_000, 1_800_000, false)
+		fr, err := collectSeekFrames(r, ix, 1, 1_000_000, 1_800_000, false, false)
 		if err != nil || len(fr) != 1 {
 			b.Fatal("no frame", err)
 		}

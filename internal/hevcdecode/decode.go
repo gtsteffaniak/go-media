@@ -12,10 +12,16 @@ type Decoder struct {
 	dec hevc.Decoder
 }
 
+// MaxLumaSamples caps pic_width × pic_height in luma samples (MaxLumaPs of
+// HEVC levels 6.x, 8192×4352). The zero-value hevc.Decoder has no limit, so an
+// SPS declaring 16384×8192 decoded and allocated about 860 MB from a 32 KB file.
+var MaxLumaSamples = hevc.MaxLumaSamples
+
 // NewDecoder constructs a HEVC decoder for thumbnail use (single-threaded).
 func NewDecoder() *Decoder {
 	d := &Decoder{}
 	d.dec.Threads(1)
+	d.dec.FrameSizeLimit(MaxLumaSamples)
 	return d
 }
 

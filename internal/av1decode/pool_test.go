@@ -11,6 +11,9 @@ func resetPoolForTest() {
 	for av1Pool.lru.Len() > 0 {
 		av1Pool.evictLocked(av1Pool.lru.Back())
 	}
+	// A pending sweep from an earlier test may use a different idleTTL; a
+	// stale timer is harmless because sweep only closes expired decoders.
+	av1Pool.sweeping = false
 	av1Pool.mu.Unlock()
 }
 

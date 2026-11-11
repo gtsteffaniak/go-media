@@ -41,7 +41,7 @@ func VP8PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64,
 		seekPercent = 10
 	}
 	targetMs := int64(float64(h.durationMs()) * seekPercent / 100.0)
-	frames, err := collectVP8FramesForSeek(r, size, h.timecodeScale(), targetMs)
+	frames, err := collectVP8FramesForSeek(r, size, h.timecodeScale(), targetMs, !exact)
 	if err != nil || len(frames) == 0 {
 		return nil, false
 	}
@@ -52,7 +52,7 @@ func VP8PictureAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64,
 	return pic, true
 }
 
-func collectVP8FramesForSeek(r io.ReaderAt, size int64, scale uint64, targetMs int64) ([]videoFrame, error) {
+func collectVP8FramesForSeek(r io.ReaderAt, size int64, scale uint64, targetMs int64, keyOnly bool) ([]videoFrame, error) {
 	ix, err := indexSegment(r, size)
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func collectVP8FramesForSeek(r io.ReaderAt, size int64, scale uint64, targetMs i
 	if !ok {
 		return nil, nil
 	}
-	return collectSeekFrames(r, ix, track, scale, targetMs, true)
+	return collectSeekFrames(r, ix, track, scale, targetMs, true, keyOnly)
 }
 
 // ThumbnailRGBA seeks to seekPercent of the file timeline and decodes a VP8 or MJPEG frame.
@@ -87,7 +87,7 @@ func ThumbnailRGBA(r io.ReaderAt, size int64, h *Header, p ThumbnailParams) (*im
 		return nil, false
 	}
 	chain := codec == "V_VP8" || codec == "V_VP9"
-	frames, err := collectSeekFrames(r, ix, track, scale, targetMs, chain)
+	frames, err := collectSeekFrames(r, ix, track, scale, targetMs, chain, chain && !p.Exact)
 	if err != nil {
 		return nil, false
 	}

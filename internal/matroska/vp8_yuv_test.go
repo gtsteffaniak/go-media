@@ -47,7 +47,7 @@ func vp8SeekTargets(t *testing.T, f *os.File, size int64, hdr *Header) (targetMs
 	if !ok {
 		t.Fatal("no VP8 track")
 	}
-	frames, err := collectSeekFrames(f, ix, track, hdr.timecodeScale(), targetMs, true)
+	frames, err := collectSeekFrames(f, ix, track, hdr.timecodeScale(), targetMs, true, false)
 	if err != nil || len(frames) == 0 {
 		t.Fatalf("frames: %v", err)
 	}

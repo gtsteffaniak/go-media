@@ -66,3 +66,28 @@ func colorFromConfig(matrix uint8, fullRange bool) (yuv.ColorSpace, yuv.Range) {
 	}
 	return cs, rng
 }
+
+// sequenceFrameSize returns max_frame_width and max_frame_height from the
+// first sequence header OBU in src.
+func sequenceFrameSize(src []byte) (w, h int, ok bool) {
+	if len(src) == 0 {
+		return 0, 0, false
+	}
+	it := av1.NewLowOverheadIterator(src)
+	for {
+		u, more, err := it.Next()
+		if err != nil || !more {
+			return 0, 0, false
+		}
+		switch u.Header.Type {
+		case av1.OBUSequenceHeader:
+			sh, err := av1.ParseSequenceHeader(u.Payload)
+			if err != nil {
+				return 0, 0, false
+			}
+			return int(sh.MaxFrameWidth), int(sh.MaxFrameHeight), true
+		case av1.OBUFrame, av1.OBUFrameHeader, av1.OBUTileGroup:
+			return 0, 0, false
+		}
+	}
+}

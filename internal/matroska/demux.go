@@ -764,7 +764,23 @@ func msToTicks(ms int64, timecodeScale uint64) int64 {
 // VP8, frames from the last keyframe at or before target through the first
 // frame at or after target are kept. For MJPEG, only the latest frame at or
 // before target is kept (or the first frame when all are later).
-func collectSeekFrames(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint64, targetMs int64, vp8 bool) ([]videoFrame, error) {
+//
+// With keyOnly (VP8/VP9 keyframe mode, Exact false) only the keyframe the
+// decoder will stop at is kept: the last keyframe at or before targetMs, or
+// the first one after it. Keeping every frame through the target only to
+// discard them held up to maxCollectBytes of payload per call. When no block
+// is flagged as a keyframe the full window is collected as before.
+func collectSeekFrames(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint64, targetMs int64, vp8, keyOnly bool) ([]videoFrame, error) {
+	if vp8 && keyOnly {
+		out, err := collectSeekWindow(r, ix, track, scale, targetMs, true, true)
+		if err != nil || len(out) > 0 {
+			return out, err
+		}
+	}
+	return collectSeekWindow(r, ix, track, scale, targetMs, vp8, false)
+}
+
+func collectSeekWindow(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint64, targetMs int64, vp8, keyOnly bool) ([]videoFrame, error) {
 	start, err := seekStartCluster(r, ix, track, msToTicks(targetMs, scale), vp8)
 	if err != nil {
 		return nil, err
@@ -788,6 +804,17 @@ func collectSeekFrames(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint
 		if !vp8 && tsMs > targetMs && mjpegPick != nil {
 			break
 		}
+		if keyOnly {
+			if !bi.keyframe {
+				if tsMs > targetMs && len(out) > 0 {
+					break
+				}
+				continue
+			}
+			if tsMs > targetMs && len(out) > 0 {
+				break
+			}
+		}
 		frames, err := readFrames(r, bi)
 		if err != nil {
 			return nil, err
@@ -798,6 +825,11 @@ func collectSeekFrames(r io.ReaderAt, ix *segmentIndex, track uint64, scale uint
 				continue
 			}
 			f := videoFrame{timestampMs: tsMs, keyframe: bi.keyframe, payload: fb}
+			if keyOnly {
+				out = append(out[:0], f)
+				done = tsMs >= targetMs
+				break
+			}
 			if vp8 {
 				if f.keyframe && tsMs <= targetMs {
 					out = out[:0]

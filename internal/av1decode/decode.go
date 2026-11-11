@@ -2,6 +2,7 @@ package av1decode
 
 import (
 	"errors"
+	"fmt"
 	"image"
 
 	"github.com/gtsteffaniak/go-av1/pkg/container"
@@ -13,11 +14,44 @@ import (
 
 // Decoder reuses go-av1 KeyframeDecoder scratch across samples from one file.
 type Decoder struct {
-	kd *decode.KeyframeDecoder
+	kd     *decode.KeyframeDecoder
+	pixels int64 // sequence max_frame_width × max_frame_height; 0 when unknown
+}
+
+// MaxFrameLongSide and MaxFrameShortSide cap the sequence header's
+// max_frame_width × max_frame_height for video thumbnails at 4K UHD in either
+// orientation (3840×2160 or 2160×3840). The check runs before the decoder is
+// built: go-av1 sizes its arenas from that area up front (about 265 MB at
+// 3840×2160, 1 GB at 7680×4320, 4 GB at 16384×8192), so a larger stream, or a
+// tiny file declaring a huge frame, would otherwise allocate gigabytes.
+// Larger streams return an unsupported-profile error (media.ErrUnsupportedProfile)
+// so callers fall back to ffmpeg. Zero disables the cap.
+var (
+	MaxFrameLongSide  = 3840
+	MaxFrameShortSide = 2160
+)
+
+// checkFrameSize rejects a sequence frame size above the 4K limit.
+func checkFrameSize(w, h int) error {
+	if MaxFrameLongSide <= 0 || MaxFrameShortSide <= 0 {
+		return nil
+	}
+	long, short := max(w, h), min(w, h)
+	if long > MaxFrameLongSide || short > MaxFrameShortSide {
+		return errs.UnsupProfile("av1 keyframe", fmt.Sprintf("frame %dx%d exceeds the %dx%d thumbnail limit", w, h, MaxFrameLongSide, MaxFrameShortSide))
+	}
+	return nil
 }
 
 // NewDecoderFromProbe sizes decode state from a representative temporal unit.
 func NewDecoderFromProbe(probe []byte) (*Decoder, error) {
+	var pixels int64
+	if w, h, ok := sequenceFrameSize(probe); ok {
+		if err := checkFrameSize(w, h); err != nil {
+			return nil, err
+		}
+		pixels = int64(w) * int64(h)
+	}
 	kd, err := decode.NewKeyframeDecoder(probe,
 		decode.KeyframeSkipFilmGrain(),
 		decode.KeyframeOutput8Bit(),
@@ -25,7 +59,7 @@ func NewDecoderFromProbe(probe []byte) (*Decoder, error) {
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return &Decoder{kd: kd}, nil
+	return &Decoder{kd: kd, pixels: pixels}, nil
 }
 
 // Close releases worker goroutines held by the underlying decoder.
