@@ -8,7 +8,7 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/errs"
 )
 
-// TestCheckFrameSize checks the 4K limit in both orientations.
+// TestCheckFrameSize checks the DCI 4K limit in both orientations.
 func TestCheckFrameSize(t *testing.T) {
 	for _, c := range []struct {
 		w, h int
@@ -17,10 +17,12 @@ func TestCheckFrameSize(t *testing.T) {
 		{1920, 1080, true},
 		{3840, 2160, true},
 		{2160, 3840, true},
-		{3841, 2160, false},
-		{3840, 2161, false},
-		{2161, 3840, false},
-		{4096, 2160, false},
+		{4096, 2160, true},
+		{2160, 4096, true},
+		{4097, 2160, false},
+		{4096, 2161, false},
+		{2161, 4096, false},
+		{2160, 4097, false},
 		{7680, 4320, false},
 		{16384, 8192, false},
 	} {

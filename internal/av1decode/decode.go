@@ -19,19 +19,19 @@ type Decoder struct {
 }
 
 // MaxFrameLongSide and MaxFrameShortSide cap the sequence header's
-// max_frame_width × max_frame_height for video thumbnails at 4K UHD in either
-// orientation (3840×2160 or 2160×3840). The check runs before the decoder is
+// max_frame_width × max_frame_height for video thumbnails at DCI 4K in either
+// orientation (4096×2160 or 2160×4096), which covers 4K UHD (3840×2160). The check runs before the decoder is
 // built: go-av1 sizes its arenas from that area up front (about 265 MB at
-// 3840×2160, 1 GB at 7680×4320, 4 GB at 16384×8192), so a larger stream, or a
+// 3840×2160, 285 MB at 4096×2160, 1 GB at 7680×4320, 4 GB at 16384×8192), so a larger stream, or a
 // tiny file declaring a huge frame, would otherwise allocate gigabytes.
 // Larger streams return an unsupported-profile error (media.ErrUnsupportedProfile)
 // so callers fall back to ffmpeg. Zero disables the cap.
 var (
-	MaxFrameLongSide  = 3840
+	MaxFrameLongSide  = 4096
 	MaxFrameShortSide = 2160
 )
 
-// checkFrameSize rejects a sequence frame size above the 4K limit.
+// checkFrameSize rejects a sequence frame size above the DCI 4K limit.
 func checkFrameSize(w, h int) error {
 	if MaxFrameLongSide <= 0 || MaxFrameShortSide <= 0 {
 		return nil

@@ -8,7 +8,7 @@
 //     DecodeSampleCached keeps a bounded pool of up to GOMAXPROCS decoders per
 //     stream config, with an LRU over configs that closes only idle decoders.
 //     Idle decoders are capped at one 4K decoder's frame area in total and
-//     closed after 30 s unused. Sequence headers above 4K UHD (either
+//     closed after 30 s unused. Sequence headers above DCI 4K, 4096×2160 (either
 //     orientation) are rejected with an unsupported-profile error before a
 //     decoder is built, so callers fall back to ffmpeg.
 //   - AVIF stills and grids use github.com/gen2brain/gav1d through avif.DecodeColor.

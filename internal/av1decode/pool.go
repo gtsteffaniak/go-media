@@ -22,7 +22,7 @@ const maxPoolKeys = 8
 // every configuration. A KeyframeDecoder's arenas scale with that area: about
 // 265 MB for 3840×2160 and 1 GB for 7680×4320. Without a byte budget the pool
 // retained up to maxPoolKeys × GOMAXPROCS decoders for the life of the
-// process. The budget keeps one 4K decoder (the largest MaxFrameLongSide ×
+// process. The budget keeps one DCI 4K decoder (the largest MaxFrameLongSide ×
 // MaxFrameShortSide allows) or up to four 1080p decoders warm.
 var maxIdlePixels = int64(MaxFrameLongSide) * int64(MaxFrameShortSide)
 
