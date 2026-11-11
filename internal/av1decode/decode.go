@@ -111,10 +111,11 @@ func (d *Decoder) DecodeSample(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, 
 // shown picture; the caller must Release it.
 func (d *Decoder) decodeSampleLastPicture(sample []byte) (*av1.Picture, error) {
 	var (
-		last   *av1.Picture
-		frames int
-		pixels int64
-		budget = decodePixelBudget()
+		last      *av1.Picture
+		frames    int
+		frameOBUs int
+		pixels    int64
+		budget    = decodePixelBudget()
 	)
 	for len(sample) > 0 {
 		obu, rest, ok := nextOBU(sample)
@@ -122,6 +123,15 @@ func (d *Decoder) decodeSampleLastPicture(sample []byte) (*av1.Picture, error) {
 			return nil, errs.UnsupProfile("av1 keyframe", "invalid OBU")
 		}
 		sample = rest
+		if obuTriggersFrameDecode(obuType(obu)) {
+			frameOBUs++
+			if frameOBUs > maxFrameOBUsPerSample {
+				if last != nil {
+					last.Release()
+				}
+				return nil, errs.UnsupProfile("av1 keyframe", "too many frame OBUs in sample")
+			}
+		}
 		if err := d.d.Send(obu); err != nil {
 			if last != nil {
 				last.Release()
