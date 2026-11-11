@@ -15,7 +15,7 @@ import (
 // Decoder reuses go-av1 KeyframeDecoder scratch across samples from one file.
 type Decoder struct {
 	kd     *decode.KeyframeDecoder
-	pixels int64 // sequence max_frame_width × max_frame_height; 0 when unknown
+	pixels int64 // largest sequence max_frame_width × max_frame_height seen; 0 when unknown
 }
 
 // MaxFrameLongSide and MaxFrameShortSide cap the sequence header's
@@ -45,13 +45,13 @@ func checkFrameSize(w, h int) error {
 
 // NewDecoderFromProbe sizes decode state from a representative temporal unit.
 func NewDecoderFromProbe(probe []byte) (*Decoder, error) {
-	var pixels int64
-	if w, h, ok := sequenceFrameSize(probe); ok {
-		if err := checkFrameSize(w, h); err != nil {
-			return nil, err
-		}
-		pixels = int64(w) * int64(h)
+	// Every sequence header in probe is checked, not just the first: the
+	// decoder adopts the last one it reads and sizes its arenas from it.
+	w, h, _, err := sequenceFrameSize(probe)
+	if err != nil {
+		return nil, err
 	}
+	pixels := int64(w) * int64(h)
 	kd, err := decode.NewKeyframeDecoder(probe,
 		decode.KeyframeSkipFilmGrain(),
 		decode.KeyframeOutput8Bit(),
@@ -80,6 +80,16 @@ func (d *Decoder) DecodeSample(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, 
 		return nil, errs.UnsupProfile("av1 keyframe", "decoder closed")
 	}
 	cfg := ConfigOBUs(av1CExtradata)
+	// A later sample may carry its own sequence headers; apply the same
+	// limit before go-av1 reads them, and keep the pool's area accounting at
+	// the largest header this decoder has seen.
+	w, h, _, err := sequenceFrameSize(cfg, sample)
+	if err != nil {
+		return nil, err
+	}
+	if px := int64(w) * int64(h); px > d.pixels {
+		d.pixels = px
+	}
 	img, err := d.kd.DecodeSample(cfg, sample)
 	if err != nil {
 		return nil, mapErr(err)

@@ -40,7 +40,8 @@ type decoderPool struct {
 	keys       map[string]*list.Element // value: *poolEntry
 	lru        *list.List               // front = most recently used
 	idlePixels int64                    // sum of Decoder.pixels over every idle decoder
-	sweeping   bool                     // an idle sweep timer is pending
+	sweepTimer *time.Timer              // idle sweep timer, created on first use
+	sweepAt    time.Time                // when sweepTimer fires; zero when not armed
 }
 
 type poolEntry struct {
@@ -159,21 +160,43 @@ func (p *decoderPool) keepIdleLocked(d *Decoder) bool {
 	return true
 }
 
-// scheduleSweepLocked arms one timer that closes decoders idle for idleTTL.
+// scheduleSweepLocked arms the sweep timer for the earliest idle expiry
+// (oldest since + idleTTL over every configuration), so a decoder is closed
+// about idleTTL after its last use rather than up to twice that.
 func (p *decoderPool) scheduleSweepLocked() {
-	if p.sweeping || idleTTL <= 0 {
+	if idleTTL <= 0 {
 		return
 	}
-	p.sweeping = true
-	time.AfterFunc(idleTTL, p.sweep)
+	var oldest time.Time
+	for el := p.lru.Front(); el != nil; el = el.Next() {
+		e := el.Value.(*poolEntry)
+		if len(e.since) > 0 && (oldest.IsZero() || e.since[0].Before(oldest)) {
+			oldest = e.since[0] // since is oldest first
+		}
+	}
+	if oldest.IsZero() {
+		return
+	}
+	at := oldest.Add(idleTTL)
+	if !p.sweepAt.IsZero() && !p.sweepAt.After(at) {
+		return // already armed for this deadline or earlier
+	}
+	p.sweepAt = at
+	if p.sweepTimer == nil {
+		p.sweepTimer = time.AfterFunc(time.Until(at), p.sweep)
+	} else {
+		p.sweepTimer.Reset(time.Until(at))
+	}
 }
 
 func (p *decoderPool) sweep() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.sweeping = false
+	p.sweepAt = time.Time{}
+	if idleTTL <= 0 {
+		return // expiry disabled
+	}
 	cutoff := time.Now().Add(-idleTTL)
-	remaining := false
 	for el := p.lru.Front(); el != nil; el = el.Next() {
 		e := el.Value.(*poolEntry)
 		n := 0
@@ -183,13 +206,8 @@ func (p *decoderPool) sweep() {
 			n++
 		}
 		e.idle, e.maxUnit, e.since = e.idle[n:], e.maxUnit[n:], e.since[n:]
-		if len(e.idle) > 0 {
-			remaining = true
-		}
 	}
-	if remaining {
-		p.scheduleSweepLocked()
-	}
+	p.scheduleSweepLocked()
 }
 
 // checkin returns a held decoder (nil when creation failed) and frees its slot.

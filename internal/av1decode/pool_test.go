@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 )
 
 func resetPoolForTest() {
@@ -13,7 +14,10 @@ func resetPoolForTest() {
 	}
 	// A pending sweep from an earlier test may use a different idleTTL; a
 	// stale timer is harmless because sweep only closes expired decoders.
-	av1Pool.sweeping = false
+	if av1Pool.sweepTimer != nil {
+		av1Pool.sweepTimer.Stop()
+	}
+	av1Pool.sweepAt = time.Time{}
 	av1Pool.mu.Unlock()
 }
 
