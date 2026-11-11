@@ -1,6 +1,7 @@
 package av1decode
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -8,6 +9,7 @@ import (
 	"github.com/gen2brain/gav1d/av1"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/h264"
+	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
 // MaxFrameLongSide and MaxFrameShortSide cap the coded frame size of video
@@ -93,23 +95,84 @@ func (d *Decoder) DecodeSample(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, 
 			return nil, mapErr(err)
 		}
 	}
-	pics, err := d.d.DecodeOBUs(sample)
+	pic, err := d.decodeSampleLastPicture(sample)
 	if err != nil {
-		return nil, mapErr(err)
-	}
-	if len(pics) == 0 {
-		return nil, errs.UnsupProfile("av1 keyframe", "sample shows no frame")
-	}
-	pic := pics[len(pics)-1]
-	defer func() {
-		for _, p := range pics {
-			p.Release()
-		}
-	}()
-	if err := checkFrameSize(pic.Width, pic.Height); err != nil {
 		return nil, err
 	}
+	defer pic.Release()
+	if pic.MatrixCoeffs == 0 && pic.Layout != av1.LayoutI444 && pic.Layout != av1.LayoutI400 {
+		return nil, errs.UnsupProfile("av1 keyframe", "identity matrix requires 4:4:4")
+	}
 	return PictureThumbYCbCr(pic), nil
+}
+
+// decodeSampleLastPicture decodes sample OBUs with Send/Receive so decoded
+// pictures are not all queued before the first Receive. It returns the last
+// shown picture; the caller must Release it.
+func (d *Decoder) decodeSampleLastPicture(sample []byte) (*av1.Picture, error) {
+	var (
+		last   *av1.Picture
+		frames int
+		pixels int64
+		budget = decodePixelBudget()
+	)
+	for len(sample) > 0 {
+		obu, rest, ok := nextOBU(sample)
+		if !ok {
+			return nil, errs.UnsupProfile("av1 keyframe", "invalid OBU")
+		}
+		sample = rest
+		if err := d.d.Send(obu); err != nil {
+			if last != nil {
+				last.Release()
+			}
+			return nil, mapErr(err)
+		}
+		for {
+			pic, err := d.d.Receive()
+			if err != nil {
+				if last != nil {
+					last.Release()
+				}
+				return nil, mapErr(err)
+			}
+			if pic == nil {
+				break
+			}
+			frames++
+			if frames > maxShownFramesPerSample {
+				pic.Release()
+				if last != nil {
+					last.Release()
+				}
+				return nil, errs.UnsupProfile("av1 keyframe", "too many frames in sample")
+			}
+			px := int64(pic.Width) * int64(pic.Height)
+			pixels += px
+			if pixels > budget {
+				pic.Release()
+				if last != nil {
+					last.Release()
+				}
+				return nil, frameTooLarge("aggregate decoded pixels")
+			}
+			if err := checkFrameSize(pic.Width, pic.Height); err != nil {
+				pic.Release()
+				if last != nil {
+					last.Release()
+				}
+				return nil, err
+			}
+			if last != nil {
+				last.Release()
+			}
+			last = pic
+		}
+	}
+	if last == nil {
+		return nil, errs.UnsupProfile("av1 keyframe", "sample shows no frame")
+	}
+	return last, nil
 }
 
 // DecodeSampleOnce decodes one keyframe with a fresh decoder.
@@ -141,6 +204,9 @@ func ConfigOBUs(av1CExtradata []byte) []byte {
 func PictureThumbYCbCr(p *av1.Picture) *h264.ThumbYCbCr {
 	if p == nil || p.Width <= 0 || p.Height <= 0 {
 		return nil
+	}
+	if p.MatrixCoeffs == 0 && p.Layout == av1.LayoutI444 {
+		return pictureThumbYCbCrIdentity444(p)
 	}
 	w, h := p.Width, p.Height
 	ycc := image.NewYCbCr(image.Rect(0, 0, w, h), image.YCbCrSubsampleRatio420)
@@ -180,7 +246,41 @@ func sample(src []byte, off, bps int) int {
 	if bps == 1 {
 		return int(src[off])
 	}
-	return int(src[off]) | int(src[off+1])<<8
+	return int(binary.NativeEndian.Uint16(src[off : off+2]))
+}
+
+// pictureThumbYCbCrIdentity444 converts identity-matrix 4:4:4 planes (G, B, R)
+// to 4:2:0 YCbCr before subsampling, matching ffmpeg's GBR handling.
+func pictureThumbYCbCrIdentity444(p *av1.Picture) *h264.ThumbYCbCr {
+	w, h := p.Width, p.Height
+	cs, rng := colorFromConfig(0, p.FullRange)
+	shift := max(p.BitDepth-8, 0)
+	bps := 1
+	if p.BitDepth > 8 {
+		bps = 2
+	}
+	yFull := make([]byte, w*h)
+	cbFull := make([]byte, w*h)
+	crFull := make([]byte, w*h)
+	for y := 0; y < h; y++ {
+		gRow := y * p.Stride[0]
+		bRow := y * p.Stride[1]
+		rRow := y * p.Stride[2]
+		for x := 0; x < w; x++ {
+			g := to8(sample(p.Data[0], gRow+x*bps, bps), shift)
+			b := to8(sample(p.Data[1], bRow+x*bps, bps), shift)
+			r := to8(sample(p.Data[2], rRow+x*bps, bps), shift)
+			c := yuv.RGBToYCbCrCS(r, g, b, cs, rng)
+			i := y*w + x
+			yFull[i], cbFull[i], crFull[i] = c.Y, c.Cb, c.Cr
+		}
+	}
+	ycc := image.NewYCbCr(image.Rect(0, 0, w, h), image.YCbCrSubsampleRatio420)
+	copyPlane(ycc.Y, ycc.YStride, yFull, w, w, h, 1, 0)
+	cw, ch := (w+1)/2, (h+1)/2
+	downsample(ycc.Cb, ycc.CStride, cbFull, w, cw, ch, w, h, 1, 1, 0)
+	downsample(ycc.Cr, ycc.CStride, crFull, w, cw, ch, w, h, 1, 1, 0)
+	return &h264.ThumbYCbCr{YCbCr: ycc, CS: cs, RNG: rng}
 }
 
 func to8(v, shift int) byte {
