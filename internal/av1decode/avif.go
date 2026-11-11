@@ -15,9 +15,8 @@ import (
 )
 
 // DecodeAVIFFile decodes the primary AVIF item (still or grid) from a full file
-// buffer with gav1d. gav1d is faster than go-av1 on AVIF stills (about 2–4× in
-// benchmarks) and handles grids itself, so the go-av1 AVIF path is not used.
-// Film grain is applied; gav1d cannot skip it.
+// buffer with gav1d, which handles grids itself. Film grain is applied
+// (avif.Options has no option to skip it).
 //
 // The clap, irot and imir properties are applied (AutoRotate), matching
 // ffmpeg, whose AVIF demuxer exports them as crop and display-matrix side data
