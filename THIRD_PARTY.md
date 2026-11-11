@@ -37,9 +37,9 @@ Thumbnail HEVC decode uses **[gen2brain/h265](https://github.com/gen2brain/h265)
 
 ## AV1 keyframe decode (`internal/av1decode`)
 
-Thumbnail AV1 decode uses two pure-Go decoders:
+Thumbnail AV1 decode uses **[gen2brain/gav1d](https://github.com/gen2brain/gav1d)** (BSD-2-Clause), a pure-Go, bit-exact port of dav1d with amd64/arm64/riscv64 assembly and no dependencies:
 
-- **[gtsteffaniak/go-av1](https://github.com/gtsteffaniak/go-av1)** (MIT) for MP4/MKV/WebM keyframes via `KeyframeDecoder`, with film grain skipped. It uses much less memory than gav1d on video.
-- **[gen2brain/gav1d](https://github.com/gen2brain/gav1d)** (BSD-2-Clause) for AVIF stills and grids via `avif.DecodeColor`. It is a bit-exact port of dav1d, 2–4× faster than go-av1 on AVIF, and applies film grain (not skippable).
+- MP4/MKV/WebM keyframes via the `av1` package's `Decoder`, with film grain skipped (`SkipFilmGrain`) and a DCI 4K (4096×2160) frame-size limit (`FrameSizeLimit`) checked before any picture memory is allocated. A fresh decoder per thumbnail is flushed before returning, so nothing is held between calls.
+- AVIF stills and grids via `avif.DecodeColor`, with film grain applied.
 
 10/12-bit output is down-converted to 8-bit YCbCr for JPEG/WebP thumbs.

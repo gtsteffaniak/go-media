@@ -53,14 +53,13 @@ func TestSequenceColorBT709Full(t *testing.T) {
 }
 
 func TestSequenceColorDefault(t *testing.T) {
-	cs, rng := sequenceColor(nil, nil)
-	if cs != yuv.BT601 || rng != yuv.LimitedRange {
-		t.Fatal("default must stay BT.601 limited")
-	}
 	sample := readAV1(t, "tu_small.obu")
-	cs, rng = sequenceColor(nil, sample)
-	if cs != yuv.BT601 || rng != yuv.LimitedRange {
-		t.Fatalf("untagged stream: %v %v", cs, rng)
+	th, err := DecodeSampleCached(nil, sample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th.CS != yuv.BT601 || th.RNG != yuv.LimitedRange {
+		t.Fatalf("untagged stream: %v %v", th.CS, th.RNG)
 	}
 }
 

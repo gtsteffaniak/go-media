@@ -7,11 +7,10 @@ require (
 	github.com/abema/go-mp4 v1.7.4
 	github.com/at-wat/ebml-go v0.19.4
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
-	github.com/gen2brain/gav1d v0.2.6
+	github.com/gen2brain/gav1d v0.2.7
 	github.com/gen2brain/h265 v0.2.4
 	github.com/gen2brain/jxl v0.2.0
 	github.com/gen2brain/vpx v0.2.1
-	github.com/gtsteffaniak/go-av1 v1.0.0
 	github.com/gtsteffaniak/go-vpx v1.0.1
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
