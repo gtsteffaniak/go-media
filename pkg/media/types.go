@@ -135,12 +135,17 @@ type ThumbnailOptions struct {
 	// MaxSourcePixels caps the original image area (width×height) go-media
 	// will decode, for formats whose decoder cannot downscale and must
 	// decode the full frame whatever MaxWidth/MaxHeight are. It applies
-	// equally to every box size, including full resolution. Today it is
-	// honored by JPEG XL. Images over it fail with an ErrUnsupported error
-	// naming the dimensions, after reading only a few KiB of header. Zero
-	// means no caller cap; the decoder's own ceiling (16384×16384 for JPEG
-	// XL) still applies.
+	// equally to every box size, including full resolution. JPEG XL and AVIF
+	// honor it today. Images over the effective limit return ErrUnsupported
+	// naming the dimensions. Zero means no caller cap; each decoder still
+	// applies its library ceiling (16384×16384 for JPEG XL, 2^27 px for AVIF).
 	MaxSourcePixels int64
+	// MaxAV1FrameLongSide and MaxAV1FrameShortSide cap the coded dimensions
+	// of AV1 video keyframes in MP4/MKV/WebM thumbnails (long and short side,
+	// either orientation). Zero on both uses the library default of 4096×2160
+	// (DCI 4K). Frames above the cap return ErrUnsupportedProfile.
+	MaxAV1FrameLongSide  int
+	MaxAV1FrameShortSide int
 }
 
 // ThumbnailResult holds encoded image bytes and how they were obtained.

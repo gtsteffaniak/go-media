@@ -16,7 +16,7 @@ func TestAVIFCodedPrimary(t *testing.T) {
 	}
 	defer f.Close()
 	st, _ := f.Stat()
-	ycc, err := heifthumb.CodedAVIFYCbCr(f, st.Size())
+	ycc, err := heifthumb.CodedAVIFYCbCr(f, st.Size(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

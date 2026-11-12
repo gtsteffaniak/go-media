@@ -31,7 +31,7 @@ func TestDecodeSampleCachedConcurrentMixedSizes(t *testing.T) {
 				if (w+i)%2 == 1 {
 					s = large
 				}
-				th, err := DecodeSampleCached(nil, s)
+				th, err := DecodeSampleCached(nil, s, FrameLimits{})
 				if err != nil {
 					errc <- err
 					return
@@ -74,7 +74,7 @@ func TestFrameSizeLimit(t *testing.T) {
 	defer func() { MaxFrameLongSide, MaxFrameShortSide = oldL, oldS }()
 	for _, lim := range [][2]int{{64, 36}, {100, 100}} { // area check, per-side check
 		MaxFrameLongSide, MaxFrameShortSide = lim[0], lim[1]
-		_, err := DecodeSampleCached(nil, sample)
+		_, err := DecodeSampleCached(nil, sample, FrameLimits{})
 		var pe *errs.ProfileError
 		if !errors.As(err, &pe) {
 			t.Fatalf("limit %v: want profile error, got %v", lim, err)

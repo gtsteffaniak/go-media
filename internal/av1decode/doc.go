@@ -3,7 +3,8 @@
 //
 //   - MP4/MKV/WebM keyframes use the av1 package's Decoder with film grain
 //     skipped (SkipFilmGrain), one frame in flight, and a frame-size limit of
-//     DCI 4K (MaxFrameLongSide × MaxFrameShortSide, 4096×2160) checked against the frame
+//     frame cap (DefaultFrameLongSide × DefaultFrameShortSide, 4096×2160 by default;
+//     overridable per call via FrameLimits / media.ThumbnailOptions) checked against the frame
 //     header before any picture memory is allocated. Each call uses a fresh
 //     decoder that is flushed before returning, so no frame memory is held
 //     between thumbnails. The sequence header's matrix_coefficients and
@@ -13,7 +14,8 @@
 //   - AVIF stills and grids use the avif package through avif.DecodeColor.
 //     clap/irot/imir are applied as ffmpeg's default autorotate does, the nclx
 //     matrix and range are honored as in the HEVC path, and the decoded area
-//     is bounded by MaxAVIFPixels. RGB output (high bit depth or a transform)
+//     honors media.ThumbnailOptions.MaxSourcePixels clamped to MaxAVIFPixels.
+//     RGB output (high bit depth or a transform)
 //     is converted directly to 4:2:0 with 2×2 chroma averaging, which measured
 //     closer to ffmpeg than top-left sampling.
 //

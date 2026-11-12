@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gtsteffaniak/go-media/internal/av1decode"
 )
 
 // TestAV1OverLimitIsUnsupported checks that an AV1 stream above the thumbnail
@@ -22,11 +21,10 @@ func TestAV1OverLimitIsUnsupported(t *testing.T) {
 	defer f.Close()
 	st, _ := f.Stat()
 
-	oldL, oldS := av1decode.MaxFrameLongSide, av1decode.MaxFrameShortSide
-	av1decode.MaxFrameLongSide, av1decode.MaxFrameShortSide = 1920, 1080
-	defer func() { av1decode.MaxFrameLongSide, av1decode.MaxFrameShortSide = oldL, oldS }()
-
-	_, err = Thumbnail(f, st.Size(), ThumbnailOptions{MaxWidth: 320, MaxHeight: 320, Format: "jpeg"})
+	_, err = Thumbnail(f, st.Size(), ThumbnailOptions{
+		MaxWidth: 320, MaxHeight: 320, Format: "jpeg",
+		MaxAV1FrameLongSide: 1920, MaxAV1FrameShortSide: 1080,
+	})
 	if !errors.Is(err, ErrUnsupportedProfile) {
 		t.Fatalf("want ErrUnsupportedProfile, got %v", err)
 	}

@@ -11,7 +11,8 @@ import (
 const maxAVIFBytes = 48 << 20
 
 // CodedAVIFYCbCr decodes the primary AV1-coded AVIF item (still or grid).
-func CodedAVIFYCbCr(r io.ReaderAt, size int64) (*h264.ThumbYCbCr, error) {
+// maxSourcePixels is passed through to av1decode (0: library ceiling only).
+func CodedAVIFYCbCr(r io.ReaderAt, size int64, maxSourcePixels int64) (*h264.ThumbYCbCr, error) {
 	if size <= 0 || size > maxAVIFBytes {
 		return nil, errs.Unsup("thumbnail", "avif: file size out of range for coded decode")
 	}
@@ -19,7 +20,7 @@ func CodedAVIFYCbCr(r io.ReaderAt, size int64) (*h264.ThumbYCbCr, error) {
 	if _, err := io.ReadFull(io.NewSectionReader(r, 0, size), data); err != nil {
 		return nil, err
 	}
-	ycc, err := av1decode.DecodeAVIFFile(data)
+	ycc, err := av1decode.DecodeAVIFFileWithLimit(data, maxSourcePixels)
 	if err != nil {
 		return nil, errs.Unsup("thumbnail", "avif coded image: "+err.Error())
 	}

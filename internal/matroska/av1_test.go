@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gtsteffaniak/go-media/internal/av1decode"
 	"github.com/gtsteffaniak/go-media/internal/matroska"
 )
 
@@ -20,7 +21,7 @@ func TestAV1MKVThumbnail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ycc, err := matroska.AV1ThumbYCbCrAtSeek(f, st.Size(), hdr, 10)
+	ycc, err := matroska.AV1ThumbYCbCrAtSeek(f, st.Size(), hdr, 10, av1decode.FrameLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +42,7 @@ func TestAV1WebMThumbnail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ycc, err := matroska.AV1ThumbYCbCrAtSeek(f, st.Size(), hdr, 10)
+	ycc, err := matroska.AV1ThumbYCbCrAtSeek(f, st.Size(), hdr, 10, av1decode.FrameLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}

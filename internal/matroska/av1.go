@@ -11,7 +11,7 @@ import (
 const CodecAV1 = "V_AV1"
 
 // AV1ThumbYCbCrAtSeek decodes the AV1 keyframe at or before seekPercent.
-func AV1ThumbYCbCrAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64) (*h264.ThumbYCbCr, error) {
+func AV1ThumbYCbCrAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float64, lim av1decode.FrameLimits) (*h264.ThumbYCbCr, error) {
 	if h == nil || !h.HasDuration() {
 		return nil, errs.Unsup("thumbnail", "matroska: no duration, seek impossible")
 	}
@@ -45,7 +45,7 @@ func AV1ThumbYCbCrAtSeek(r io.ReaderAt, size int64, h *Header, seekPercent float
 	if pick == nil {
 		return nil, errs.Unsup("thumbnail", "matroska: no AV1 keyframe found")
 	}
-	return av1decode.DecodeSampleOnce(av1C, pick)
+	return av1decode.DecodeSampleOnceWithLimits(av1C, pick, lim)
 }
 
 func av1ThumbErr(err error) error {

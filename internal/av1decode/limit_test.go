@@ -28,7 +28,7 @@ func TestCheckFrameSize(t *testing.T) {
 		{7680, 4320, false},
 		{16384, 8192, false},
 	} {
-		err := checkFrameSize(c.w, c.h)
+		err := FrameLimits{}.checkFrameSize(c.w, c.h)
 		var pe *errs.ProfileError
 		if c.ok != (err == nil) || (err != nil && !errors.As(err, &pe)) {
 			t.Errorf("%dx%d: err=%v, want ok=%v", c.w, c.h, err, c.ok)
@@ -94,27 +94,27 @@ func TestFrameSizeEverySequenceHeader(t *testing.T) {
 	mixed := cat(smallSeq, bigSeq, bigFrame)
 	twoUnits := cat(small, big)
 
-	if th, err := DecodeSampleCached(nil, mixed); err != nil || th.YCbCr.Bounds().Dy() != 128 {
+	if th, err := DecodeSampleCached(nil, mixed, FrameLimits{}); err != nil || th.YCbCr.Bounds().Dy() != 128 {
 		t.Fatalf("in-limit mixed unit: %v", err)
 	}
-	if _, err := DecodeSampleCached(nil, small); err != nil {
+	if _, err := DecodeSampleCached(nil, small, FrameLimits{}); err != nil {
 		t.Fatal(err)
 	}
 
 	setFrameLimit(t, 64, 64)
 	for name, unit := range map[string][]byte{"mixed": mixed, "two units": twoUnits} {
-		_, err := DecodeSampleCached(nil, unit)
+		_, err := DecodeSampleCached(nil, unit, FrameLimits{})
 		var pe *errs.ProfileError
 		if !errors.As(err, &pe) || !strings.Contains(err.Error(), "frame header exceeds") {
 			t.Fatalf("%s: want frame-size profile error, got %v", name, err)
 		}
 		// av1C config OBUs carry the small header; the sample the larger one.
 		av1C := cat([]byte{0x81, 0, 0, 0}, smallSeq)
-		if _, err := DecodeSampleCached(av1C, cat(bigSeq, bigFrame)); !errors.As(err, &pe) {
+		if _, err := DecodeSampleCached(av1C, cat(bigSeq, bigFrame), FrameLimits{}); !errors.As(err, &pe) {
 			t.Fatalf("%s via av1C: want profile error, got %v", name, err)
 		}
 	}
-	if _, err := DecodeSampleCached(nil, small); err != nil {
+	if _, err := DecodeSampleCached(nil, small, FrameLimits{}); err != nil {
 		t.Fatalf("in-limit sample after rejection: %v", err)
 	}
 }
