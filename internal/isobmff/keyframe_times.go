@@ -13,9 +13,10 @@ import (
 // first video track (what "ffprobe -select_streams v:0 -show_entries
 // packet=pts_time,flags" lists), from the sample tables alone:
 //
-//   - keyframes are stss sync samples plus stps partial sync samples; with no
-//     stss box every sample is a keyframe, and an empty stss marks only the
-//     first sample (ffmpeg mov_build_index);
+//   - keyframes are stss sync samples plus stps partial sync samples plus
+//     samples in 'rap ' sample groups (sbgp); with no stss box every sample
+//     is a keyframe, and an empty stss with neither stps nor 'rap ' groups
+//     marks only the first sample (ffmpeg mov_build_index);
 //   - pts is dts + ctts, with ctts read as signed (ffmpeg reads it that way
 //     for both box versions);
 //   - an edit list made of leading empty edits and one media edit is applied
@@ -60,6 +61,7 @@ type kfTrack struct {
 	ctts        boxRange // 8-byte entries after the full-box header
 	stss        boxRange // 4-byte entries
 	stps        boxRange // 4-byte entries
+	rap         boxRange // sbgp 'rap ' entries: 8-byte (sample_count, group_description_index)
 	edits       []edit
 	hasElst     bool
 }
@@ -253,6 +255,15 @@ func scanTrak(r io.ReaderAt, size, start, end int64) (*kfTrack, bool, error) {
 					return err
 				}
 				tr.stps = rg
+			case "sbgp":
+				rg, isRap, err := rapGroupRange(r, s, e)
+				if err != nil {
+					return err
+				}
+				if isRap {
+					// ffmpeg keeps the last 'rap ' sbgp of a track.
+					tr.rap = rg
+				}
 			case "stsz", "stz2":
 				// Both carry sample_count at bytes 8..12 of the payload.
 				b, err := readPayload(r, s, min(e, s+12), 12)
@@ -332,14 +343,41 @@ func tableRange(r io.ReaderAt, s, e int64, width int64) (boxRange, error) {
 		return boxRange{}, errs.Unsup("keyframe times", "short table header")
 	}
 	var h [8]byte
-	if !readFullAt(r, h[:], s) {
-		return boxRange{}, errs.Unsup("keyframe times", "short table header read")
+	if err := readFullAtErr(r, h[:], s, errs.Unsup("keyframe times", "short table header read")); err != nil {
+		return boxRange{}, err
 	}
 	count := binary.BigEndian.Uint32(h[4:8])
 	if int64(count)*width > e-s-8 {
 		return boxRange{}, errs.Unsup("keyframe times", "table truncated")
 	}
 	return boxRange{off: s + 8, end: s + 8 + int64(count)*width, count: count, ok: true}, nil
+}
+
+// rapGroupRange reads an sbgp header and, when its grouping type is 'rap ',
+// returns where its (sample_count, group_description_index) entries live.
+// ffmpeg's mov_build_index marks every sample in a run with a non-zero
+// description index as a keyframe, on top of stss and stps. Other grouping
+// types report isRap false.
+func rapGroupRange(r io.ReaderAt, s, e int64) (rg boxRange, isRap bool, err error) {
+	b, err := readPayload(r, s, min(e, s+16), 16)
+	if err != nil {
+		return boxRange{}, false, err
+	}
+	if len(b) < 8 || string(b[4:8]) != "rap " {
+		return boxRange{}, false, nil
+	}
+	hdr := int64(12)
+	if b[0] == 1 {
+		hdr = 16 // grouping_type_parameter
+	}
+	if int64(len(b)) < hdr {
+		return boxRange{}, false, errs.Unsup("keyframe times", "short sbgp")
+	}
+	count := binary.BigEndian.Uint32(b[hdr-4 : hdr])
+	if int64(count)*8 > e-s-hdr {
+		return boxRange{}, false, errs.Unsup("keyframe times", "sbgp truncated")
+	}
+	return boxRange{off: s + hdr, end: s + hdr + int64(count)*8, count: count, ok: count > 0}, true, nil
 }
 
 // u32Reader streams big-endian uint32 values from a table payload.
@@ -368,8 +406,8 @@ func (u *u32Reader) next() (uint32, bool) {
 			u.buf = make([]byte, n)
 		}
 		u.buf = u.buf[:n]
-		if !readFullAt(u.r, u.buf, u.off) {
-			u.err = errs.Unsup("keyframe times", "short table read")
+		if err := readFullAtErr(u.r, u.buf, u.off, errs.Unsup("keyframe times", "short table read")); err != nil {
+			u.err = err
 			return 0, false
 		}
 		u.off += n
@@ -403,6 +441,11 @@ type sampleWalker struct {
 	stpsHave          bool
 	keyOff            uint32
 	allKey, firstOnly bool
+	// 'rap ' sample groups: the current run's description index, its length
+	// and how many of its samples were used.
+	rap                         *u32Reader
+	rapHave                     bool
+	rapCount, rapIndex, rapUsed uint32
 }
 
 // newSampleWalker positions a walker at the first sample of tr.
@@ -424,6 +467,10 @@ func newSampleWalker(r io.ReaderAt, tr *kfTrack) (*sampleWalker, error) {
 		w.stps = newU32Reader(r, tr.stps)
 		w.stpsNext, w.stpsHave = w.stps.next()
 	}
+	if tr.rap.ok {
+		w.rap = newU32Reader(r, tr.rap)
+		w.nextRapRun()
+	}
 	// ffmpeg's key_off: tables are 1-based unless the first entry is 0.
 	if (w.stssHave && w.stssNext > 0) || (w.stpsHave && w.stpsNext > 0) {
 		w.keyOff = 1
@@ -441,9 +488,18 @@ func newSampleWalker(r io.ReaderAt, tr *kfTrack) (*sampleWalker, error) {
 	return w, nil
 }
 
+// nextRapRun loads the next 'rap ' sample group run; rapHave is false once
+// the table is used up.
+func (w *sampleWalker) nextRapRun() {
+	c, ok1 := w.rap.next()
+	d, ok2 := w.rap.next()
+	w.rapHave = ok1 && ok2
+	w.rapCount, w.rapIndex, w.rapUsed = c, d, 0
+}
+
 // errs returns the first table read error seen by the walker.
 func (w *sampleWalker) errs() error {
-	for _, u := range []*u32Reader{w.ctts, w.stss, w.stps} {
+	for _, u := range []*u32Reader{w.ctts, w.stss, w.stps, w.rap} {
 		if u != nil && u.err != nil {
 			return u.err
 		}
@@ -503,8 +559,19 @@ func (w *sampleWalker) next() (sample, bool) {
 			w.stpsNext = v
 		}
 	}
-	if w.firstOnly && !w.stpsHave && w.i == 0 {
-		// An empty stss (and no stps) marks only the first sample.
+	if w.rapHave {
+		// Like ffmpeg, a run with a zero sample_count never ends.
+		if w.rapIndex > 0 {
+			s.key = true
+		}
+		w.rapUsed++
+		if w.rapUsed == w.rapCount {
+			w.nextRapRun()
+		}
+	}
+	if w.firstOnly && !w.stpsHave && w.rap == nil && w.i == 0 {
+		// An empty stss (and no stps or 'rap ' groups) marks only the first
+		// sample.
 		s.key = true
 	}
 

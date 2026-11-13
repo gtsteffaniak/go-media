@@ -3,6 +3,7 @@ package isobmff
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -128,6 +129,22 @@ func readFullAt(r io.ReaderAt, b []byte, off int64) bool {
 	return n == len(b) && (err == nil || err == io.EOF)
 }
 
+// readFullAtErr is readFullAt that keeps the reader's own error. It returns
+// nil when b was filled, the reader error when the read failed with anything
+// other than io.EOF (for example a cancelled context), and short when the
+// data simply ended, so callers can report a truncated box as unsupported
+// without hiding I/O failures.
+func readFullAtErr(r io.ReaderAt, b []byte, off int64, short error) error {
+	n, err := r.ReadAt(b, off)
+	if n == len(b) && (err == nil || err == io.EOF) {
+		return nil
+	}
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return err
+	}
+	return short
+}
+
 // openMovieIndex finds moov with bounded top-level header reads and indexes its traks.
 func openMovieIndex(r io.ReaderAt, size int64) (*movieIndex, error) {
 	return openMovieIndexFor(r, size, -1)
@@ -168,8 +185,8 @@ func readBoxHeader(r io.ReaderAt, size, off, end int64, buf []byte) (typ [4]byte
 	if end-off < 8 {
 		return typ, 0, 0, errs.Unsup("mp4 index", "truncated box header")
 	}
-	if !readFullAt(r, buf[:8], off) {
-		return typ, 0, 0, errs.Unsup("mp4 index", "short box header read")
+	if err := readFullAtErr(r, buf[:8], off, errs.Unsup("mp4 index", "short box header read")); err != nil {
+		return typ, 0, 0, err
 	}
 	copy(typ[:], buf[4:8])
 	boxSize = int64(binary.BigEndian.Uint32(buf[:4]))
@@ -181,8 +198,8 @@ func readBoxHeader(r io.ReaderAt, size, off, end int64, buf []byte) (typ [4]byte
 		if end-off < 16 {
 			return typ, 0, 0, errs.Unsup("mp4 index", "truncated largesize")
 		}
-		if !readFullAt(r, buf[8:16], off+8) {
-			return typ, 0, 0, errs.Unsup("mp4 index", "short largesize read")
+		if err := readFullAtErr(r, buf[8:16], off+8, errs.Unsup("mp4 index", "short largesize read")); err != nil {
+			return typ, 0, 0, err
 		}
 		ls := binary.BigEndian.Uint64(buf[8:16])
 		if ls > uint64(end-off) {
@@ -219,8 +236,10 @@ func readPayload(r io.ReaderAt, start, end int64, limit int64) ([]byte, error) {
 		return nil, errs.Unsup("mp4 index", "box payload too large")
 	}
 	b := make([]byte, n)
-	if n > 0 && !readFullAt(r, b, start) {
-		return nil, errs.Unsup("mp4 index", "short box payload read")
+	if n > 0 {
+		if err := readFullAtErr(r, b, start, errs.Unsup("mp4 index", "short box payload read")); err != nil {
+			return nil, err
+		}
 	}
 	return b, nil
 }

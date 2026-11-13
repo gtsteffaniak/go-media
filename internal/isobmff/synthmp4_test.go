@@ -46,6 +46,8 @@ type synthMP4Opts struct {
 	EmptyStss bool
 	// Mvex adds an (empty) mvex box to moov, marking the file fragmented.
 	Mvex bool
+	// Stbl lists extra boxes (for example sbgp) appended to the video stbl.
+	Stbl [][]byte
 }
 
 const synthSampleSize = 12
@@ -125,6 +127,7 @@ func buildSynthMP4(o synthMP4Opts) []byte {
 		if o.Ctts != nil {
 			parts = append(parts, o.Ctts)
 		}
+		parts = append(parts, o.Stbl...)
 		avcC := synthBox("avcC", []byte{1, 66, 0, 30, 0xFF, 0xE1, 0, 4, 0x67, 66, 0, 30, 1, 0, 2, 0x68, 0xCE})
 		avc1Payload := make([]byte, 78)
 		binary.BigEndian.PutUint16(avc1Payload[6:], 1)   // data reference index

@@ -89,13 +89,14 @@ func infoTest(scale uint64, duration float64) []byte {
 }
 
 // videoTrackTest builds one Tracks element holding a single video TrackEntry.
-func videoTrackTest(codec string) []byte {
-	entry := ebmlElem(idTrackEntry,
+func videoTrackTest(codec string, extra ...[]byte) []byte {
+	children := [][]byte{
 		u64Elem(idTrackNumTst, 1),
 		u64Elem(idTrackTypeTst, 1),
 		ebmlElem(idCodecIDTest, []byte(codec)),
 		ebmlElem(idVideoTest, u64Elem(0xB0, 320), u64Elem(0xBA, 240)),
-	)
+	}
+	entry := ebmlElem(idTrackEntry, append(children, extra...)...)
 	return ebmlElem(idTracksTest, entry)
 }
 

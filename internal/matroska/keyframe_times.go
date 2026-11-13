@@ -3,6 +3,7 @@ package matroska
 import (
 	"errors"
 	"io"
+	"math"
 	"sort"
 
 	"github.com/gtsteffaniak/go-media/internal/errs"
@@ -11,10 +12,14 @@ import (
 // Keyframe timeline for HLS segment planning. VideoKeyframeTimes returns the
 // timestamps ffmpeg's matroska demuxer gives the key packets of the first
 // video track (Tracks order, as ffprobe's v:0): Cluster Timecode plus the
-// block's relative timecode, scaled by TimecodeScale. A SimpleBlock is a
-// keyframe when its key flag is set; a BlockGroup when it has no
-// ReferenceBlock. For a laced block only the first lace is key, at the block
-// timestamp.
+// block's relative timecode minus the track's CodecDelay, scaled by
+// TimecodeScale. A SimpleBlock is a keyframe when its key flag is set; a
+// BlockGroup when it has no ReferenceBlock. Every lace of a key block is key
+// (ffmpeg 7.1.1 and later; 7.1.0 flagged only the first lace), timed like
+// ffmpeg's matroska_parse_block: lace n starts after n lace durations, split
+// from BlockDuration or else DefaultDuration times the lace count, and with
+// neither only the first lace has a timestamp. A track with a
+// TrackTimestampScale other than 1.0 returns errs.Unsup.
 //
 // When the file has Cues for the track, the CueTimes are used and no Cluster
 // is read. mkvmerge and ffmpeg write a CuePoint for every video keyframe, so
@@ -46,60 +51,79 @@ func VideoKeyframeTimes(r io.ReaderAt, size int64, windowSec float64) ([]float64
 	if err != nil {
 		return nil, err
 	}
-	track, ok := firstVideoTrack(ix.tracks)
+	te, track, ok := firstVideoTrack(ix.tracks)
 	if !ok {
 		return nil, errs.Unsup("keyframe times", "no video track")
 	}
+	// ffmpeg reads a TrackTimestampScale below 0.01 (including an absent
+	// one) as 1.0. Other values scale block timestamps but not Cluster or
+	// Cue times; such files are rare enough to leave to ffprobe.
+	if ts := te.TrackTimestampScale; ts >= 0.01 && ts != 1.0 {
+		return nil, errs.Unsup("keyframe times", "TrackTimestampScale is not 1.0")
+	}
+	// CodecDelay in segment ticks, rounded to nearest like ffmpeg's
+	// av_rescale_q.
+	delay := int64(0)
+	if te.CodecDelay > 0 {
+		if te.CodecDelay > 1<<62 {
+			return nil, errs.Unsup("keyframe times", "CodecDelay out of range")
+		}
+		delay = int64((te.CodecDelay + scale/2) / scale)
+	}
+	// The Cluster walk stops one tick past the window, rounded up, so a
+	// keyframe exactly at the window is never cut by float rounding; the
+	// inclusive limit is applied in seconds below.
 	var windowTicks int64 = -1
 	if windowSec > 0 {
-		windowTicks = int64(windowSec * 1e9 / float64(scale))
+		windowTicks = int64(math.Ceil(windowSec*1e9/float64(scale))) + 1
 	}
 	ticks, err := cueKeyframeTicks(r, ix, track)
 	if err != nil || len(ticks) == 0 {
-		ticks, err = walkKeyframeTicks(r, ix, track, windowTicks)
+		ticks, err = walkKeyframeTicks(r, ix, track, keyWalkTrack{delay: delay, defaultDuration: te.DefaultDuration, scale: scale}, windowTicks)
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		for i := range ticks {
+			ticks[i] -= delay
+		}
 	}
-	out := ticksToSeconds(ticks, scale, windowTicks)
+	out := ticksToSeconds(ticks, scale, windowSec)
 	if len(out) == 0 {
 		return nil, errNoKeyframes
 	}
 	return out, nil
 }
 
-// firstVideoTrack returns the track number of the first video track.
-func firstVideoTrack(tracks []trackEntry) (uint64, bool) {
+// firstVideoTrack returns the first video track and its track number.
+func firstVideoTrack(tracks []trackEntry) (trackEntry, uint64, bool) {
 	for i, t := range tracks {
 		if t.TrackType != 1 {
 			continue
 		}
 		if t.TrackNumber != 0 {
-			return t.TrackNumber, true
+			return t, t.TrackNumber, true
 		}
-		return uint64(i + 1), true
+		return t, uint64(i + 1), true
 	}
-	return 0, false
+	return trackEntry{}, 0, false
 }
 
 // ticksToSeconds sorts, de-duplicates and window-limits timecode ticks.
 // Duplicates are dropped after conversion, so ticks that only differ below
 // float64 precision (absurd timecodes) still give a strictly ascending list.
-func ticksToSeconds(ticks []int64, scale uint64, windowTicks int64) []float64 {
+// windowSec > 0 keeps the times at most windowSec after the first one.
+func ticksToSeconds(ticks []int64, scale uint64, windowSec float64) []float64 {
 	sort.Slice(ticks, func(i, j int) bool { return ticks[i] < ticks[j] })
 	out := make([]float64, 0, len(ticks))
-	first := int64(-1)
 	for _, t := range ticks {
 		if t < 0 {
 			continue
 		}
-		if first < 0 {
-			first = t
-		}
-		if windowTicks >= 0 && t-first > windowTicks {
+		v := float64(t) * float64(scale) / 1e9
+		if windowSec > 0 && len(out) > 0 && v > out[0]+windowSec {
 			break
 		}
-		v := float64(t) * float64(scale) / 1e9
 		if len(out) > 0 && v <= out[len(out)-1] {
 			continue
 		}
@@ -173,10 +197,48 @@ func parseCueTimes(b []byte, track uint64) []int64 {
 	return out
 }
 
+// keyWalkTrack is the per-track timing a Cluster walk needs.
+type keyWalkTrack struct {
+	delay           int64  // CodecDelay in segment ticks
+	defaultDuration uint64 // DefaultDuration in nanoseconds, 0 when absent
+	scale           uint64 // TimecodeScale in nanoseconds per tick
+}
+
+// laceTicks returns the timestamps of the laces of key block bi that has
+// timestamp tc, the way ffmpeg's matroska_parse_block times them. It reads
+// the lace count byte only for laced blocks.
+func (k keyWalkTrack) laceTicks(r io.ReaderAt, bi blockInfo, tc int64, out []int64) []int64 {
+	out = append(out, tc)
+	if bi.lacing == 0 || bi.payloadLen < 1 {
+		return out
+	}
+	var b [1]byte
+	if n, _ := r.ReadAt(b[:], bi.payloadOff); n != 1 {
+		return out
+	}
+	laces := int64(b[0]) + 1
+	dur := bi.duration
+	if dur <= 0 && k.defaultDuration > 0 && k.defaultDuration <= 1<<62/uint64(laces) {
+		dur = int64(k.defaultDuration * uint64(laces) / k.scale)
+	}
+	if dur <= 0 || dur > 1<<54 {
+		// ffmpeg gives laces after the first no timestamp; an absurd
+		// duration is treated the same rather than risk overflow.
+		return out
+	}
+	for n := int64(1); n < laces; n++ {
+		// Lace n starts after laces 0..n-1, whose durations sum to
+		// dur*n/laces (ffmpeg splits dur*(i+1)/laces - dur*i/laces).
+		out = append(out, tc+dur*n/laces)
+	}
+	return out
+}
+
 // walkKeyframeTicks walks every Cluster from the first one and collects the
-// timecodes of track's key blocks. windowTicks >= 0 stops the walk once a
-// block of track is past the first keyframe plus the window.
-func walkKeyframeTicks(r io.ReaderAt, ix *segmentIndex, track uint64, windowTicks int64) ([]int64, error) {
+// timecodes of track's key blocks and their laces, minus the track's
+// CodecDelay. windowTicks >= 0 stops the walk once a block of track is past
+// the first keyframe plus the window.
+func walkKeyframeTicks(r io.ReaderAt, ix *segmentIndex, track uint64, kt keyWalkTrack, windowTicks int64) ([]int64, error) {
 	if ix.firstCluster < 0 {
 		return nil, errs.Unsup("keyframe times", "no clusters")
 	}
@@ -203,14 +265,22 @@ func walkKeyframeTicks(r io.ReaderAt, ix *segmentIndex, track uint64, windowTick
 		if bi.track != track {
 			continue
 		}
-		if windowTicks >= 0 && first >= 0 && bi.timecode-first > windowTicks {
+		tc := bi.timecode - kt.delay
+		if windowTicks >= 0 && first >= 0 && tc-first > windowTicks {
 			break
 		}
-		if bi.keyframe && bi.timecode >= 0 {
+		if bi.keyframe {
+			// Negative times are dropped later; a block before zero can
+			// still have laces after it.
+			out = kt.laceTicks(br, bi, tc, out)
 			if first < 0 {
-				first = bi.timecode
+				for _, t := range out {
+					if t >= 0 {
+						first = t
+						break
+					}
+				}
 			}
-			out = append(out, bi.timecode)
 		}
 	}
 	if br.err != nil {

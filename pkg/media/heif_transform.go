@@ -10,7 +10,10 @@ import (
 
 // ImageTransform is the display transform a HEIF still image stores for its
 // primary item (irot and imir properties). Apply Rotation first, then the
-// mirror, the order ffmpeg and libheif use.
+// mirror. HEIFTransform composes the properties in their ipma association
+// order, as HEIF and libheif define it, and reports the result in this
+// rotate-then-mirror form, so a file that associates imir before irot is
+// still described correctly.
 type ImageTransform struct {
 	// Rotation is 0, 90, 180 or 270 degrees counter-clockwise.
 	Rotation int

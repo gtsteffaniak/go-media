@@ -59,6 +59,7 @@ type mkvOpts struct {
 	extraBlocks   [][]byte // prepended to the first cluster
 	jpegForFrame  func(i int) []byte
 	durationMsArg float64
+	trackExtra    [][]byte // extra TrackEntry children
 }
 
 // buildMJPEGMKV builds a Matroska file with one V_MJPEG track (number 1),
@@ -66,7 +67,7 @@ type mkvOpts struct {
 // ffmpeg's muxer).
 func buildMJPEGMKV(tb testing.TB, o mkvOpts) []byte {
 	tb.Helper()
-	tracks := videoTrackTest("V_MJPEG")
+	tracks := videoTrackTest("V_MJPEG", o.trackExtra...)
 	totalMs := o.clusters * o.framesPer * o.frameStepMs
 	dur := float64(totalMs)
 	if o.durationMsArg > 0 {

@@ -47,7 +47,13 @@ func MP4KeyframeSamples(r io.ReaderAt, size int64, trackIndex int) ([]KeyframeSa
 // without duplicates, and without negative times (keyframes an MP4 edit list
 // starts before).
 //
-// MP4/MOV reads only the moov sample tables (stss/stps, stts, ctts, elst) and
+// The list comes from the container index only. ffprobe can also flag
+// keyframes its codec parsers find in the bitstream (H.264 recovery points,
+// for example) that the index does not mark, and Matroska Cues may index
+// only some keyframes, so the result can be a subset of ffprobe's; it never
+// adds a keyframe the container does not mark.
+//
+// MP4/MOV reads only the moov sample tables (stss/stps, 'rap ' sbgp, stts, ctts, elst) and
 // applies a single edit list entry, with or without leading empty edits, the
 // way ffmpeg's mov demuxer does. Matroska/WebM uses Cues when they index the
 // video track and otherwise walks the Clusters, reading block headers only.

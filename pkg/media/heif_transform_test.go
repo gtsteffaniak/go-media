@@ -43,6 +43,21 @@ func TestHEIFTransformIrot(t *testing.T) {
 	}
 }
 
+// TestHEIFTransformMirrorFirst checks that an imir associated before irot is
+// composed in association order: a top-to-bottom mirror followed by a
+// quarter turn is the quarter turn followed by a left-to-right mirror.
+func TestHEIFTransformMirrorFirst(t *testing.T) {
+	data := heifthumb.SynthJPEGHEIFWithPrimaryMirrorFirst([]byte{0xff, 0xd8, 0xff, 0xd9}, 2, 1, 0, 1)
+	got, err := media.HEIFTransform(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := media.ImageTransform{Rotation: 90, Mirror: true, MirrorHorizontal: true}
+	if got != want {
+		t.Fatalf("HEIFTransform = %+v, want %+v", got, want)
+	}
+}
+
 // TestHEIFTransformUnreadable checks that missing item properties are an
 // error, not "no transform", and that other formats are unsupported.
 func TestHEIFTransformUnreadable(t *testing.T) {

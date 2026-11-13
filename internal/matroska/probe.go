@@ -54,6 +54,12 @@ type trackEntry struct {
 	// DefaultDuration is the nominal frame length in nanoseconds; ffmpeg
 	// uses it as a subtitle block's duration when BlockDuration is absent.
 	DefaultDuration uint64 `ebml:"DefaultDuration"`
+	// CodecDelay is the codec's built-in delay in nanoseconds; ffmpeg
+	// subtracts it from every block timestamp of the track.
+	CodecDelay uint64 `ebml:"CodecDelay"`
+	// TrackTimestampScale scales the track's block timestamps (deprecated
+	// in Matroska v4). Zero means absent, which is the default of 1.0.
+	TrackTimestampScale float64 `ebml:"TrackTimestampScale"`
 	// ContentEncodings lists the compression applied to the track's frames.
 	ContentEncodings *contentEncodings `ebml:"ContentEncodings"`
 	Video            *struct {

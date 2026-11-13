@@ -80,8 +80,11 @@ func (m metaReaderAt) ReadAt(p []byte, off int64) (int, error) {
 }
 
 // Transform is the primary item's display transform from its irot and imir
-// properties, applied in the order ffmpeg (and libavif/gav1d) apply them:
-// first rotate counter-clockwise by Rotation, then mirror.
+// properties, normalized to one form: first rotate counter-clockwise by
+// Rotation, then mirror. The properties themselves are composed in ipma
+// association order, as HEIF and libheif define it, so a mirror associated
+// before a quarter-turn rotation is reported as the rotation followed by a
+// mirror across the other axis.
 type Transform struct {
 	// Rotation is 0, 90, 180 or 270 degrees counter-clockwise (irot × 90).
 	Rotation int
@@ -186,22 +189,58 @@ func primaryTransformFrom(pitm, iprp []byte) (Transform, bool, error) {
 		return Transform{}, false, errs.Unsup("heif transform", "no ipco or ipma")
 	}
 	properties := parseIPCOProperties(ipco)
+	indices, err := parseIPMAPropertyIndices(ipma, primaryID)
+	if err != nil {
+		return Transform{}, false, err
+	}
 	var t Transform
 	found := false
-	for _, idx := range parseIPMAPropertyIndices(ipma, primaryID) {
+	// HEIF applies transformative properties in association order, so each
+	// irot or imir is composed onto the transform so far (libheif does the
+	// same). The result is kept in the rotate-then-mirror form Transform
+	// documents.
+	for _, idx := range indices {
 		if idx == 0 || int(idx) > len(properties) {
 			continue
 		}
 		switch prop := properties[idx-1]; prop.typ {
 		case "irot":
-			t.Rotation = irotDegrees(prop.val)
+			t = t.thenRotate(irotDegrees(prop.val))
 			found = true
 		case "imir":
-			t.Mirror, t.MirrorAxis = true, prop.val&0x01
+			t = t.thenMirror(prop.val & 0x01)
 			found = true
 		}
 	}
 	return t, found, nil
+}
+
+// thenRotate returns t followed by a counter-clockwise rotation of deg
+// degrees, in rotate-then-mirror form. A quarter turn after a mirror equals
+// the same quarter turn before the mirror across the other axis; a half turn
+// keeps the axis.
+func (t Transform) thenRotate(deg int) Transform {
+	t.Rotation = (t.Rotation + deg) % 360
+	if t.Mirror && (deg == 90 || deg == 270) {
+		t.MirrorAxis ^= 1
+	}
+	return t
+}
+
+// thenMirror returns t followed by a mirror across axis (0 top-to-bottom,
+// 1 left-to-right), in rotate-then-mirror form. Two mirrors across the same
+// axis cancel; across different axes they make a half turn.
+func (t Transform) thenMirror(axis uint8) Transform {
+	switch {
+	case !t.Mirror:
+		t.Mirror, t.MirrorAxis = true, axis
+	case t.MirrorAxis == axis:
+		t.Mirror, t.MirrorAxis = false, 0
+	default:
+		t.Mirror, t.MirrorAxis = false, 0
+		t.Rotation = (t.Rotation + 180) % 360
+	}
+	return t
 }
 
 const maxBMFFRecursionDepth = 32
@@ -377,11 +416,20 @@ func parseIPCOProperties(ipco []byte) []ipcoProperty {
 	return props
 }
 
-func parseIPMAPropertyIndices(ipma []byte, itemID uint32) []uint16 {
+// errMalformedIPMA reports an ipma box too short for its entry count or for
+// the entries it declares.
+var errMalformedIPMA = errs.Unsup("heif transform", "malformed ipma")
+
+// parseIPMAPropertyIndices returns the property indices associated with
+// itemID, in association order. An item with no entry returns nil and a nil
+// error; an ipma box that is too short for its entry count or entries
+// returns errMalformedIPMA, so callers do not read a broken box as "no
+// properties".
+func parseIPMAPropertyIndices(ipma []byte, itemID uint32) ([]uint16, error) {
 	payload := bmffBoxPayload(ipma)
 	version, flags, ok := bmffFullBoxVersionFlags(ipma)
 	if !ok || payload == nil || len(payload) < 4 {
-		return nil
+		return nil, errMalformedIPMA
 	}
 	wide := flags&0x01 != 0
 	entrySize := 1
@@ -390,29 +438,33 @@ func parseIPMAPropertyIndices(ipma []byte, itemID uint32) []uint16 {
 	}
 	entryCount := int(binary.BigEndian.Uint32(payload[0:4]))
 	pos := 4
-	for i := 0; i < entryCount && pos < len(payload); i++ {
+	for i := 0; i < entryCount; i++ {
 		var id uint32
 		switch version {
 		case 0:
 			if pos+2 > len(payload) {
-				return nil
+				return nil, errMalformedIPMA
 			}
 			id = uint32(binary.BigEndian.Uint16(payload[pos : pos+2]))
 			pos += 2
 		default:
 			if pos+4 > len(payload) {
-				return nil
+				return nil, errMalformedIPMA
 			}
 			id = binary.BigEndian.Uint32(payload[pos : pos+4])
 			pos += 4
 		}
 		if pos >= len(payload) {
-			return nil
+			return nil, errMalformedIPMA
 		}
 		count := int(payload[pos])
 		pos++
 		if pos+count*entrySize > len(payload) {
-			return nil
+			return nil, errMalformedIPMA
+		}
+		if id != itemID {
+			pos += count * entrySize
+			continue
 		}
 		indices := make([]uint16, count)
 		for j := 0; j < count; j++ {
@@ -422,11 +474,7 @@ func parseIPMAPropertyIndices(ipma []byte, itemID uint32) []uint16 {
 				indices[j] = uint16(payload[pos+j] & 0x7f)
 			}
 		}
-		pos += count * entrySize
-		if id != itemID {
-			continue
-		}
-		return indices
+		return indices, nil
 	}
-	return nil
+	return nil, nil
 }

@@ -2,6 +2,7 @@ package isobmff
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"math"
 	"testing"
@@ -67,6 +68,76 @@ func TestVideoKeyframeTimesNoStssAllKey(t *testing.T) {
 func TestVideoKeyframeTimesEmptyStssFirstOnly(t *testing.T) {
 	data := buildSynthMP4(synthMP4Opts{Samples: 6, EmptyStss: true})
 	sameTimes(t, kfTimes(t, data, 0), frames(0))
+}
+
+// sbgp builds a version-0 sample-to-group box of grouping type typ from
+// (sample_count, group_description_index) runs.
+func sbgp(typ string, runs ...[2]uint32) []byte {
+	b := append(u32s(0), []byte(typ)...)
+	b = append(b, u32s(uint32(len(runs)))...)
+	for _, r := range runs {
+		b = append(b, u32s(r[0], r[1])...)
+	}
+	return synthBox("sbgp", b)
+}
+
+// TestVideoKeyframeTimesRapGroups checks that samples in 'rap ' sample
+// groups are keyframes, as in ffmpeg's mov_build_index: with an empty stss
+// they replace the first-sample-only rule, and with stss they add to it.
+// Other grouping types are ignored.
+func TestVideoKeyframeTimesRapGroups(t *testing.T) {
+	runs := [][2]uint32{{1, 1}, {9, 0}, {1, 1}, {9, 0}, {1, 1}, {9, 0}}
+	data := buildSynthMP4(synthMP4Opts{Samples: 30, EmptyStss: true, Stbl: [][]byte{sbgp("rap ", runs...)}})
+	sameTimes(t, kfTimes(t, data, 0), frames(0, 10, 20))
+
+	data = buildSynthMP4(synthMP4Opts{Samples: 30, GOP: 10, Stbl: [][]byte{sbgp("rap ", [2]uint32{5, 0}, [2]uint32{1, 1})}})
+	sameTimes(t, kfTimes(t, data, 0), frames(0, 5, 10, 20))
+
+	data = buildSynthMP4(synthMP4Opts{Samples: 30, EmptyStss: true, Stbl: [][]byte{sbgp("roll", runs...)}})
+	sameTimes(t, kfTimes(t, data, 0), frames(0))
+
+	// Version 1 carries a grouping_type_parameter before the entry count.
+	v1 := append(u32s(1<<24), []byte("rap ")...)
+	v1 = append(v1, u32s(0, 2, 15, 0, 1, 1)...)
+	data = buildSynthMP4(synthMP4Opts{Samples: 30, EmptyStss: true, Stbl: [][]byte{synthBox("sbgp", v1)}})
+	sameTimes(t, kfTimes(t, data, 0), frames(15))
+}
+
+// failingReaderAt fails every read at or past off with err.
+type failingReaderAt struct {
+	r   *bytes.Reader
+	off int64
+	err error
+}
+
+func (f failingReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	if off+int64(len(p)) > f.off {
+		return 0, f.err
+	}
+	return f.r.ReadAt(p, off)
+}
+
+// TestVideoKeyframeTimesReadError checks that a reader error while reading
+// the sample tables is returned as is, not as unsupported.
+func TestVideoKeyframeTimesReadError(t *testing.T) {
+	data := buildSynthMP4(synthMP4Opts{Samples: 3000, GOP: 10})
+	for _, box := range []string{"stss", "stts", "moov"} {
+		off := int64(bytes.Index(data, []byte(box)))
+		if off < 0 {
+			t.Fatalf("no %s box", box)
+		}
+		// Fail just past the box header so the payload read fails.
+		r := failingReaderAt{r: bytes.NewReader(data), off: off + 8, err: context.Canceled}
+		_, err := VideoKeyframeTimes(r, int64(len(data)), 0)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("%s: err = %v, want context.Canceled", box, err)
+		}
+	}
+	// A file that simply ends early is still unsupported.
+	short := data[:bytes.Index(data, []byte("stss"))+12]
+	if _, err := VideoKeyframeTimes(bytes.NewReader(short), int64(len(data)), 0); !errors.Is(err, errs.Unsupported) {
+		t.Fatalf("truncated: err = %v, want unsupported", err)
+	}
 }
 
 // TestVideoKeyframeTimesCttsNoEdit checks pts = dts + ctts without an edit
