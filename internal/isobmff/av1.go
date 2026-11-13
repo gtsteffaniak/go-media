@@ -7,7 +7,7 @@ import (
 )
 
 // AV1ThumbnailYCbCr decodes the sync keyframe at seekPercent on the first AV1 track.
-func (s ThumbSource) AV1ThumbnailYCbCr(seekPercent float64) (*h264.ThumbYCbCr, error) {
+func (s ThumbSource) AV1ThumbnailYCbCr(seekPercent float64, lim av1decode.FrameLimits) (*h264.ThumbYCbCr, error) {
 	track, ok := s.idx.firstAV1()
 	if !ok {
 		return nil, nil
@@ -20,7 +20,7 @@ func (s ThumbSource) AV1ThumbnailYCbCr(seekPercent float64) (*h264.ThumbYCbCr, e
 	if err != nil {
 		return nil, thumbErr(err)
 	}
-	ycc, err := av1decode.DecodeSampleCached(tr.av1C, sample)
+	ycc, err := av1decode.DecodeSampleCached(tr.av1C, sample, lim)
 	if err != nil {
 		return nil, err
 	}

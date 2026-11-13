@@ -78,7 +78,9 @@ func mapThumbOptions(opt ThumbnailOptions) thumb.Options {
 		Fast:            opt.Fast,
 		PreferEmbedded:  opt.PreferEmbedded,
 		Exact:           opt.Exact,
-		MaxSourcePixels: opt.MaxSourcePixels,
+		MaxSourcePixels:      opt.MaxSourcePixels,
+		MaxAV1FrameLongSide:  opt.MaxAV1FrameLongSide,
+		MaxAV1FrameShortSide: opt.MaxAV1FrameShortSide,
 	}
 	switch opt.Filter {
 	case ThumbnailFilterFast:

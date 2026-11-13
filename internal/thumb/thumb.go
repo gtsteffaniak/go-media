@@ -28,6 +28,7 @@ import (
 
 	"github.com/gen2brain/vpx/webp"
 	"github.com/gtsteffaniak/go-media/internal/asf"
+	"github.com/gtsteffaniak/go-media/internal/av1decode"
 	"github.com/gtsteffaniak/go-media/internal/avi"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 	"github.com/gtsteffaniak/go-media/internal/format"
@@ -63,8 +64,22 @@ type Options struct {
 	// supports it (VP8, VP9). Default: keyframe at or before the seek time.
 	Exact bool
 	// MaxSourcePixels caps the original image area for decoders that must
-	// decode the full frame regardless of the box (JPEG XL). Zero: no cap.
+	// decode the full frame regardless of the box (JPEG XL, AVIF). Zero: no
+	// caller cap beyond each decoder's library ceiling.
 	MaxSourcePixels int64
+	// MaxAV1FrameLongSide and MaxAV1FrameShortSide cap coded AV1 video keyframe
+	// dimensions. Zero on both uses the library default (4096×2160). Frames
+	// above the cap return ErrUnsupportedProfile.
+	MaxAV1FrameLongSide  int
+	MaxAV1FrameShortSide int
+}
+
+// av1FrameLimits maps thumbnail options to av1decode.FrameLimits.
+func (opt Options) av1FrameLimits() av1decode.FrameLimits {
+	return av1decode.FrameLimits{
+		LongSide:  opt.MaxAV1FrameLongSide,
+		ShortSide: opt.MaxAV1FrameShortSide,
+	}
 }
 
 // Result is a data type used by this package.
@@ -163,7 +178,7 @@ func decodeSource(r interface {
 		} else if yimg != nil {
 			return yimg, "decode", nil
 		}
-		if yimg, err := src.AV1ThumbnailYCbCr(opt.SeekPercent); err != nil {
+		if yimg, err := src.AV1ThumbnailYCbCr(opt.SeekPercent, opt.av1FrameLimits()); err != nil {
 			return nil, "", err
 		} else if yimg != nil {
 			return yimg, "decode", nil
@@ -284,7 +299,7 @@ func decodeSource(r interface {
 			}
 		}
 		if slices.Contains(hdr.VideoCodecIDs, matroska.CodecAV1) {
-			if ycc, err := matroska.AV1ThumbYCbCrAtSeek(r, size, hdr, opt.SeekPercent); err != nil {
+			if ycc, err := matroska.AV1ThumbYCbCrAtSeek(r, size, hdr, opt.SeekPercent, opt.av1FrameLimits()); err != nil {
 				return nil, "", err
 			} else if ycc != nil {
 				return ycc, "decode", nil
@@ -400,7 +415,7 @@ func decodeSource(r interface {
 		if !errors.As(err, &ue) {
 			return nil, "", err
 		}
-		if yimg, err := heifthumb.CodedAVIFYCbCr(r, size); err != nil {
+		if yimg, err := heifthumb.CodedAVIFYCbCr(r, size, opt.MaxSourcePixels); err != nil {
 			return nil, "", err
 		} else if yimg != nil {
 			return yimg, "decode", nil

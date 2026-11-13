@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gtsteffaniak/go-media/internal/av1decode"
 	"github.com/gtsteffaniak/go-media/internal/isobmff"
 )
 
@@ -22,7 +23,7 @@ func BenchmarkMP4AV1Thumbnail(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := src.AV1ThumbnailYCbCr(10); err != nil {
+		if _, err := src.AV1ThumbnailYCbCr(10, av1decode.FrameLimits{}); err != nil {
 			b.Fatal(err)
 		}
 	}

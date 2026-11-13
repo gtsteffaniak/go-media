@@ -14,7 +14,7 @@ import (
 // values of ffmpeg's RGB (sidecar made with ffmpeg 9.0.2 default swscale flags, -pix_fmt rgb24).
 func TestSequenceColorBT709Full(t *testing.T) {
 	sample := readAV1(t, "tu_bt709_full.obu")
-	th, err := DecodeSampleCached(nil, sample)
+	th, err := DecodeSampleCached(nil, sample, FrameLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestSequenceColorBT709Full(t *testing.T) {
 
 func TestSequenceColorDefault(t *testing.T) {
 	sample := readAV1(t, "tu_small.obu")
-	th, err := DecodeSampleCached(nil, sample)
+	th, err := DecodeSampleCached(nil, sample, FrameLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}

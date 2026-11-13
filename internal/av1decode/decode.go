@@ -3,7 +3,6 @@ package av1decode
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"image"
 
 	"github.com/gen2brain/gav1d/av1"
@@ -12,58 +11,42 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
-// MaxFrameLongSide and MaxFrameShortSide cap the coded frame size of video
-// keyframes at DCI 4K in either orientation (4096×2160 or 2160×4096). The
-// area (long × short) is handed to gav1d as Decoder.FrameSizeLimit, which it
-// checks against the frame header before allocating any picture memory, so a
-// tiny file declaring a huge frame is rejected cheaply. The per-side check
-// runs on the decoded picture. Larger frames return an unsupported-profile
-// error (media.ErrUnsupportedProfile) so callers fall back to ffmpeg. Zero
+// MaxFrameLongSide and MaxFrameShortSide are the default per-side caps for
+// video keyframes when no caller override is passed (see FrameLimits). They
+// default to DCI 4K (4096×2160 in either orientation). Setting both to zero
 // disables the cap (gav1d's own DefaultFrameSizeLimit then applies).
 var (
-	MaxFrameLongSide  = 4096
-	MaxFrameShortSide = 2160
+	MaxFrameLongSide  = DefaultFrameLongSide
+	MaxFrameShortSide = DefaultFrameShortSide
 )
-
-func frameSizeLimit() int {
-	if MaxFrameLongSide <= 0 || MaxFrameShortSide <= 0 {
-		return 0
-	}
-	return MaxFrameLongSide * MaxFrameShortSide
-}
-
-// checkFrameSize rejects a decoded frame above the 4K limit.
-func checkFrameSize(w, h int) error {
-	if MaxFrameLongSide <= 0 || MaxFrameShortSide <= 0 {
-		return nil
-	}
-	long, short := max(w, h), min(w, h)
-	if long > MaxFrameLongSide || short > MaxFrameShortSide {
-		return frameTooLarge(fmt.Sprintf("frame %dx%d", w, h))
-	}
-	return nil
-}
-
-func frameTooLarge(what string) error {
-	return errs.UnsupProfile("av1 keyframe", fmt.Sprintf("%s exceeds the %dx%d thumbnail limit", what, MaxFrameLongSide, MaxFrameShortSide))
-}
 
 // Decoder decodes AV1 keyframes with gen2brain/gav1d. A Decoder holds no
 // frame memory between calls: DecodeSample flushes the decoder (dropping its
 // reference frames and picture pool) before returning, and the returned
 // picture is an independent copy.
 type Decoder struct {
-	d *av1.Decoder
+	d      *av1.Decoder
+	limits FrameLimits
 }
 
 // NewDecoder returns a keyframe decoder with film grain synthesis skipped,
-// one frame in flight and the 4K frame-size limit.
+// one frame in flight and the default frame-size limit.
 func NewDecoder() *Decoder {
-	return &Decoder{d: &av1.Decoder{
-		FrameThreads:   1,
-		FrameSizeLimit: frameSizeLimit(),
-		SkipFilmGrain:  true,
-	}}
+	return NewDecoderWithLimits(FrameLimits{})
+}
+
+// NewDecoderWithLimits returns a decoder using lim for per-frame dimension
+// checks and gav1d's FrameSizeLimit. Zero limits select MaxFrameLongSide and
+// MaxFrameShortSide.
+func NewDecoderWithLimits(lim FrameLimits) *Decoder {
+	return &Decoder{
+		d: &av1.Decoder{
+			FrameThreads:   1,
+			FrameSizeLimit: lim.frameSizeLimit(),
+			SkipFilmGrain:  true,
+		},
+		limits: lim,
+	}
 }
 
 // Close drops the underlying decoder. It is safe to call more than once.
@@ -86,13 +69,13 @@ func (d *Decoder) DecodeSample(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, 
 	if len(sample) == 0 {
 		return nil, errs.UnsupProfile("av1 keyframe", "empty sample")
 	}
-	d.d.FrameSizeLimit = frameSizeLimit()
+	d.d.FrameSizeLimit = d.limits.frameSizeLimit()
 	defer d.d.Flush()
 	if cfg := ConfigOBUs(av1CExtradata); len(cfg) > 0 {
 		// Sequence header (and metadata) OBUs from av1C / CodecPrivate. A
 		// repeated in-band sequence header in the sample is accepted.
 		if err := d.d.Send(cfg); err != nil {
-			return nil, mapErr(err)
+			return nil, d.mapErr(err)
 		}
 	}
 	pic, err := d.decodeSampleLastPicture(sample)
@@ -115,7 +98,7 @@ func (d *Decoder) decodeSampleLastPicture(sample []byte) (*av1.Picture, error) {
 		frames    int
 		frameOBUs int
 		pixels    int64
-		budget    = decodePixelBudget()
+		budget    = decodePixelBudget(d.limits)
 	)
 	for len(sample) > 0 {
 		obu, rest, ok := nextOBU(sample)
@@ -136,7 +119,7 @@ func (d *Decoder) decodeSampleLastPicture(sample []byte) (*av1.Picture, error) {
 			if last != nil {
 				last.Release()
 			}
-			return nil, mapErr(err)
+			return nil, d.mapErr(err)
 		}
 		for {
 			pic, err := d.d.Receive()
@@ -144,7 +127,7 @@ func (d *Decoder) decodeSampleLastPicture(sample []byte) (*av1.Picture, error) {
 				if last != nil {
 					last.Release()
 				}
-				return nil, mapErr(err)
+				return nil, d.mapErr(err)
 			}
 			if pic == nil {
 				break
@@ -157,16 +140,16 @@ func (d *Decoder) decodeSampleLastPicture(sample []byte) (*av1.Picture, error) {
 				}
 				return nil, errs.UnsupProfile("av1 keyframe", "too many frames in sample")
 			}
-			px := int64(pic.Width) * int64(pic.Height)
-			pixels += px
-			if pixels > budget {
+			px, ok := framePixels(pic.Width, pic.Height)
+			if !ok || px > budget-pixels {
 				pic.Release()
 				if last != nil {
 					last.Release()
 				}
-				return nil, frameTooLarge("aggregate decoded pixels")
+				return nil, d.limits.frameTooLarge("aggregate decoded pixels")
 			}
-			if err := checkFrameSize(pic.Width, pic.Height); err != nil {
+			pixels += px
+			if err := d.limits.checkFrameSize(pic.Width, pic.Height); err != nil {
 				pic.Release()
 				if last != nil {
 					last.Release()
@@ -185,9 +168,14 @@ func (d *Decoder) decodeSampleLastPicture(sample []byte) (*av1.Picture, error) {
 	return last, nil
 }
 
-// DecodeSampleOnce decodes one keyframe with a fresh decoder.
+// DecodeSampleOnce decodes one keyframe with a fresh decoder and default limits.
 func DecodeSampleOnce(av1CExtradata, sample []byte) (*h264.ThumbYCbCr, error) {
-	return DecodeSampleCached(av1CExtradata, sample)
+	return DecodeSampleCached(av1CExtradata, sample, FrameLimits{})
+}
+
+// DecodeSampleOnceWithLimits is DecodeSampleOnce with an explicit frame cap.
+func DecodeSampleOnceWithLimits(av1CExtradata, sample []byte, lim FrameLimits) (*h264.ThumbYCbCr, error) {
+	return DecodeSampleCached(av1CExtradata, sample, lim)
 }
 
 // ConfigOBUs returns the configOBUs of an av1C box or Matroska CodecPrivate
@@ -345,12 +333,12 @@ func downsample(dst []byte, dstStride int, src []byte, srcStride, cw, ch, srcW, 
 	}
 }
 
-func mapErr(err error) error {
+func (d *Decoder) mapErr(err error) error {
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, av1.ErrFrameTooLarge) {
-		return frameTooLarge("frame header")
+		return d.limits.frameTooLarge("frame header")
 	}
 	var ue *errs.UnsupportedError
 	if errors.As(err, &ue) {

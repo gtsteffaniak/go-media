@@ -14,28 +14,35 @@ import (
 	"github.com/gtsteffaniak/go-media/internal/h264/yuv"
 )
 
-// DecodeAVIFFile decodes the primary AVIF item (still or grid) from a full file
-// buffer with gav1d, which handles grids itself. Film grain is applied
-// (avif.Options has no option to skip it).
+// DecodeAVIFFile decodes the primary AVIF item (still or grid) with no caller
+// pixel cap beyond MaxAVIFPixels.
+func DecodeAVIFFile(data []byte) (*h264.ThumbYCbCr, error) {
+	return DecodeAVIFFileWithLimit(data, 0)
+}
+
+// DecodeAVIFFileWithLimit decodes the primary AVIF item (still or grid) from a
+// full file buffer with gav1d, which handles grids itself. Film grain is
+// applied (avif.Options has no option to skip it).
 //
 // The clap, irot and imir properties are applied (AutoRotate), matching
 // ffmpeg, whose AVIF demuxer exports them as crop and display-matrix side data
-// that the ffmpeg CLI applies by default (-autorotate). The decoded area is
-// bounded by MaxAVIFPixels so a small, highly compressed file cannot request
-// an unbounded allocation.
+// that the ffmpeg CLI applies by default (-autorotate). maxSourcePixels is the
+// caller area cap (media.ThumbnailOptions.MaxSourcePixels): positive values are
+// honored as min(maxSourcePixels, MaxAVIFPixels); zero keeps MaxAVIFPixels.
 //
 // gav1d decodes a frame's tiles over up to GOMAXPROCS goroutines (fewer for
 // fewer tiles). avif.Options has no thread setting, and capping concurrent
 // decodes to GOMAXPROCS measured as no win (−4% on 16-tile 1080p, +5% on
 // single-tile, 32 concurrent callers), so no global cap is applied.
-func DecodeAVIFFile(data []byte) (*h264.ThumbYCbCr, error) {
+func DecodeAVIFFileWithLimit(data []byte, maxSourcePixels int64) (*h264.ThumbYCbCr, error) {
+	limit := avifDecodeLimit(maxSourcePixels)
 	img, ci, err := avif.DecodeColor(bytes.NewReader(data), avif.Options{
 		ToYCbCr:        true,
 		AutoRotate:     true,
-		FrameSizeLimit: MaxAVIFPixels,
+		FrameSizeLimit: int(limit),
 	})
 	if err != nil {
-		return nil, avifErr(err)
+		return nil, avifErr(err, limit)
 	}
 	return avifToThumb(img, ci), nil
 }
@@ -230,12 +237,12 @@ func clamp8(v int32) uint8 {
 	return uint8(v)
 }
 
-func avifErr(err error) error {
+func avifErr(err error, limit int64) error {
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, av1.ErrFrameTooLarge) {
-		return errs.Unsup("thumbnail", fmt.Sprintf("avif: decoded image exceeds the %d-pixel decode limit", MaxAVIFPixels))
+		return errs.Unsup("thumbnail", fmt.Sprintf("avif: decoded image exceeds the %d-pixel decode limit", limit))
 	}
 	if errors.Is(err, avif.ErrUnsupported) {
 		return errs.Unsup("thumbnail", "avif: "+err.Error())

@@ -268,6 +268,8 @@ func custom(f io.ReaderAt, size int64) (media.ThumbnailResult, error) {
 | `Quality` | JPEG quality, 1 to 100 |
 | `Filter` | `ThumbnailFilterFast`, `ThumbnailFilterArea`, `ThumbnailFilterBalanced`, `ThumbnailFilterHigh` |
 | `MaxWidth`, `MaxHeight` | Bounding box; aspect ratio is preserved |
+| `MaxSourcePixels` | Cap full-frame decode area for JPEG XL and AVIF stills (0 = library ceiling only) |
+| `MaxAV1FrameLongSide`, `MaxAV1FrameShortSide` | Cap AV1 video keyframe coded size (0 = default 4096×2160) |
 | `PreferEmbedded` | Use cover art before decoding video |
 
 ### Start from a preset and tweak it
