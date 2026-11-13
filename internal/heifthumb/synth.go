@@ -39,6 +39,10 @@ func synthMetaBox(children ...[]byte) []byte {
 type synthIrotMeta struct {
 	primaryIrot *uint8
 	thumbIrot   *uint8
+	// primaryImir adds an imir property with this axis to the primary item,
+	// associated before irot when imirFirst is set and after it otherwise.
+	primaryImir *uint8
+	imirFirst   bool
 }
 
 // SynthJPEGHEIF builds a minimal HEIF-like file with a JPEG item and thmb reference.
@@ -57,6 +61,14 @@ func SynthJPEGHEIFWithPrimaryIrot(jpeg []byte, thumbID, primaryID uint16, primar
 func SynthJPEGHEIFWithItemIrot(jpeg []byte, thumbID, primaryID uint16, primaryIrot, thumbIrot uint8) []byte {
 	p, th := primaryIrot, thumbIrot
 	return synthJPEGHEIF(jpeg, thumbID, primaryID, synthIrotMeta{primaryIrot: &p, thumbIrot: &th}, "heic", "heic", "heic")
+}
+
+// SynthJPEGHEIFWithPrimaryMirrorFirst is like SynthJPEGHEIFWithPrimaryIrot but
+// also gives the primary item an imir property with axis imirAxis, associated
+// in ipma before the irot property.
+func SynthJPEGHEIFWithPrimaryMirrorFirst(jpeg []byte, thumbID, primaryID uint16, imirAxis, primaryIrot uint8) []byte {
+	r, m := primaryIrot, imirAxis
+	return synthJPEGHEIF(jpeg, thumbID, primaryID, synthIrotMeta{primaryIrot: &r, primaryImir: &m, imirFirst: true}, "heic", "heic", "heic")
 }
 
 // SynthJPEGHEIFMIF1 builds the same embedded-JPEG HEIF as SynthJPEGHEIF but with an
@@ -156,16 +168,25 @@ func synthIPRP(primaryID, thumbID uint16, codedW, codedH int, rot synthIrotMeta)
 
 	primaryIspe := appendProp(synthIspe(codedW, codedH))
 	primaryIrot := appendProp(synthIrotBox(*rot.primaryIrot))
+	primaryAssoc := []ipmaAssoc{
+		{index: primaryIspe, essential: true},
+		{index: primaryIrot, essential: false},
+	}
+	if rot.primaryImir != nil {
+		imir := ipmaAssoc{index: appendProp(synthBox("imir", []byte{*rot.primaryImir & 0x01}))}
+		if rot.imirFirst {
+			primaryAssoc = []ipmaAssoc{primaryAssoc[0], imir, primaryAssoc[1]}
+		} else {
+			primaryAssoc = append(primaryAssoc, imir)
+		}
+	}
 	entries := []struct {
 		itemID uint16
 		assoc  []ipmaAssoc
 	}{
 		{
 			itemID: primaryID,
-			assoc: []ipmaAssoc{
-				{index: primaryIspe, essential: true},
-				{index: primaryIrot, essential: false},
-			},
+			assoc:  primaryAssoc,
 		},
 	}
 

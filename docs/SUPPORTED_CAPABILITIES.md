@@ -49,7 +49,7 @@ What **go-media** implements in pure Go (`CGO_ENABLED=0`). This is **not** a ffm
 | AVI / `.avi` | ✅ | 🟡 | ✅ | RIFF `idx1`/OpenDML; MJPEG, MPEG-4 Part 2, H.264 thumbnails |
 | FLV | — | — | ❌ | No demux/thumbnail (ffmpeg fallback) |
 | WMV / ASF | ✅ | — | ✅ | Probe, duration, WMV3 (Simple/Main) keyframe thumbnails, bit-exact vs ffmpeg; WVC1 Advanced Profile returns `ErrUnsupportedProfile` |
-| HEIC / HEIF / AVIF | ✅ | — | ✅ | Embedded JPEG via `iinf`/`iref thmb`/`iloc`; coded HEVC primary image when no JPEG thumb. Only the top-level `meta` box is read (≤1 MiB buffered, shared by the irot/imir, JPEG and coded paths); HEIC `irot` and `imir` are applied in ffmpeg's order (rotate, then mirror) |
+| HEIC / HEIF / AVIF | ✅ | — | ✅ | Embedded JPEG via `iinf`/`iref thmb`/`iloc`; coded HEVC primary image when no JPEG thumb. Only the top-level `meta` box is read (≤1 MiB buffered, shared by the irot/imir, JPEG and coded paths); HEIC `irot` and `imir` are composed in `ipma` association order, as HEIF and libheif define it; for the usual irot-then-imir order this is ffmpeg's result (rotate, then mirror) |
 | Camera RAW (CR2, CR3, NEF, …) | ✅ | — | ✅ | Embedded JPEG preview extraction |
 
 ---
@@ -266,6 +266,28 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 
 ---
 
+## Keyframe times (HLS segment planning)
+
+**API:** `KeyframeTimes()`, `KeyframeTimesWithin()`
+
+**ffmpeg equivalent:** `ffprobe -select_streams v:0 -show_entries packet=pts_time,dts_time,flags` filtered to `K` packets
+
+| Capability | Containers | Status | Notes |
+|------------|------------|:------:|-------|
+| Keyframe pts of the first video stream | `.mp4`, `.mov`, `.m4v` | ✅ | moov tables only: `stss`/`stps`, `stts`, signed `ctts`; one media edit with optional leading empty edits applied like ffmpeg's `mov_fix_index` |
+| | `.mkv`, `.webm` | ✅ | Cues when they index the video track (no Cluster reads); otherwise a Cluster walk reading block headers only |
+| Fragmented MP4, several media edits, zero-length edits | — | ❌ `ErrUnsupported` | fall back to ffprobe |
+
+Times are container pts (ffprobe's `pts_time`; a non-zero `start_time` is kept), ascending, unique, and non-negative. A live comparison test encodes MP4/MOV/MKV/WebM variants (B-frames, edit-list cuts, empty edits, negative ctts, Cue-less Matroska, shifted start) and diffs against ffprobe. Known differences: ffprobe's parsers can also flag a non-sync H.264/HEVC sample as key when its bitstream is an IDR or carries a recovery point SEI, which go-media does not read; and a Matroska muxer that writes fewer CuePoints than keyframes gives a subset. Both only make segments longer.
+
+---
+
+## HEIF display transform
+
+**API:** `HEIFTransform()` returns the primary item's `irot`/`imir` (`ImageTransform`), reading only the top-level `meta` box. `Thumbnail()` already applies it; this is for callers that decode HEIC some other way. Missing item properties return `ErrUnsupported` rather than "no transform".
+
+---
+
 ## Runtime
 
 | API | Purpose |
@@ -289,6 +311,8 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | `ApplyPreset`, `OptionsForPreset` | FileBrowser-style presets |
 | `AllThumbnailFilters`, `ThumbnailFilterLabel` | Scaler metadata |
 | `MP4KeyframeSamples` | Sync samples |
+| `KeyframeTimes`, `KeyframeTimesWithin` | Keyframe pts of the first video stream (MP4/MOV/MKV/WebM) from the container index. Same as ffprobe when the index flags every keyframe; a subset when ffprobe also flags keyframes from the bitstream (for example with its H.264 and AV1 parsers) or Matroska Cues skip some |
+| `HEIFTransform` | HEIC/HEIF/AVIF `irot`/`imir` display transform |
 | `DecodeH264Keyframe`, `H264KeyframeYUV420`, `H264KeyframeTimeSec` | H.264 metrics / debug |
 | `SIMDActive` | SIMD experiment status |
 | `Unsupported`, `UnsupportedProfile` | Error helpers |
