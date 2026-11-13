@@ -2,6 +2,7 @@ package av1decode
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/gtsteffaniak/go-media/internal/errs"
 )
@@ -38,10 +39,19 @@ func (l FrameLimits) resolved() (long, short int) {
 	return long, short
 }
 
+// frameSizeLimit returns the per-frame pixel cap (LongSide × ShortSide),
+// saturating at math.MaxInt instead of wrapping. Caller-supplied dimensions
+// are untrusted: e.g. 1<<30 × 1<<30 must not wrap to a small or negative
+// limit that rejects every picture (or, via decodePixelBudget, wraps the
+// aggregate budget to zero). The per-side check in checkFrameSize still
+// enforces the actual dimensions.
 func (l FrameLimits) frameSizeLimit() int {
 	long, short := l.resolved()
 	if long <= 0 || short <= 0 {
 		return 0
+	}
+	if long > math.MaxInt/short {
+		return math.MaxInt
 	}
 	return long * short
 }

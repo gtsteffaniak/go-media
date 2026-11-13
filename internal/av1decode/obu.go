@@ -1,5 +1,7 @@
 package av1decode
 
+import "math"
+
 // maxShownFramesPerSample bounds how many pictures one sample may show while
 // decoding. OBUs are submitted one at a time and Receive is drained between
 // them so at most one decoded picture is queued; this cap still rejects samples
@@ -75,10 +77,36 @@ func nextOBU(src []byte) (obu, rest []byte, ok bool) {
 	return src[:end], src[end:], true
 }
 
+// framePixels returns w*h as an int64 pixel count, reporting false when
+// either dimension is negative or the product would overflow. Decoded
+// picture dimensions come from the bitstream, so they are not trusted
+// to fit in an int64 product.
+func framePixels(w, h int) (int64, bool) {
+	if w < 0 || h < 0 {
+		return 0, false
+	}
+	if w == 0 || h == 0 {
+		return 0, true
+	}
+	if int64(w) > math.MaxInt64/int64(h) {
+		return 0, false
+	}
+	return int64(w) * int64(h), true
+}
+
+// decodePixelBudget returns the aggregate pixel budget for one sample:
+// the per-frame limit × maxShownFramesPerSample, saturating at
+// math.MaxInt64 instead of wrapping. With a saturated per-frame limit
+// (see frameSizeLimit) the naive product wraps to zero or negative and
+// every picture, including small in-limit ones, fails the aggregate
+// check in decodeSampleLastPicture.
 func decodePixelBudget(lim FrameLimits) int64 {
 	limit := int64(lim.frameSizeLimit())
 	if limit <= 0 {
 		limit = int64(DefaultFrameLongSide * DefaultFrameShortSide)
+	}
+	if limit > math.MaxInt64/int64(maxShownFramesPerSample) {
+		return math.MaxInt64
 	}
 	return limit * int64(maxShownFramesPerSample)
 }

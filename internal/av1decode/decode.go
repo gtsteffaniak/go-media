@@ -140,15 +140,15 @@ func (d *Decoder) decodeSampleLastPicture(sample []byte) (*av1.Picture, error) {
 				}
 				return nil, errs.UnsupProfile("av1 keyframe", "too many frames in sample")
 			}
-			px := int64(pic.Width) * int64(pic.Height)
-			pixels += px
-			if pixels > budget {
+			px, ok := framePixels(pic.Width, pic.Height)
+			if !ok || px > budget-pixels {
 				pic.Release()
 				if last != nil {
 					last.Release()
 				}
 				return nil, d.limits.frameTooLarge("aggregate decoded pixels")
 			}
+			pixels += px
 			if err := d.limits.checkFrameSize(pic.Width, pic.Height); err != nil {
 				pic.Release()
 				if last != nil {
