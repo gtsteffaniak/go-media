@@ -16,6 +16,21 @@ const (
 	FormatAIFF Format = "aiff"
 	FormatAU   Format = "au"
 
+	// FormatAVI is a RIFF AVI file.
+	FormatAVI Format = "avi"
+	// FormatASF is an ASF file (.asf, .wmv, .wma). Detection reports every
+	// ASF file, Windows Media Video included, as FormatASF.
+	FormatASF Format = "asf"
+	// FormatWMV is reserved for an ASF file identified as Windows Media
+	// Video; detection currently reports those as FormatASF.
+	FormatWMV Format = "wmv"
+	// FormatMPEGTS is an MPEG transport stream with 188-byte packets.
+	FormatMPEGTS Format = "mpegts"
+	// FormatM2TS is a BDAV/AVCHD transport stream with 192-byte packets.
+	FormatM2TS Format = "m2ts"
+	// FormatMPEGPS is an MPEG program stream (.mpg, .mpeg, .vob).
+	FormatMPEGPS Format = "mpegps"
+
 	FormatHEIC Format = "heic"
 	FormatHEIF Format = "heif"
 	FormatAVIF Format = "avif"

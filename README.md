@@ -42,6 +42,7 @@ To build the same report locally, run `make compare` (see [`test/compare/README.
 | 💬 **Subtitles** | SRT, VTT, ASS/SSA sidecars plus embedded MKV and MP4 text tracks, converted to WebVTT byte-identical to `ffmpeg -f webvtt` |
 | 🖼️ **Thumbnails** | Video: one keyframe decoded in pure Go. Photos and RAW: the embedded JPEG preview. Audio: cover art. Output as JPEG, PNG or lossless WebP |
 | 🎵 **Lyrics** | Embedded lyrics and `.lrc` / `.elrc` sidecars |
+| 🎞️ **Keyframe times** | MP4/MOV/MKV/WebM keyframe timeline for HLS planning, matching ffprobe's key packets |
 
 ### Thumbnail codecs
 

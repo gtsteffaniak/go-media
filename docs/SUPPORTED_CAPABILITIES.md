@@ -266,6 +266,28 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 
 ---
 
+## Keyframe times (HLS segment planning)
+
+**API:** `KeyframeTimes()`, `KeyframeTimesWithin()`
+
+**ffmpeg equivalent:** `ffprobe -select_streams v:0 -show_entries packet=pts_time,dts_time,flags` filtered to `K` packets
+
+| Capability | Containers | Status | Notes |
+|------------|------------|:------:|-------|
+| Keyframe pts of the first video stream | `.mp4`, `.mov`, `.m4v` | ✅ | moov tables only: `stss`/`stps`, `stts`, signed `ctts`; one media edit with optional leading empty edits applied like ffmpeg's `mov_fix_index` |
+| | `.mkv`, `.webm` | ✅ | Cues when they index the video track (no Cluster reads); otherwise a Cluster walk reading block headers only |
+| Fragmented MP4, several media edits, zero-length edits | — | ❌ `ErrUnsupported` | fall back to ffprobe |
+
+Times are container pts (ffprobe's `pts_time`; a non-zero `start_time` is kept), ascending, unique, and non-negative. A live comparison test encodes MP4/MOV/MKV/WebM variants (B-frames, edit-list cuts, empty edits, negative ctts, Cue-less Matroska, shifted start) and diffs against ffprobe. Known differences: ffprobe's parsers can also flag a non-sync H.264/HEVC sample as key when its bitstream is an IDR or carries a recovery point SEI, which go-media does not read; and a Matroska muxer that writes fewer CuePoints than keyframes gives a subset. Both only make segments longer.
+
+---
+
+## HEIF display transform
+
+**API:** `HEIFTransform()` returns the primary item's `irot`/`imir` (`ImageTransform`), reading only the top-level `meta` box. `Thumbnail()` already applies it; this is for callers that decode HEIC some other way. Missing item properties return `ErrUnsupported` rather than "no transform".
+
+---
+
 ## Runtime
 
 | API | Purpose |
@@ -289,6 +311,8 @@ Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 s
 | `ApplyPreset`, `OptionsForPreset` | FileBrowser-style presets |
 | `AllThumbnailFilters`, `ThumbnailFilterLabel` | Scaler metadata |
 | `MP4KeyframeSamples` | Sync samples |
+| `KeyframeTimes`, `KeyframeTimesWithin` | Keyframe pts of the first video stream (MP4/MOV/MKV/WebM), ffprobe parity |
+| `HEIFTransform` | HEIC/HEIF/AVIF `irot`/`imir` display transform |
 | `DecodeH264Keyframe`, `H264KeyframeYUV420`, `H264KeyframeTimeSec` | H.264 metrics / debug |
 | `SIMDActive` | SIMD experiment status |
 | `Unsupported`, `UnsupportedProfile` | Error helpers |

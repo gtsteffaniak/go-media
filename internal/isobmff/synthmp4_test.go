@@ -38,6 +38,14 @@ type synthMP4Opts struct {
 	BadVideoStts    bool // video stts claims more entries than it holds
 	// ExtraTraks are complete trak boxes placed before the video trak.
 	ExtraTraks [][]byte
+	// Edts, when set, is an edts box placed in the video trak after tkhd.
+	Edts []byte
+	// Ctts, when set, is a ctts box added to the video stbl.
+	Ctts []byte
+	// EmptyStss writes an stss box with no entries.
+	EmptyStss bool
+	// Mvex adds an (empty) mvex box to moov, marking the file fragmented.
+	Mvex bool
 }
 
 const synthSampleSize = 12
@@ -111,6 +119,11 @@ func buildSynthMP4(o synthMP4Opts) []byte {
 				sync = append(sync, uint32(i+1))
 			}
 			parts = append(parts, synthBox("stss", u32s(0, uint32(len(sync))), u32s(sync...)))
+		} else if o.EmptyStss {
+			parts = append(parts, synthBox("stss", u32s(0, 0)))
+		}
+		if o.Ctts != nil {
+			parts = append(parts, o.Ctts)
 		}
 		avcC := synthBox("avcC", []byte{1, 66, 0, 30, 0xFF, 0xE1, 0, 4, 0x67, 66, 0, 30, 1, 0, 2, 0x68, 0xCE})
 		avc1Payload := make([]byte, 78)
@@ -138,7 +151,11 @@ func buildSynthMP4(o synthMP4Opts) []byte {
 		binary.BigEndian.PutUint32(tkhdP[76:], 64<<16)
 		binary.BigEndian.PutUint32(tkhdP[80:], 48<<16)
 		tkhd := synthBox("tkhd", tkhdP)
-		trak := synthBox("trak", tkhd, mdia)
+		trakParts := [][]byte{tkhd}
+		if o.Edts != nil {
+			trakParts = append(trakParts, o.Edts)
+		}
+		trak := synthBox("trak", append(trakParts, mdia)...)
 		mvhdP := make([]byte, 100)
 		binary.BigEndian.PutUint32(mvhdP[12:], synthTimescale)
 		binary.BigEndian.PutUint32(mvhdP[16:], dur)
@@ -148,6 +165,9 @@ func buildSynthMP4(o synthMP4Opts) []byte {
 		moovParts := [][]byte{synthBox("mvhd", mvhdP)}
 		moovParts = append(moovParts, o.ExtraTraks...)
 		moovParts = append(moovParts, trak)
+		if o.Mvex {
+			moovParts = append(moovParts, synthBox("mvex"))
+		}
 		return synthBox("moov", moovParts...)
 	}
 	if o.MoovAfterMdat {

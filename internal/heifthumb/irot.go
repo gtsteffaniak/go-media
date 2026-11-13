@@ -96,8 +96,17 @@ type Transform struct {
 // PrimaryTransform returns the primary item's irot/imir transform. ok is false
 // when the primary item has neither property (or meta cannot be parsed).
 func (m *Meta) PrimaryTransform(r io.ReaderAt, size int64) (Transform, bool) {
+	t, found, err := m.PrimaryTransformErr(r, size)
+	return t, found && err == nil
+}
+
+// PrimaryTransformErr is PrimaryTransform that tells a file without irot and
+// imir (found false, nil error) from one whose pitm, iprp, ipco or ipma
+// cannot be read (errs.Unsup), so callers can fall back instead of assuming
+// no transform.
+func (m *Meta) PrimaryTransformErr(r io.ReaderAt, size int64) (Transform, bool, error) {
 	if m == nil {
-		return Transform{}, false
+		return Transform{}, false, errs.Unsup("heif transform", "no meta box")
 	}
 	if m.box != nil {
 		return parsePrimaryTransform(m.box)
@@ -158,23 +167,23 @@ func irotDegrees(irot uint8) int {
 	}
 }
 
-func parsePrimaryTransform(data []byte) (Transform, bool) {
+func parsePrimaryTransform(data []byte) (Transform, bool, error) {
 	meta := findBMFFBox(data, "meta")
 	if meta == nil {
-		return Transform{}, false
+		return Transform{}, false, errs.Unsup("heif transform", "no meta box")
 	}
 	return primaryTransformFrom(findBMFFChildBox(meta, "pitm"), findBMFFChildBox(meta, "iprp"))
 }
 
-func primaryTransformFrom(pitm, iprp []byte) (Transform, bool) {
+func primaryTransformFrom(pitm, iprp []byte) (Transform, bool, error) {
 	primaryID := parsePITMItemID(pitm)
 	if primaryID == 0 || iprp == nil {
-		return Transform{}, false
+		return Transform{}, false, errs.Unsup("heif transform", "no primary item properties")
 	}
 	ipco := findBMFFChildBox(iprp, "ipco")
 	ipma := findBMFFChildBox(iprp, "ipma")
 	if ipco == nil || ipma == nil {
-		return Transform{}, false
+		return Transform{}, false, errs.Unsup("heif transform", "no ipco or ipma")
 	}
 	properties := parseIPCOProperties(ipco)
 	var t Transform
@@ -192,7 +201,7 @@ func primaryTransformFrom(pitm, iprp []byte) (Transform, bool) {
 			found = true
 		}
 	}
-	return t, found
+	return t, found, nil
 }
 
 const maxBMFFRecursionDepth = 32
