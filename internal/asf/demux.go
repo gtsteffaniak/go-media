@@ -3,6 +3,7 @@ package asf
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"time"
 
 	"github.com/gtsteffaniak/go-media/internal/detect"
@@ -178,21 +179,31 @@ func parseStreamProps(b []byte) (*streamEntry, error) {
 		se.height = h
 		se.extradata = extra
 	} else {
-		// Probe only; audio decode is out of scope. An unknown format tag
-		// leaves the codec empty so callers fall back to ffprobe instead of
-		// reporting a wrong name.
-		se.codec = audioCodecFromSpec(spec)
+		// Probe only; audio decode is out of scope. An unrecognized format
+		// tag returns a typed profile error so the whole probe falls back
+		// to ffprobe instead of reporting a wrong or empty codec name.
+		codec, err := audioCodecFromSpec(spec)
+		if err != nil {
+			return nil, err
+		}
+		se.codec = codec
 	}
 	return se, nil
 }
 
 // audioCodecFromSpec names an ASF audio stream from the WAVEFORMATEX
 // wFormatTag at the start of its type-specific data. Names match ffprobe.
-func audioCodecFromSpec(spec []byte) string {
+// Short data is corrupt; an unknown tag is an unsupported profile.
+func audioCodecFromSpec(spec []byte) (string, error) {
 	if len(spec) < 2 {
-		return ""
+		return "", errs.Corrupt
 	}
-	return audioCodecName(binary.LittleEndian.Uint16(spec[0:2]))
+	tag := binary.LittleEndian.Uint16(spec[0:2])
+	codec := audioCodecName(tag)
+	if codec == "" {
+		return "", errs.UnsupProfile("probe", fmt.Sprintf("asf audio format tag 0x%04x", tag))
+	}
+	return codec, nil
 }
 
 // audioCodecName maps a WAVEFORMATEX wFormatTag to an ffprobe codec name.

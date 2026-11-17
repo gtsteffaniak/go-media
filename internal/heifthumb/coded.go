@@ -71,7 +71,10 @@ func wellFormedBoxLength(r io.ReaderAt, size int64) int64 {
 			boxSize = int64(binary.BigEndian.Uint64(hdr[8:16]))
 			headerLen = 16
 		}
-		if boxSize < headerLen || boxSize > size-end || !printableFourCC(hdr[4:8]) {
+		// Unknown box types are skipped, as ISO/IEC 14496-12 requires. The
+		// size checks alone reject trailers: their first bytes read as a
+		// size far beyond the file.
+		if boxSize < headerLen || boxSize > size-end {
 			break
 		}
 		end += boxSize
@@ -85,16 +88,6 @@ func boxLengthOrSize(end, size int64) int64 {
 		return size
 	}
 	return end
-}
-
-// printableFourCC reports whether a box type is four printable ASCII bytes.
-func printableFourCC(t []byte) bool {
-	for _, c := range t {
-		if c < 0x20 || c > 0x7e {
-			return false
-		}
-	}
-	return true
 }
 
 func colorFromCI(ci heic.ColorInfo) yuv.ColorSpace {

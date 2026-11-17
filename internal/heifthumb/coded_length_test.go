@@ -41,6 +41,7 @@ func TestWellFormedBoxLength(t *testing.T) {
 	}{
 		{"clean file", valid, int64(len(valid))},
 		{"samsung trailer after last box", append(append([]byte{}, valid...), []byte("/>\n<xmp>junk")...), int64(len(valid))},
+		{"unknown binary box type is skipped", append(append(append(append([]byte{}, ftyp...), testBox("\x00\x01\x02\x03", make([]byte, 12))...), meta...), mdat...), int64(len(ftyp) + len(testBox("\x00\x01\x02\x03", make([]byte, 12))) + len(meta) + len(mdat))},
 		{"oversized box stops the walk", append(append(append([]byte{}, ftyp...), mdat...), []byte{0x3c, 0x00, 0x00, 0x00, 'x', 'y', 'z', 'w', 1, 2, 3}...), int64(len(ftyp) + len(mdat))},
 		{"no parseable box keeps full size", []byte("not a box at all, just bytes"), 28},
 	}

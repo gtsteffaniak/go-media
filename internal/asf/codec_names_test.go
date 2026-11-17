@@ -2,7 +2,10 @@ package asf
 
 import (
 	"encoding/binary"
+	"errors"
 	"testing"
+
+	"github.com/gtsteffaniak/go-media/internal/errs"
 )
 
 // videoSpec builds ASF video type-specific data (ASF spec 9.2) with the given
@@ -67,7 +70,18 @@ func TestParseStreamPropsAudioUsesFormatTag(t *testing.T) {
 	// Audio type-specific data is a WAVEFORMATEX; wFormatTag is the first u16.
 	spec := make([]byte, 18)
 	binary.LittleEndian.PutUint16(spec[0:], 0x0162) // WMA Pro
-	if codec := audioCodecFromSpec(spec); codec != "wmapro" {
-		t.Fatalf("audio codec %q, want wmapro", codec)
+	codec, err := audioCodecFromSpec(spec)
+	if err != nil || codec != "wmapro" {
+		t.Fatalf("audio codec %q err %v, want wmapro", codec, err)
+	}
+}
+
+func TestParseStreamPropsAudioUnknownTagIsUnsupported(t *testing.T) {
+	// An unrecognized WAVEFORMATEX tag must not yield an empty codec; it
+	// must return a typed profile error so callers fall back to ffprobe.
+	spec := make([]byte, 18)
+	binary.LittleEndian.PutUint16(spec[0:], 0x9999)
+	if _, err := audioCodecFromSpec(spec); !errors.Is(err, errs.UnsupportedProfile) {
+		t.Fatalf("unknown audio tag err = %v, want UnsupportedProfile", err)
 	}
 }
