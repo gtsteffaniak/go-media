@@ -125,6 +125,9 @@ func rotateYCbCr(src *image.YCbCr, r int) *image.YCbCr {
 type orientation struct {
 	rot   int  // degrees counter-clockwise (ffprobe sign convention)
 	hflip bool // mirror left-to-right after rotating
+	// heifCoded is set when the image is the decoded HEVC primary of a HEIC/HEIF
+	// file. Its YCbCr planes may then go to the JPEG encoder without an RGB round trip.
+	heifCoded bool
 }
 
 // orientationFromHEIF maps HEIF irot/imir to an orientation the way ffmpeg's

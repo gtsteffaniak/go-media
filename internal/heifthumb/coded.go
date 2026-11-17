@@ -1,6 +1,7 @@
 package heifthumb
 
 import (
+	"encoding/binary"
 	"fmt"
 	"image"
 	"io"
@@ -17,7 +18,7 @@ func CodedPrimaryYCbCr(r io.ReaderAt, size int64) (*h264.ThumbYCbCr, error) {
 	if size <= 0 {
 		return nil, errs.Corrupt
 	}
-	rc := io.NewSectionReader(r, 0, size)
+	rc := io.NewSectionReader(r, 0, wellFormedBoxLength(r, size))
 	img, ci, err := heic.DecodeColor(rc, heic.Options{ToYCbCr: true})
 	if err != nil {
 		return nil, errs.Unsup("thumbnail", "heif coded image: "+err.Error())
@@ -39,6 +40,61 @@ func CodedPrimaryYCbCr(r io.ReaderAt, size int64) (*h264.ThumbYCbCr, error) {
 	default:
 		return nil, errs.Unsup("thumbnail", "heif: coded image type "+typeName(img))
 	}
+}
+
+// wellFormedBoxLength returns the end of the leading run of well-formed top-level
+// ISOBMFF boxes. Some writers append bytes that are not a box after the last
+// one: Samsung adds a sefd box and then an XML-like trailer whose first four
+// bytes read as a huge box size. The HEVC decoder rejects the whole file for
+// that, so it is given only the well-formed part. If no box parses, the full
+// size is returned and the decoder reports the error as before.
+func wellFormedBoxLength(r io.ReaderAt, size int64) int64 {
+	var end int64
+	var hdr [16]byte
+	for end+8 <= size {
+		n := int64(len(hdr))
+		if rem := size - end; rem < n {
+			n = rem
+		}
+		if got, _ := r.ReadAt(hdr[:n], end); got < 8 {
+			break
+		}
+		boxSize := int64(binary.BigEndian.Uint32(hdr[0:4]))
+		headerLen := int64(8)
+		switch boxSize {
+		case 0: // box runs to the end of the file
+			boxSize = size - end
+		case 1: // 64-bit largesize
+			if n < 16 {
+				return boxLengthOrSize(end, size)
+			}
+			boxSize = int64(binary.BigEndian.Uint64(hdr[8:16]))
+			headerLen = 16
+		}
+		if boxSize < headerLen || boxSize > size-end || !printableFourCC(hdr[4:8]) {
+			break
+		}
+		end += boxSize
+	}
+	return boxLengthOrSize(end, size)
+}
+
+// boxLengthOrSize returns end when any box parsed, otherwise the full size.
+func boxLengthOrSize(end, size int64) int64 {
+	if end == 0 {
+		return size
+	}
+	return end
+}
+
+// printableFourCC reports whether a box type is four printable ASCII bytes.
+func printableFourCC(t []byte) bool {
+	for _, c := range t {
+		if c < 0x20 || c > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 func colorFromCI(ci heic.ColorInfo) yuv.ColorSpace {
