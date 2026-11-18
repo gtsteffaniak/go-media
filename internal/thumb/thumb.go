@@ -393,6 +393,7 @@ func decodeSource(r interface {
 		if yimg, err := heifthumb.CodedPrimaryYCbCr(mr, size); err != nil {
 			return nil, "", err
 		} else if yimg != nil {
+			o.heifCoded = true
 			return yimg, "decode", nil
 		}
 		return nil, "", err
@@ -471,9 +472,12 @@ func encodeImageRaster(img image.Image, opt Options, src string, o orientation) 
 		t.MatchFFmpegYUVOutput()
 	}
 	if jpegOut {
-		if _, ok := img.(*h264.ThumbYCbCr); ok {
+		if t, ok := img.(*h264.ThumbYCbCr); ok {
 			if scaled, ok := tryScaleYCbCrSource(img, opt.MaxWidth, opt.MaxHeight, mode); ok {
 				img = scaled
+			} else if o.heifCoded && fitsWithin(t.YCbCr.Bounds(), opt.MaxWidth, opt.MaxHeight) {
+				// HEIC primary, no scaling: encode the planes directly.
+				img = jpegReadyYCbCr(t)
 			} else {
 				img = rgbaFromImage(img)
 			}

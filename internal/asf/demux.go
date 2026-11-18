@@ -3,6 +3,7 @@ package asf
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"time"
 
 	"github.com/gtsteffaniak/go-media/internal/detect"
@@ -178,9 +179,51 @@ func parseStreamProps(b []byte) (*streamEntry, error) {
 		se.height = h
 		se.extradata = extra
 	} else {
-		se.codec = "wmav2" // probe only; audio decode out of scope
+		// Probe only; audio decode is out of scope. An unrecognized format
+		// tag returns a typed profile error so the whole probe falls back
+		// to ffprobe instead of reporting a wrong or empty codec name.
+		codec, err := audioCodecFromSpec(spec)
+		if err != nil {
+			return nil, err
+		}
+		se.codec = codec
 	}
 	return se, nil
+}
+
+// audioCodecFromSpec names an ASF audio stream from the WAVEFORMATEX
+// wFormatTag at the start of its type-specific data. Names match ffprobe.
+// Short data is corrupt; an unknown tag is an unsupported profile.
+func audioCodecFromSpec(spec []byte) (string, error) {
+	if len(spec) < 2 {
+		return "", errs.Corrupt
+	}
+	tag := binary.LittleEndian.Uint16(spec[0:2])
+	codec := audioCodecName(tag)
+	if codec == "" {
+		return "", errs.UnsupProfile("probe", fmt.Sprintf("asf audio format tag 0x%04x", tag))
+	}
+	return codec, nil
+}
+
+// audioCodecName maps a WAVEFORMATEX wFormatTag to an ffprobe codec name.
+// It returns "" for tags it does not know.
+func audioCodecName(tag uint16) string {
+	switch tag {
+	case 0x0160:
+		return "wmav1"
+	case 0x0161:
+		return "wmav2"
+	case 0x0162:
+		return "wmapro"
+	case 0x0163:
+		return "wmalossless"
+	case 0x0055:
+		return "mp3"
+	case 0x00FF, 0x1610:
+		return "aac"
+	}
+	return ""
 }
 
 func parseVideoFormat(spec []byte) (codec string, width, height int, extra []byte, err error) {
@@ -201,18 +244,20 @@ func parseVideoFormat(spec []byte) (codec string, width, height int, extra []byt
 		}
 		extra = append([]byte(nil), spec[bih+40:end]...)
 	}
-	if idx := bytes.Index(spec, []byte("WMV3")); idx >= 0 {
-		codec = "wmv3"
-	} else if idx := bytes.Index(spec, []byte("WMV2")); idx >= 0 {
-		codec = "wmv2"
-	} else if idx := bytes.Index(spec, []byte("WMV1")); idx >= 0 {
-		codec = "wmv1"
-	}
+	// The BITMAPINFOHEADER compression fourcc is authoritative. Scanning the
+	// whole spec for "WMV3" and friends is only a fallback for unusual headers.
+	tag := binary.LittleEndian.Uint32(spec[bih+16:])
+	var fourcc [4]byte
+	binary.LittleEndian.PutUint32(fourcc[:], tag)
+	codec = detectVideoFourCC(string(fourcc[:]))
 	if codec == "" {
-		tag := binary.LittleEndian.Uint32(spec[bih+16:])
-		var b [4]byte
-		binary.LittleEndian.PutUint32(b[:], tag)
-		codec = detectVideoFourCC(string(b[:]))
+		if idx := bytes.Index(spec, []byte("WMV3")); idx >= 0 {
+			codec = "wmv3"
+		} else if idx := bytes.Index(spec, []byte("WMV2")); idx >= 0 {
+			codec = "wmv2"
+		} else if idx := bytes.Index(spec, []byte("WMV1")); idx >= 0 {
+			codec = "wmv1"
+		}
 	}
 	if codec == "" || width <= 0 || height <= 0 {
 		return "", 0, 0, nil, errs.Corrupt
@@ -230,6 +275,10 @@ func detectVideoFourCC(tag string) string {
 		return "wmv1"
 	case "MSS2":
 		return "mss2"
+	case "WVC1", "wvc1", "WMVA", "wmva", "VC-1":
+		// VC-1 Advanced Profile. ffprobe names it vc1. Before this mapping a
+		// WVC1 file failed the whole probe with a corrupt error.
+		return "vc1"
 	default:
 		return ""
 	}

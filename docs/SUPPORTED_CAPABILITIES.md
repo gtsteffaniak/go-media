@@ -49,7 +49,7 @@ What **go-media** implements in pure Go (`CGO_ENABLED=0`). This is **not** a ffm
 | AVI / `.avi` | ✅ | 🟡 | ✅ | RIFF `idx1`/OpenDML; MJPEG, MPEG-4 Part 2, H.264 thumbnails |
 | FLV | — | — | ❌ | No demux/thumbnail (ffmpeg fallback) |
 | WMV / ASF | ✅ | — | ✅ | Probe, duration, WMV3 (Simple/Main) keyframe thumbnails, bit-exact vs ffmpeg; WVC1 Advanced Profile returns `ErrUnsupportedProfile` |
-| HEIC / HEIF / AVIF | ✅ | — | ✅ | Embedded JPEG via `iinf`/`iref thmb`/`iloc`; coded HEVC primary image when no JPEG thumb. Only the top-level `meta` box is read (≤1 MiB buffered, shared by the irot/imir, JPEG and coded paths); HEIC `irot` and `imir` are composed in `ipma` association order, as HEIF and libheif define it; for the usual irot-then-imir order this is ffmpeg's result (rotate, then mirror) |
+| HEIC / HEIF / AVIF | ✅ | — | ✅ | Embedded JPEG via `iinf`/`iref thmb`/`iloc`; coded HEVC primary image when no JPEG thumb; bytes after the last well-formed top-level box (for example Samsung `sefd` plus a trailer) are ignored, so the coded path still decodes the file; Only the top-level `meta` box is read (≤1 MiB buffered, shared by the irot/imir, JPEG and coded paths); HEIC `irot` and `imir` are composed in `ipma` association order, as HEIF and libheif define it; for the usual irot-then-imir order this is ffmpeg's result (rotate, then mirror) |
 | Camera RAW (CR2, CR3, NEF, …) | ✅ | — | ✅ | Embedded JPEG preview extraction |
 
 ---
@@ -71,7 +71,8 @@ What **go-media** implements in pure Go (`CGO_ENABLED=0`). This is **not** a ffm
 | AIFF, AU | 📋 | |
 | MPEG-TS, M2TS, MPEG-PS | 🟡 | Bounded PTS / pack scan |
 | AVI | 🟡 | `avih` / stream header |
-| AAC (ADTS), FLV, WMV, ASF | ❌ | |
+| AAC (ADTS), FLV | ❌ | |
+| WMV, ASF | ✅ | ASF header; matches ffprobe on a 1080p WMV sample |
 
 ---
 
@@ -89,7 +90,8 @@ What **go-media** implements in pure Go (`CGO_ENABLED=0`). This is **not** a ffm
 | `.mkv`, `.webm` | ✅ | Codecs via `Tracks`, named with ffprobe codec names |
 | `.ts`, `.m2ts`, `.mpg` | 🟡 | PAT/PMT bounded scan |
 | `.avi` | 🟡 | `strh`/`strf` video stream |
-| FLV, WMV, ASF | ❌ | |
+| FLV | ❌ | |
+| WMV, ASF | ✅ | ASF streams; codec names as ffprobe (`vc1`, `wmapro`) |
 
 ### Audio containers
 
@@ -200,7 +202,7 @@ ffmpeg version notes: go-media follows ffmpeg 9.0.2. ffmpeg 7.1 differs in two p
 
 **ffmpeg equivalent (compare harness):** `ffmpeg -ss <seek> -i file -frames:v 1 -vf scale=… -q:v … out.jpg` (H.264: keyframe seek + skip loop filter; see [`test/compare/README.md`](../test/compare/README.md))
 
-Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 sync samples may be IDR or open-GOP keyframes: non-IDR ones decode when all slices are intra or a recovery point SEI has `recovery_frame_cnt` 0, otherwise `ErrUnsupportedProfile`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream, including MP4 files with a non-zero display rotation (callers fall back to ffmpeg, which autorotates). Scaled outputs round to the nearest pixel, so their size can differ from the ffmpeg preset by 1 px.
+Seek default ~**10%** into timeline; sync sample (`stss`) or MKV `Cues`. H.264 sync samples may be IDR or open-GOP keyframes: non-IDR ones decode when all slices are intra or a recovery point SEI has `recovery_frame_cnt` 0, otherwise `ErrUnsupportedProfile`. Returns `ErrUnsupported` / `ErrUnsupportedProfile` when decode or policy rejects the stream, MP4 display rotation (`tkhd`) is applied to the output, as ffmpeg's autorotate does. Scaled outputs round to the nearest pixel, so their size can differ from the ffmpeg preset by 1 px.
 
 **Keyframe snapping (default) vs exact seek:** by default every video thumbnail is the keyframe at or before the seek time, so only one frame is decoded. The image can therefore come from up to one keyframe interval (GOP) before the requested time: about 1–2 s for phone and most web encodes, up to ~10 s for encoder defaults like x264's 250 frames, and occasionally the first frame for files with a single keyframe. Set `ThumbnailOptions.Exact = true` to decode forward from that keyframe to the frame at the seek time; cost grows with the distance from the keyframe. Only VP8 and VP9 honor `Exact` today; H.264, MPEG-2, MPEG-4 Part 2 and WMV3 always use the keyframe (MJPEG frames are all keyframes). The compare harness checks the default keyframe mode against ffmpeg seeked to the same keyframe.
 
