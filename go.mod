@@ -3,9 +3,7 @@ module github.com/gtsteffaniak/go-media
 go 1.27.0
 
 require (
-	github.com/Eyevinn/mp4ff v0.50.0
 	github.com/abema/go-mp4 v1.7.4
-	github.com/at-wat/ebml-go v0.19.4
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	github.com/gen2brain/gav1d v0.2.7
 	github.com/gen2brain/h265 v0.2.4

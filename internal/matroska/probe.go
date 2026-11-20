@@ -13,88 +13,88 @@ import (
 
 // segmentInfo holds the Segment Info element fields go-media uses.
 type segmentInfo struct {
-	TimecodeScale uint64  `ebml:"TimecodeScale"`
-	Duration      float64 `ebml:"Duration"`
+	TimecodeScale uint64
+	Duration      float64
 }
 
 // segmentTracks holds the Segment Tracks element.
 type segmentTracks struct {
-	TrackEntry []trackEntry `ebml:"TrackEntry"`
+	TrackEntry []trackEntry
 }
 
 // segmentHead is a data type used by this package.
 type segmentHead struct {
 	Segment struct {
-		Info   segmentInfo   `ebml:"Info"`
-		Tracks segmentTracks `ebml:"Tracks"`
+		Info   segmentInfo
+		Tracks segmentTracks
 	}
 }
 
-// infoElement decodes a single Segment Info element, so readHead can unmarshal
+// infoElement decodes a single Segment Info element, so readHead can decode
 // it without walking the rest of the Segment.
 type infoElement struct {
-	Info segmentInfo `ebml:"Info"`
+	Info segmentInfo
 }
 
 // tracksElement decodes a single Segment Tracks element.
 type tracksElement struct {
-	Tracks segmentTracks `ebml:"Tracks"`
+	Tracks segmentTracks
 }
 
 // trackEntry is a data type used by this package.
 type trackEntry struct {
-	TrackNumber  uint64 `ebml:"TrackNumber"`
-	TrackType    uint64 `ebml:"TrackType"`
-	CodecID      string `ebml:"CodecID"`
-	CodecPrivate []byte `ebml:"CodecPrivate"`
-	Language     string `ebml:"Language"`
-	Name         string `ebml:"Name"`
+	TrackNumber  uint64
+	TrackType    uint64
+	CodecID      string
+	CodecPrivate []byte
+	Language     string
+	Name         string
 	// DefaultDuration is the nominal frame length in nanoseconds; ffmpeg
 	// uses it as a subtitle block's duration when BlockDuration is absent.
-	DefaultDuration uint64 `ebml:"DefaultDuration"`
+	DefaultDuration uint64
 	// CodecDelay is the codec's built-in delay in nanoseconds; ffmpeg
 	// subtracts it from every block timestamp of the track.
-	CodecDelay uint64 `ebml:"CodecDelay"`
+	CodecDelay uint64
 	// TrackTimestampScale scales the track's block timestamps (deprecated
 	// in Matroska v4). Zero means absent, which is the default of 1.0.
-	TrackTimestampScale float64 `ebml:"TrackTimestampScale"`
+	TrackTimestampScale float64
 	// ContentEncodings lists the compression applied to the track's frames.
-	ContentEncodings *contentEncodings `ebml:"ContentEncodings"`
-	Video            *trackVideo       `ebml:"Video"`
-	Audio            *trackAudio       `ebml:"Audio"`
+	ContentEncodings *contentEncodings
+	Video            *trackVideo
+	Audio            *trackAudio
 }
 
 // trackVideo is the Video master element of a TrackEntry.
 type trackVideo struct {
-	PixelWidth  uint64 `ebml:"PixelWidth"`
-	PixelHeight uint64 `ebml:"PixelHeight"`
+	PixelWidth  uint64
+	PixelHeight uint64
 }
 
 // trackAudio is the Audio master element of a TrackEntry.
 type trackAudio struct {
-	SamplingFrequency float64 `ebml:"SamplingFrequency"`
-	Channels          uint64  `ebml:"Channels"`
-	BitDepth          uint64  `ebml:"BitDepth"`
+	SamplingFrequency float64
+	Channels          uint64
+	BitDepth          uint64
 }
 
 // contentEncodings is the Matroska ContentEncodings master element.
 type contentEncodings struct {
-	ContentEncoding []contentEncoding `ebml:"ContentEncoding"`
+	ContentEncoding []contentEncoding
 }
 
 // contentEncoding is one Matroska ContentEncoding element. A zero Scope is
 // read as the spec default 1 (all frames).
 type contentEncoding struct {
-	ContentEncodingScope uint64              `ebml:"ContentEncodingScope"`
-	ContentEncodingType  uint64              `ebml:"ContentEncodingType"`
-	ContentCompression   *contentCompression `ebml:"ContentCompression"`
+	ContentEncodingScope uint64
+	ContentEncodingType  uint64
+	ContentCompression   *contentCompression
 }
 
 // contentCompression is the ContentCompression master element of a
 // ContentEncoding.
 type contentCompression struct {
-	ContentCompAlgo     uint64 `ebml:"ContentCompAlgo"`
-	ContentCompSettings []byte `ebml:"ContentCompSettings"`
+	ContentCompAlgo     uint64
+	ContentCompSettings []byte
 }
 
 // Duration reads container length from headers in internal.
