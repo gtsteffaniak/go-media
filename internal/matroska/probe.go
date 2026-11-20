@@ -3,12 +3,10 @@
 package matroska
 
 import (
-	"bytes"
 	"io"
 	"math/bits"
 	"time"
 
-	"github.com/at-wat/ebml-go"
 	"github.com/gtsteffaniak/go-media/internal/detect"
 	"github.com/gtsteffaniak/go-media/internal/errs"
 )
@@ -62,15 +60,21 @@ type trackEntry struct {
 	TrackTimestampScale float64 `ebml:"TrackTimestampScale"`
 	// ContentEncodings lists the compression applied to the track's frames.
 	ContentEncodings *contentEncodings `ebml:"ContentEncodings"`
-	Video            *struct {
-		PixelWidth  uint64 `ebml:"PixelWidth"`
-		PixelHeight uint64 `ebml:"PixelHeight"`
-	} `ebml:"Video"`
-	Audio *struct {
-		SamplingFrequency float64 `ebml:"SamplingFrequency"`
-		Channels          uint64  `ebml:"Channels"`
-		BitDepth          uint64  `ebml:"BitDepth"`
-	} `ebml:"Audio"`
+	Video            *trackVideo       `ebml:"Video"`
+	Audio            *trackAudio       `ebml:"Audio"`
+}
+
+// trackVideo is the Video master element of a TrackEntry.
+type trackVideo struct {
+	PixelWidth  uint64 `ebml:"PixelWidth"`
+	PixelHeight uint64 `ebml:"PixelHeight"`
+}
+
+// trackAudio is the Audio master element of a TrackEntry.
+type trackAudio struct {
+	SamplingFrequency float64 `ebml:"SamplingFrequency"`
+	Channels          uint64  `ebml:"Channels"`
+	BitDepth          uint64  `ebml:"BitDepth"`
 }
 
 // contentEncodings is the Matroska ContentEncodings master element.
@@ -81,12 +85,16 @@ type contentEncodings struct {
 // contentEncoding is one Matroska ContentEncoding element. A zero Scope is
 // read as the spec default 1 (all frames).
 type contentEncoding struct {
-	ContentEncodingScope uint64 `ebml:"ContentEncodingScope"`
-	ContentEncodingType  uint64 `ebml:"ContentEncodingType"`
-	ContentCompression   *struct {
-		ContentCompAlgo     uint64 `ebml:"ContentCompAlgo"`
-		ContentCompSettings []byte `ebml:"ContentCompSettings"`
-	} `ebml:"ContentCompression"`
+	ContentEncodingScope uint64              `ebml:"ContentEncodingScope"`
+	ContentEncodingType  uint64              `ebml:"ContentEncodingType"`
+	ContentCompression   *contentCompression `ebml:"ContentCompression"`
+}
+
+// contentCompression is the ContentCompression master element of a
+// ContentEncoding.
+type contentCompression struct {
+	ContentCompAlgo     uint64 `ebml:"ContentCompAlgo"`
+	ContentCompSettings []byte `ebml:"ContentCompSettings"`
 }
 
 // Duration reads container length from headers in internal.
@@ -251,9 +259,9 @@ func findSegment(r io.ReaderAt, size int64) (start, end int64, found bool, err e
 	return 0, 0, false, nil
 }
 
-// decodeElement reads the raw bytes of the element at [off, end) and unmarshals
-// them into v. Only that element is read, not the rest of the file.
-func decodeElement(r io.ReaderAt, off, end int64, v any) error {
+// decodeElement reads the raw bytes of the element at [off, end) and decodes
+// them into sink. Only that element is read, not the rest of the file.
+func decodeElement(r io.ReaderAt, off, end int64, sink ebmlSink) error {
 	n := end - off
 	if n <= 0 || n > maxHeaderElement {
 		return errs.Corrupt
@@ -267,10 +275,7 @@ func decodeElement(r io.ReaderAt, off, end int64, v any) error {
 		}
 		return err
 	}
-	if err := ebml.Unmarshal(bytes.NewReader(buf), v); err != nil && err != ebml.ErrReadStopped {
-		return err
-	}
-	return nil
+	return decodeEBML(buf, sink)
 }
 
 // readElementHeader reads one EBML element ID and size at off. It returns the
