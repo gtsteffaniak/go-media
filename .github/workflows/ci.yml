@@ -57,7 +57,7 @@ jobs:
           else
             CGO_ENABLED=0 go test ./...
           fi
-      - name: Fuzz smoke (subtitle, h264, keyframe times; amd64 production only)
+      - name: Fuzz smoke (subtitle, h264, keyframe times, SPS validation, EBML headers; amd64 production only)
         if: matrix.os == 'ubuntu-latest' && matrix.profile == 'production'
         run: |
           CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -fuzz=FuzzParseSRT -fuzztime=10s ./internal/subtitle
@@ -65,6 +65,8 @@ jobs:
           CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -fuzz=FuzzDecodeIDRAVC -fuzztime=30s ./internal/h264/cleanroom
           CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -run '^$' -fuzz='^FuzzVideoKeyframeTimes$' -fuzztime=10s ./internal/isobmff
           CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -run '^$' -fuzz='^FuzzVideoKeyframeTimes$' -fuzztime=10s ./internal/matroska
+          CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -run '^$' -fuzz='^FuzzValidateSPS$' -fuzztime=10s ./internal/h264
+          CGO_ENABLED=0 GOFLAGS=-pgo=default.pgo go test -run '^$' -fuzz='^FuzzDecodeEBML$' -fuzztime=10s ./internal/matroska
 
   test-go-latest:
     runs-on: ubuntu-latest

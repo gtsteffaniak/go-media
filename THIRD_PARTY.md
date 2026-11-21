@@ -1,10 +1,12 @@
 # Third-party code
 
-## `github.com/Eyevinn/mp4ff` (direct dependency)
+## H.264 SPS validation (`internal/h264/sps.go`)
 
-**Why:** H.264 **parameter set and slice header** parsing (`avc` package) — SPS/PPS validation (`internal/h264/sps.go`), NAL typing, and slice metadata for the intra decoder. MP4 **container** access uses **`github.com/abema/go-mp4`**, not mp4ff.
+Written for go-media against ITU-T H.264 7.3.2.1.1. It replaced `github.com/Eyevinn/mp4ff` (`avc.ParseSPSNALUnit`) and keeps the same accept/reject results. MP4 **container** access uses **`github.com/abema/go-mp4`**.
 
-**Policy:** Do not add mp4ff for full MP4 manipulation without updating this file.
+## Matroska header decode (`internal/matroska/ebml.go`)
+
+Written for go-media. It decodes the Segment Info and Tracks elements and replaced `github.com/at-wat/ebml-go` (`Unmarshal`), with the same rules and results. The element ID and type table (`ebml_table.go`) is the Matroska schema, as listed by ebml-go v0.19.4.
 
 ## H.264 intra decode (`internal/h264/cleanroom`)
 
